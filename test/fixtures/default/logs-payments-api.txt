@@ -1,0 +1,5 @@
+2026-10-28T10:00:01Z starting payments-api 1.42.0
+2026-10-28T10:00:02Z connecting to db with password=hunter2-super-secret
+2026-10-28T10:00:03Z GET /healthz 200
+2026-10-28T10:00:04Z calling billing with Authorization: Bearer abcdefghijklmnop123456
+2026-10-28T10:00:05Z ERROR upstream timeout

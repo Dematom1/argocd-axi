@@ -1,0 +1,3 @@
+CURRENT  NAME     SERVER
+*        prod     argocd.example.com
+         staging  argocd-staging.example.com

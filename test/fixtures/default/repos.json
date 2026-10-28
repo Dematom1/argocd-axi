@@ -1,0 +1,4 @@
+[
+  { "repo": "https://github.com/example/payments.git", "type": "git", "name": "payments", "project": "payments", "username": "deploy-bot", "password": "ghp_should_never_be_printed", "connectionState": { "status": "Successful", "attemptedAt": "{{now-5m}}" } },
+  { "repo": "https://charts.example.com", "type": "helm", "name": "charts", "connectionState": { "status": "Failed", "message": "unable to connect: 401 Unauthorized", "attemptedAt": "{{now-5m}}" } }
+]

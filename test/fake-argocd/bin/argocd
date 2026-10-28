@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fake argocd for tests. It never contacts a server: it answers from the
+# recorded fixtures named by FAKE_ARGOCD_SCENARIO. The test harness puts only
+# this directory on PATH, so a real argocd can never be reached.
+exec "$FAKE_ARGOCD_NODE" "$FAKE_ARGOCD_JS" "$@"

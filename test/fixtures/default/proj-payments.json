@@ -1,0 +1,18 @@
+{
+  "metadata": { "name": "payments", "namespace": "argocd" },
+  "spec": {
+    "description": "Payments team services",
+    "sourceRepos": ["https://github.com/example/payments.git"],
+    "destinations": [ { "name": "prod-eu", "namespace": "payments" }, { "server": "https://kubernetes.default.svc", "namespace": "payments-staging" } ],
+    "clusterResourceWhitelist": [ { "group": "", "kind": "Namespace" } ],
+    "namespaceResourceBlacklist": [ { "group": "", "kind": "ResourceQuota" } ],
+    "roles": [
+      { "name": "ci", "description": "CI sync role", "policies": ["p, proj:payments:ci, applications, sync, payments/*, allow"], "groups": [], "jwtTokens": [ { "iat": 1790000000, "exp": 1790086400, "id": "a1b2c3" } ] }
+    ],
+    "syncWindows": [
+      { "kind": "deny", "schedule": "0 22 * * *", "duration": "8h", "applications": ["*"], "manualSync": true, "timeZone": "Europe/Berlin" },
+      { "kind": "allow", "schedule": "0 9 * * 1-5", "duration": "9h", "namespaces": ["payments"] }
+    ],
+    "orphanedResources": { "warn": true }
+  }
+}

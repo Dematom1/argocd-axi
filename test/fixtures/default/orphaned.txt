@@ -1,0 +1,3 @@
+GROUP  KIND       NAMESPACE  NAME          ORPHANED
+       ConfigMap  payments   stale-config  Yes
+apps   Deployment payments   old-worker    Yes

@@ -1,0 +1,13 @@
+{
+  "metadata": { "name": "checkout", "namespace": "argocd" },
+  "spec": {
+    "project": "shop",
+    "source": { "repoURL": "https://github.com/example/shop.git", "path": "checkout", "targetRevision": "v2.3.0" },
+    "destination": { "server": "https://kubernetes.default.svc", "namespace": "shop" }
+  },
+  "status": {
+    "sync": { "status": "Synced", "revision": "v2.3.0" },
+    "health": { "status": "Progressing", "lastTransitionTime": "{{now-25m}}" },
+    "operationState": { "phase": "Running", "message": "waiting for healthy state of apps/Deployment/checkout", "startedAt": "{{now-25m}}" }
+  }
+}

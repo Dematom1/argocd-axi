@@ -1,0 +1,196 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  expectSafeCalls,
+  isNetworkCall,
+  makeHome,
+  runCli,
+  scenario,
+} from "./helpers.js";
+
+describe("test isolation", () => {
+  it("can only reach the fake argocd", () => {
+    const result = runCli(["apps"], { scenario: scenario([]) });
+    expect(result.stdout).toContain("fake argocd: no fixture");
+    expect(result.exitCode).toBe(1);
+  });
+});
+
+describe("home view", () => {
+  it("shows the target, user, apps needing attention and running operations", () => {
+    const { stdout, exitCode, calls } = runCli([]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toMatch(/^bin: .*argocd-axi\.js\ndescription: /);
+    expect(stdout).toContain("context: prod\nserver: argocd.example.com\n");
+    expect(stdout).toContain("user: alice");
+    expect(stdout).toContain(
+      'apps: "5 total, 3 need attention, 1 operation running"',
+    );
+    expect(stdout).toContain("writableContexts: none");
+    expect(stdout).toContain(
+      "attention[3]{app,project,sync,health,why}:\n  payments-api,payments,OutOfSync,Degraded,",
+    );
+    expect(stdout).toContain(
+      "checkout,shop,Synced,Progressing,Progressing for 25m",
+    );
+    expect(stdout).toContain(
+      "operations[1]{app,phase,started}:\n  checkout,Running,25m ago",
+    );
+    expect(stdout).not.toContain("guestbook");
+    expectSafeCalls(calls);
+  });
+
+  it("refreshes the version check at most every 12 hours and warns on major skew", () => {
+    const home = makeHome();
+    const skewed = scenario([
+      { argv: ["context"], exact: true, stdoutFile: "context.txt" },
+      {
+        argv: ["version"],
+        stdout:
+          '{"client":{"Version":"v3.3.6"},"server":{"Version":"v2.13.1"}}',
+      },
+      { argv: ["app", "list"], stdout: "[]" },
+      { argv: ["account", "get-user-info"], stdoutFile: "user.json" },
+      { argv: ["version", "--client"], stdoutFile: "version-client.json" },
+    ]);
+    const first = runCli([], { home, scenario: skewed });
+    expect(first.stdout).toContain(
+      "warning: argocd CLI v3.3.6 and server v2.13.1 differ by a major version",
+    );
+    expect(first.stdout).toContain(
+      "apps: 0 applications visible to this credential",
+    );
+    expect(
+      first.calls.filter((c) => c[0] === "version" && c[1] !== "--client"),
+    ).toHaveLength(1);
+    const second = runCli([], { home, scenario: skewed });
+    expect(
+      second.calls.filter((c) => c[0] === "version" && c[1] !== "--client"),
+    ).toHaveLength(0);
+    expect(second.stdout).toContain("warning:");
+    const ctx = runCli(["ctx"], { home, scenario: skewed });
+    expect(ctx.stdout).toContain("serverVersion: v2.13.1 (checked just now)");
+    expect(ctx.stdout).toContain(
+      "warning: argocd CLI v3.3.6 and server v2.13.1",
+    );
+  });
+
+  it("degrades each read to unavailable instead of failing", () => {
+    const broken = scenario([
+      { argv: ["context"], exact: true, stdoutFile: "context.txt" },
+      {
+        argv: ["app", "list"],
+        exit: 20,
+        stderr:
+          'level=fatal msg="dial tcp 1.2.3.4:443: connect: connection refused"\n',
+      },
+      {
+        argv: ["account"],
+        exit: 20,
+        stderr:
+          'level=fatal msg="rpc error: code = Unauthenticated desc = invalid session"\n',
+      },
+      { argv: ["version"], exit: 20, stderr: "boom" },
+    ]);
+    const { stdout, exitCode } = runCli([], { scenario: broken });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(
+      'apps: "unavailable - Argo CD server unreachable: dial tcp 1.2.3.4:443: connect: connection refused"',
+    );
+    expect(stdout).toContain(
+      'user: "unavailable - Not authenticated to Argo CD',
+    );
+    expect(stdout).toContain(
+      "Run `argocd-axi ctx` to confirm which server this context targets",
+    );
+  });
+
+  it("makes no server call when no context is configured", () => {
+    const empty = scenario([
+      {
+        argv: ["context"],
+        exact: true,
+        exit: 20,
+        stderr: 'level=fatal msg="No contexts defined"\n',
+      },
+    ]);
+    const { stdout, exitCode, calls } = runCli([], { scenario: empty });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("context: none configured");
+    expect(stdout).toContain("A human runs `argocd login <server> --sso`");
+    expect(calls.filter(isNetworkCall)).toEqual([]);
+  });
+});
+
+describe("ctx and the session hook (S17)", () => {
+  it("is offline: only local argocd commands run", () => {
+    for (const bin of ["argocd-axi", "argocd-axi-ctx"] as const) {
+      const { stdout, exitCode, calls } = runCli(
+        bin === "argocd-axi" ? ["ctx"] : [],
+        { bin },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain(
+        "context: prod\nserver: argocd.example.com\nauth: argocd CLI session for this context\ncli: v3.3.6 (tested with v3.3.6)",
+      );
+      expect(stdout).toContain("writableContexts: none");
+      expect(stdout).toContain(
+        "otherContexts[1]{name,server}:\n  staging,argocd-staging.example.com",
+      );
+      expect(calls.filter(isNetworkCall)).toEqual([]);
+      expect(calls.map((c) => c.join(" ")).sort()).toEqual([
+        "context",
+        "version --client -o json",
+      ]);
+    }
+  });
+
+  it("reports the environment token and server without reading them out", () => {
+    const { stdout } = runCli(["ctx"], {
+      env: {
+        ARGOCD_AUTH_TOKEN: "eyJ.secret.value",
+        ARGOCD_SERVER: "cd.example.com",
+      },
+    });
+    expect(stdout).toContain("server: cd.example.com (from ARGOCD_SERVER)");
+    expect(stdout).toContain("auth: ARGOCD_AUTH_TOKEN is set");
+    expect(stdout).not.toContain("eyJ.secret.value");
+  });
+
+  it("shows the writable-contexts allowlist from the tool's own config", () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]\n",
+    );
+    expect(runCli(["ctx"], { home }).stdout).toContain(
+      "writableContexts: staging",
+    );
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: staging\n",
+    );
+    const broken = runCli(["ctx"], { home });
+    expect(broken.exitCode).toBe(0);
+    expect(broken.stdout).toMatch(
+      /writableContexts: "?unavailable - argocd-axi config .* is invalid: writable-contexts must be a list/,
+    );
+  });
+
+  it("switches context with ctx use, idempotently (A11)", () => {
+    const switched = runCli(["ctx", "use", "staging"]);
+    expect(switched.stdout).toContain("context: switched to staging");
+    expect(switched.calls.at(-1)).toEqual(["context", "staging"]);
+    const already = runCli(["ctx", "use", "prod"]);
+    expect(already.exitCode).toBe(0);
+    expect(already.stdout).toContain(
+      "prod is already the current context (no-op)",
+    );
+    expect(already.calls).toEqual([["context"]]);
+    const missing = runCli(["ctx", "use", "nope"]);
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stdout).toContain("code: CONTEXT_NOT_FOUND");
+  });
+});

@@ -1,0 +1,15 @@
+{
+  "metadata": { "name": "web", "namespace": "argocd" },
+  "spec": {
+    "project": "shop",
+    "source": { "repoURL": "https://github.com/example/shop.git", "path": "web", "targetRevision": "main" },
+    "destination": { "server": "https://kubernetes.default.svc", "namespace": "shop" }
+  },
+  "status": {
+    "sync": { "status": "Synced", "revision": "cccccccccccccccccccccccccccccccccccccccc" },
+    "health": { "status": "Progressing", "lastTransitionTime": "{{now-3m}}" },
+    "resources": [
+      { "group": "argoproj.io", "version": "v1alpha1", "kind": "Rollout", "namespace": "shop", "name": "web", "status": "Synced", "health": { "status": "Suspended", "message": "Rollout is paused at step 2 of 4" } }
+    ]
+  }
+}

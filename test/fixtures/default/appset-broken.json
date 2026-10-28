@@ -1,0 +1,5 @@
+{
+  "metadata": { "name": "broken", "namespace": "argocd" },
+  "spec": { "generators": [ { "clusters": { "selector": { "matchLabels": { "env": "prod" } } } } ], "template": { "spec": { "project": "default" } } },
+  "status": { "conditions": [ { "type": "ErrorOccurred", "status": "True", "reason": "ApplicationGenerationFromParamsError", "message": "failed to execute go template: missing key" } ] }
+}

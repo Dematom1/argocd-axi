@@ -1,0 +1,189 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { VERSION } from "../src/version.js";
+import { ROOT, makeHome, runCli } from "./helpers.js";
+
+describe("refusals (A2, A-c22)", () => {
+  it.each([
+    ["apps", "sync", "payments-api"],
+    ["apps", "rollback", "payments-api", "7"],
+    ["apps", "terminate-op", "payments-api"],
+    ["apps", "refresh", "payments-api"],
+    ["apps", "action", "run", "web", "restart"],
+  ])("plans the write tier for %s %s", (...args) => {
+    const { stdout, exitCode, calls } = runCli(args);
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain("code: REFUSED");
+    expect(stdout).toContain("not in v1 (see ROADMAP.md)");
+    expect(stdout).toMatch(/A human can .* with the raw CLI: `argocd app /);
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["login"],
+    ["relogin"],
+    ["logout"],
+    ["configure"],
+    ["account", "generate-token"],
+    ["admin", "export"],
+    ["cert", "add-tls"],
+    ["gpg", "add"],
+    ["repocreds", "add"],
+    ["repos", "add", "https://x"],
+    ["clusters", "add", "ctx"],
+    ["clusters", "rotate-auth", "x"],
+    ["projects", "role", "create-token", "p", "r"],
+    ["projects", "delete", "p"],
+    ["appsets", "delete", "x"],
+    ["apps", "delete", "x"],
+    ["apps", "edit", "x"],
+    ["apps", "patch-resource", "x"],
+    ["apps", "delete-resource", "x"],
+  ])("refuses %s with a reason and a route", (...args) => {
+    const { stdout, exitCode, calls } = runCli(args);
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain("code: REFUSED");
+    expect(stdout).toMatch(/help\[\d+\]:/);
+    expect(calls).toEqual([]);
+  });
+
+  it("points argocd's own nouns at the argocd-axi spelling", () => {
+    const { stdout, exitCode } = runCli(["app", "list"]);
+    expect(exitCode).toBe(2);
+    expect(stdout).toContain("argocd-axi spells this `apps`");
+  });
+});
+
+describe("account, projects, appsets, inventory", () => {
+  it("whoami and can-i", () => {
+    const who = runCli(["whoami"]);
+    expect(who.stdout).toContain(
+      'user: alice\nissuer: "https://dex.example.com"\ngroups[2]: platform,payments',
+    );
+    const yes = runCli(["can-i", "sync", "applications", "payments/*"]);
+    expect(yes.stdout).toContain(
+      "answer: yes\ncheck: sync applications payments/*",
+    );
+    const no = runCli(["can-i", "delete", "applications", "*"]);
+    expect(no.exitCode).toBe(0);
+    expect(no.stdout).toContain("answer: no");
+    expect(runCli(["can-i", "destroy", "applications", "*"]).exitCode).toBe(2);
+  });
+
+  it("projects, view and sync windows", () => {
+    expect(runCli(["projects"]).stdout).toContain(
+      'projects[2]{project,description,destinations,windows}:\n  default,"",1,0\n  payments,Payments team services,2,2',
+    );
+    const view = runCli(["projects", "view", "payments"]);
+    expect(view.stdout).toContain(
+      "roles[1]{role,policies,groups,tokens}:\n  ci,1,0,1",
+    );
+    expect(view.stdout).not.toContain("a1b2c3");
+    const frozen = runCli(["projects", "windows", "frozen"]);
+    expect(frozen.stdout).toContain(
+      "sync:\n  automated: blocked\n  manual: blocked\n  reason: 1 deny window is active",
+    );
+    expect(runCli(["projects", "windows", "default"]).stdout).toContain(
+      "windows: 0 sync windows in project default",
+    );
+  });
+
+  it("appsets, view and generate", () => {
+    const list = runCli(["appsets"]);
+    expect(list.stdout).toContain(
+      'broken,default,clusters,"error: failed to execute go template: missing key"',
+    );
+    expect(runCli(["appsets", "view", "team-apps"]).stdout).toContain(
+      "apps[2]{app,sync,health}:\n  team-blue,OutOfSync,Healthy",
+    );
+    const home = makeHome();
+    const file = join(home, "appset.yaml");
+    writeFileSync(file, "kind: ApplicationSet\n");
+    const generated = runCli(["appsets", "generate", file], { home });
+    expect(generated.stdout).toContain(
+      "count: 1 application would be generated",
+    );
+    expect(generated.calls).toContainEqual([
+      "appset",
+      "generate",
+      file,
+      "-o",
+      "json",
+    ]);
+    expect(
+      runCli(["appsets", "generate", "/does/not/exist.yaml"]).stdout,
+    ).toContain("file not found");
+    expect(
+      runCli(["appsets", "generate", "https://example.com/a.yaml"]).exitCode,
+    ).toBe(2);
+  });
+
+  it("repos and clusters never print credentials", () => {
+    const repos = runCli(["repos"]);
+    expect(repos.stdout).toContain(
+      '"https://charts.example.com",helm,charts,"","Failed: unable to connect: 401 Unauthorized"',
+    );
+    expect(repos.stdout).not.toContain("ghp_should_never_be_printed");
+    expect(repos.stdout).not.toContain("deploy-bot");
+    const clusters = runCli(["clusters"]);
+    expect(clusters.stdout).toContain('count: "2 clusters, 1 failing"');
+    expect(clusters.stdout).not.toContain("should-never-print");
+  });
+});
+
+describe("help, version and setup", () => {
+  it("answers --version from the fast path", () => {
+    const pkg = JSON.parse(
+      readFileSync(join(ROOT, "package.json"), "utf8"),
+    ) as { version: string };
+    expect(VERSION).toBe(pkg.version);
+    for (const flag of ["--version", "-v", "-V"]) {
+      const { stdout, calls } = runCli([flag]);
+      expect(stdout).toBe(`${VERSION}\n`);
+      expect(calls).toEqual([]);
+    }
+  });
+
+  it("prints top-level and per-command help without calling argocd", () => {
+    const top = runCli(["--help"]);
+    expect(top.stdout).toContain("commands[18]:");
+    expect(top.calls).toEqual([]);
+    const view = runCli(["apps", "view", "--help"]);
+    expect(view.stdout).toContain("usage: argocd-axi apps view <app> [flags]");
+    expect(view.stdout).toContain("examples[2]:");
+    expect(view.calls).toEqual([]);
+    expect(runCli(["apps", "--help"]).stdout).toContain("subcommands[8]:");
+  });
+
+  it("rejects flags before the command", () => {
+    const { stdout, exitCode } = runCli(["--context", "prod", "apps"]);
+    expect(exitCode).toBe(2);
+    expect(stdout).toContain("Flags must come after the command");
+  });
+
+  it("installs a SessionStart hook that runs the offline ctx entrypoint", () => {
+    const home = makeHome();
+    const { stdout, exitCode, calls } = runCli(["setup", "hooks"], { home });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("hooks: installed or already up to date");
+    expect(calls).toEqual([]);
+    const settings = readFileSync(
+      join(home, ".claude", "settings.json"),
+      "utf8",
+    );
+    expect(settings).toMatch(/argocd-axi-ctx/);
+    expect(settings).not.toMatch(/"command": "[^"]*argocd-axi\.js"/);
+  });
+});
+
+describe("guards", () => {
+  it("refuses sync-window changes and hints ctx use", () => {
+    const windows = runCli(["projects", "windows", "add", "payments"]);
+    expect(windows.stdout).toContain("code: REFUSED");
+    expect(windows.calls).toEqual([]);
+    const ctx = runCli(["ctx", "staging"]);
+    expect(ctx.exitCode).toBe(2);
+    expect(ctx.stdout).toContain("argocd-axi ctx use staging");
+  });
+});

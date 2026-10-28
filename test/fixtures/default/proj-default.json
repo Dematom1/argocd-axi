@@ -1,0 +1,1 @@
+{ "metadata": { "name": "default", "namespace": "argocd" }, "spec": { "sourceRepos": ["*"], "destinations": [ { "server": "*", "namespace": "*" } ], "clusterResourceWhitelist": [ { "group": "*", "kind": "*" } ] } }
