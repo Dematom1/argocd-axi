@@ -187,6 +187,33 @@ describe("ctx and the session hook (S17)", () => {
     expect(use.stdout).toContain("A human installs the argocd CLI");
   });
 
+  it("points env-credential setups without a context at the live view", () => {
+    const empty = scenario([
+      {
+        argv: ["context"],
+        exact: true,
+        exit: 20,
+        stderr: 'level=fatal msg="No contexts defined"\n',
+      },
+    ]);
+    for (const bin of ["argocd-axi", "argocd-axi-ctx"] as const) {
+      const { stdout, exitCode } = runCli(bin === "argocd-axi" ? ["ctx"] : [], {
+        bin,
+        scenario: empty,
+        env: {
+          ARGOCD_AUTH_TOKEN: "eyJ.secret.value",
+          ARGOCD_SERVER: "cd.example.com",
+        },
+      });
+      expect(exitCode, bin).toBe(0);
+      expect(stdout, bin).toContain(
+        "server: cd.example.com (from ARGOCD_SERVER)",
+      );
+      expect(stdout, bin).toContain("Run `argocd-axi` for a live overview");
+      expect(stdout, bin).not.toContain("argocd login");
+    }
+  });
+
   it("reports the environment token and server without reading them out", () => {
     const { stdout } = runCli(["ctx"], {
       env: {

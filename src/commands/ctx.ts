@@ -109,7 +109,7 @@ export async function ctxView(args: string[]): Promise<string> {
   const others = listing.contexts.filter((c) => c.name !== target.context);
   const help: string[] = [];
   if (listing.notInstalled) help.push(...listing.notInstalled.suggestions);
-  else if (!target.context) help.push(...LOGIN_HELP);
+  else if (!target.context && !target.envServer) help.push(...LOGIN_HELP);
   else
     help.push(
       "Run `argocd-axi` for a live overview of this context's applications",
