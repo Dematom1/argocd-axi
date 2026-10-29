@@ -122,12 +122,24 @@ jobs:
     permissions:
       id-token: write # npm trusted publishing and provenance
     steps:
-      # npm trusted publishing needs npm >= 11.5.1 and `npm stage` needs
-      # npm >= 11.15.0; the current Node 24 release ships a newer npm.
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
+
+      # npm trusted publishing needs npm >= 11.5.1 and `npm stage` needs
+      # npm >= 11.15.0.
+      - name: Require npm >= 11.15.0
+        run: |
+          set -eu
+          version="$(npm --version)"
+          if ! node -e '
+            const [major, minor] = process.argv[1].split(".").map(Number);
+            process.exit(major > 11 || (major === 11 && minor >= 15) ? 0 : 1);
+          ' "$version"; then
+            echo "::error::npm $version is too old; npm stage publish needs npm >= 11.15.0."
+            exit 1
+          fi
 
       - uses: actions/download-artifact@v4
         with:
@@ -143,4 +155,7 @@ jobs:
             echo "$SPEC is already published; nothing to do."
             exit 0
           fi
-          npm stage publish "./$TARBALL" --access public --provenance --ignore-scripts
+          if ! npm stage publish "./$TARBALL" --access public --provenance --ignore-scripts; then
+            echo "::error::Staging $SPEC failed. If an earlier run already staged it, approve it with 'npm stage approve <id>' or discard it on npmjs.com instead of re-running."
+            exit 1
+          fi

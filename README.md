@@ -270,6 +270,10 @@ If a release was tagged but its publish failed, re-run the publish on that tag
 gh workflow run release-please.yml --ref v0.1.1 -f tag=v0.1.1
 ```
 
+A version that is staged but not yet approved does not count as published, so
+re-running would try to stage it again and fail. Approve or discard the staged
+version instead.
+
 ## License
 
 [MIT](LICENSE)
