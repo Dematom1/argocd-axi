@@ -304,6 +304,10 @@ describe("apps", () => {
       "https://ghp_secret123@github.com/org/repo.git",
       "https://[redacted]@github.com/org/repo.git",
     ],
+    [
+      "https://:ghp_secret123@github.com/org/repo.git",
+      "https://:[redacted]@github.com/org/repo.git",
+    ],
   ])("masks credentials in repo URL %s everywhere (S12)", (repoURL, masked) => {
     const app = {
       metadata: { name: "cred", namespace: "argocd" },

@@ -125,7 +125,7 @@ const KEY_VALUE =
   /(["']?)([A-Za-z0-9_.-]*?(?:passw(?:or)?d|passwd|secret|token|api[-_.]?key|private[-_.]?key|credential|access[-_.]?key|client[-_.]?secret)[A-Za-z0-9_.-]*)\1([ \t]*[:=][ \t]*)(["']?)([^\s"',;&]+)\4/gi;
 const BEARER = /\b(bearer|basic)([ \t]+)([A-Za-z0-9._~+/=-]{8,})/gi;
 const JWT = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g;
-const URL_USERINFO = /(:\/\/[^/\s:@]+:)([^@\s/]+)(@)/g;
+const URL_USERINFO = /(:\/\/[^/\s:@]*:)([^@\s/]+)(@)/g;
 const URL_TOKEN_USERINFO = /(\b(?:https?|oci):\/\/)([^/\s:@]+)(@)/gi;
 // `- name: DB_PASSWORD` followed by `value: ...` (env vars, Helm parameters).
 const PAIR_NAME = /\bname:[ \t]*["']?([A-Za-z0-9_.-]+)["']?[ \t]*$/;

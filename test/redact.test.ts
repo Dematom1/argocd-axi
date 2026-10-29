@@ -12,17 +12,19 @@ describe("structured redaction", () => {
     expect(
       redactor.deep({
         repo: "https://ghp_abc123@github.com/org/repo.git",
+        azure: "https://:pat123@dev.azure.com/org/proj/_git/repo",
         chart: "oci://glpat-xyz@registry.example.com/charts",
         ssh: "ssh://git@github.com/org/repo.git",
         scp: "git@github.com:org/repo.git",
       }),
     ).toEqual({
       repo: `https://${REDACTED}@github.com/org/repo.git`,
+      azure: `https://:${REDACTED}@dev.azure.com/org/proj/_git/repo`,
       chart: `oci://${REDACTED}@registry.example.com/charts`,
       ssh: "ssh://git@github.com/org/repo.git",
       scp: "git@github.com:org/repo.git",
     });
-    expect(redactor.count).toBe(2);
+    expect(redactor.count).toBe(3);
     const text = redactText(
       `clone https://ghp_abc123@github.com/o/r.git failed; again: https://${REDACTED}@github.com/o/r.git`,
     );
