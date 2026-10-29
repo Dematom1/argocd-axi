@@ -206,7 +206,7 @@ export async function appsetsView(args: string[]): Promise<string> {
   );
   const summary = {
     name: appset.metadata?.name ?? name,
-    status: appsetStatus(appset, redactor),
+    status: appsetStatus(appset, new Redactor()),
     generators: generatorKinds(appset),
     appName: appset.spec?.template?.metadata?.name,
     project: template?.project,

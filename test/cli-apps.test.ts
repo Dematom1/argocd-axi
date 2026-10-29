@@ -426,6 +426,51 @@ describe("apps", () => {
     expect(stdout).toContain("1 sensitive value hidden");
   });
 
+  it("counts a secret once when a view shows its message twice", () => {
+    const secret = "rendering failed: token=supersecretvalue123";
+    const app = {
+      metadata: { name: "canary", namespace: "argocd" },
+      spec: { project: "default" },
+      status: {
+        sync: { status: "Synced" },
+        health: { status: "Healthy" },
+        resources: [
+          {
+            group: "argoproj.io",
+            kind: "Rollout",
+            namespace: "web",
+            name: "canary",
+            status: "Synced",
+            health: { status: "Degraded", message: secret },
+          },
+        ],
+      },
+    };
+    const appset = {
+      metadata: { name: "broken" },
+      spec: { generators: [{ list: {} }] },
+      status: {
+        conditions: [
+          { type: "ErrorOccurred", status: "True", message: secret },
+        ],
+      },
+    };
+    const views = scenario([
+      { argv: ["app", "get", "canary"], stdout: JSON.stringify(app) },
+      { argv: ["appset", "get", "broken"], stdout: JSON.stringify(appset) },
+    ]);
+    for (const args of [
+      ["apps", "view", "canary"],
+      ["appsets", "view", "broken"],
+    ]) {
+      const { stdout } = runCli(args, { scenario: views });
+      const label = args.join(" ");
+      expect(stdout, label).not.toContain("supersecretvalue123");
+      expect(stdout.split("token=[redacted]").length - 1, label).toBe(2);
+      expect(stdout, label).toContain("1 sensitive value hidden");
+    }
+  });
+
   it("shows an unknown Progressing duration without flagging it (A6)", () => {
     const app = {
       metadata: { name: "rolling", namespace: "argocd" },

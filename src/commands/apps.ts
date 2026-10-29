@@ -356,9 +356,13 @@ export async function appsView(args: string[]): Promise<string> {
   const now = Date.now();
   const redactor = new Redactor();
   let truncated = false;
-  const cut = (text: string | undefined, max = MESSAGE_CHARS) => {
+  const cut = (
+    text: string | undefined,
+    max = MESSAGE_CHARS,
+    counter = redactor,
+  ) => {
     if (!text) return undefined;
-    const result = preview(redactor.text(text), max, full);
+    const result = preview(counter.text(text), max, full);
     truncated ||= result.truncated;
     return result.text;
   };
@@ -433,13 +437,19 @@ export async function appsView(args: string[]): Promise<string> {
 
   const resources = app.status?.resources ?? [];
   const problems = resources.filter(isResourceProblem);
+  const shownProblems = problems.slice(0, 20);
   const rollouts = resources
     .filter((r) => r.kind === ROLLOUT_KIND && r.group === "argoproj.io")
     .map((r) => ({
       name: r.name ?? "",
       namespace: r.namespace ?? "",
       health: r.health?.status ?? "Unknown",
-      message: cut(r.health?.message, 120) ?? "",
+      message:
+        cut(
+          r.health?.message,
+          120,
+          shownProblems.includes(r) ? new Redactor() : redactor,
+        ) ?? "",
     }));
 
   const help: string[] = [];
@@ -480,11 +490,7 @@ export async function appsView(args: string[]): Promise<string> {
       }),
       problems.length > 0
         ? encodeObject({
-            problemResources: resourceRows(
-              problems.slice(0, 20),
-              redactor,
-              cut,
-            ),
+            problemResources: resourceRows(shownProblems, redactor, cut),
           })
         : undefined,
       problems.length > 20
