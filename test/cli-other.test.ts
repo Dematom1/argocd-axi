@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { VERSION } from "../src/version.js";
-import { ROOT, makeHome, runCli } from "./helpers.js";
+import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
 describe("refusals (A2, A-c22)", () => {
   it.each([
@@ -87,6 +87,24 @@ describe("account, projects, appsets, inventory", () => {
     expect(runCli(["projects", "windows", "default"]).stdout).toContain(
       "windows: 0 sync windows in project default",
     );
+  });
+
+  it("redacts secrets in a project description in list and view (S12)", () => {
+    const project = {
+      metadata: { name: "leaky" },
+      spec: { description: "deploy bot uses token=supersecretvalue123" },
+    };
+    const leaky = scenario([
+      { argv: ["proj", "list"], stdout: JSON.stringify([project]) },
+      { argv: ["proj", "get", "leaky"], stdout: JSON.stringify(project) },
+    ]);
+    for (const args of [["projects"], ["projects", "view", "leaky"]]) {
+      const { stdout } = runCli(args, { scenario: leaky });
+      const label = args.join(" ");
+      expect(stdout, label).not.toContain("supersecretvalue123");
+      expect(stdout, label).toContain("token=[redacted]");
+      expect(stdout, label).toContain("1 sensitive value hidden");
+    }
   });
 
   it("appsets, view and generate", () => {

@@ -167,7 +167,7 @@ export async function projectsView(args: string[]): Promise<string> {
   const windows = spec.syncWindows ?? [];
   const summary = {
     name: project.metadata?.name ?? name,
-    description: spec.description || undefined,
+    description: spec.description ? redactor.text(spec.description) : undefined,
     sourceRepos: capped(spec.sourceRepos),
     sourceNamespaces: capped(spec.sourceNamespaces),
     clusterResourcesAllowed: groupKinds(spec.clusterResourceWhitelist),
