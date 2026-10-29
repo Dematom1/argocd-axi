@@ -1,4 +1,12 @@
-# argocd-axi
+<h1 align="center">argocd-axi</h1>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/argocd-axi"><img alt="npm" src="https://img.shields.io/npm/v/argocd-axi?style=flat-square" /></a>
+  <a href="https://github.com/Dematom1/argocd-axi/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Dematom1/argocd-axi/ci.yml?style=flat-square&label=ci" /></a>
+  <a href="https://github.com/Dematom1/argocd-axi/actions/workflows/release-please.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/Dematom1/argocd-axi/release-please.yml?style=flat-square&label=release" /></a>
+  <a href="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square"><img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square" /></a>
+  <a href="https://x.com/dematom1"><img alt="X" src="https://img.shields.io/badge/X-@dematom1-black?style=flat-square" /></a>
+</p>
 
 Read-only Argo CD for agents. `argocd-axi` wraps the `argocd` CLI and answers
 the questions an agent asks during a deployment problem (which apps need
