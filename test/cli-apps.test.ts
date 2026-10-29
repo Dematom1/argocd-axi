@@ -38,7 +38,7 @@ describe("apps", () => {
     );
     expect(stdout).toContain("apps[1]{app,project,sync,health,why,revision}:");
     expect(stdout).toContain(
-      "Run `argocd-axi apps --limit 3 --context prod` to see all 3",
+      "Run `argocd-axi apps --limit 3 --problems --fields revision --context prod` to see all 3",
     );
     const project = runCli(["apps", "-p", "payments"]);
     expect(project.calls).toContainEqual([
@@ -53,8 +53,73 @@ describe("apps", () => {
     expect(none.stdout).toContain(
       "apps: 0 of 5 applications match the filters",
     );
+    expect(none.stdout).toContain("Run `argocd-axi apps` to list all 5");
     expect(runCli(["apps", "--sync", "Broken"]).stdout).toContain(
       "--sync must be one of Synced, OutOfSync, Unknown",
+    );
+  });
+
+  it("keeps every given filter in the see-all hints", () => {
+    const synced = runCli(["apps", "--sync", "Synced", "--limit", "1"]);
+    const all = synced.stdout.match(/Run `argocd-axi (apps [^`]*)` to see all/);
+    expect(all?.[1]).toBe("apps --limit 3 --sync Synced");
+    expect(synced.stdout).toContain(
+      'count: "1 of 3 matching (5 total, 3 need attention)"',
+    );
+    const widened = runCli(["apps", "--sync", "Synced", "--limit", "3"]);
+    expect(widened.stdout).toContain(
+      'count: "3 of 3 matching (5 total, 3 need attention)"',
+    );
+    const selected = runCli([
+      "apps",
+      "-l",
+      "team in (a,b)",
+      "--sync",
+      "Synced",
+      "--limit",
+      "1",
+    ]);
+    expect(selected.stdout).toContain(
+      "Run `argocd-axi apps --limit 3 --selector 'team in (a,b)' --sync Synced` to see all 3",
+    );
+    expect(selected.stdout).toContain(
+      "Run `argocd-axi apps --problems --selector 'team in (a,b)'` to list only apps needing attention",
+    );
+    const resources = runCli([
+      "apps",
+      "resources",
+      "payments-api",
+      "--problems",
+      "--limit",
+      "1",
+    ]);
+    expect(resources.stdout).toContain(
+      "Run `argocd-axi apps resources payments-api --limit 3 --problems` to see all",
+    );
+    const orphaned = runCli([
+      "apps",
+      "resources",
+      "payments-api",
+      "--orphaned",
+      "--limit",
+      "1",
+    ]);
+    expect(orphaned.stdout).toContain(
+      "Run `argocd-axi apps resources payments-api --limit 2 --orphaned` to see all",
+    );
+    const manifests = runCli([
+      "apps",
+      "manifests",
+      "payments-api",
+      "--revision",
+      "abc123",
+      "--kind",
+      "Service",
+      "--context",
+      "prod",
+    ]);
+    expect(manifests.stdout).toContain(
+      "Run `argocd-axi apps manifests payments-api --full --revision abc123 --kind Service --context prod` to see the YAML",
     );
   });
 

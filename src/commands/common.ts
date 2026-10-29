@@ -35,6 +35,24 @@ export function contextSuffix(parsed: ParsedArgs): string {
   return context === undefined ? "" : ` --context ${context}`;
 }
 
+/** The flags the user gave, minus `omit`, rendered for a suggested command with `--context` last. */
+export function carriedFlags(parsed: ParsedArgs, omit: string[] = []): string {
+  const parts: string[] = [];
+  for (const [name, value] of parsed.flags) {
+    if (name === "--context" || omit.includes(name)) continue;
+    if (value === true) parts.push(name);
+    else if (typeof value === "string") parts.push(name, shellWord(value));
+    else if (Array.isArray(value)) parts.push(name, shellWord(value.join(",")));
+  }
+  return parts.map((part) => ` ${part}`).join("") + contextSuffix(parsed);
+}
+
+function shellWord(value: string): string {
+  return /^[\w./:=,@%+-]+$/.test(value)
+    ? value
+    : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 export function refuse(key: string): never {
   const refusal = PLANNED_WRITES[key] ?? REFUSALS[key];
   if (!refusal) {

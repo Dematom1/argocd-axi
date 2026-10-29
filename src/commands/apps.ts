@@ -45,6 +45,7 @@ import { parseTable } from "../context.js";
 import { Redactor } from "../redact.js";
 import { encodeObject, renderTextBlock } from "../toon.js";
 import {
+  carriedFlags,
   contextOption,
   contextSuffix,
   dispatch,
@@ -77,6 +78,9 @@ async function getApp(
 }
 
 // ---------------------------------------------------------------- apps (list)
+
+/** `apps` filters applied locally, after the server-side list is fetched. */
+const LOCAL_FILTERS = ["--sync", "--health", "--problems", "--limit"];
 
 const LIST_FIELDS = [
   "namespace",
@@ -282,7 +286,9 @@ export async function appsList(args: string[]): Promise<string> {
       undefined,
       all.length === 0
         ? []
-        : [`Run \`argocd-axi apps${scope}\` to list all ${all.length}`],
+        : [
+            `Run \`argocd-axi apps${carriedFlags(parsed, LOCAL_FILTERS)}\` to list all ${all.length}`,
+          ],
     );
   }
 
@@ -308,14 +314,14 @@ export async function appsList(args: string[]): Promise<string> {
   const help: string[] = [];
   if (rows.length < matching.length)
     help.push(
-      `Run \`argocd-axi apps --limit ${matching.length}${scope}\` to see all ${matching.length}`,
+      `Run \`argocd-axi apps --limit ${matching.length}${carriedFlags(parsed, ["--limit"])}\` to see all ${matching.length}`,
     );
   help.push(
     `Run \`argocd-axi apps view <app>${scope}\` to diagnose an application`,
   );
   if (!problemsOnly && attention > 0)
     help.push(
-      `Run \`argocd-axi apps --problems${scope}\` to list only apps needing attention`,
+      `Run \`argocd-axi apps --problems${carriedFlags(parsed, LOCAL_FILTERS)}\` to list only apps needing attention`,
     );
   return finish(
     [encodeObject({ count, apps: redactor.deep(rows) })],
@@ -641,7 +647,7 @@ export async function appsResources(args: string[]): Promise<string> {
       redactor,
       shown.length < rows.length
         ? [
-            `Run \`argocd-axi apps resources ${name} --orphaned --limit ${rows.length}${scope}\` to see all`,
+            `Run \`argocd-axi apps resources ${name} --limit ${rows.length}${carriedFlags(parsed, ["--limit"])}\` to see all`,
           ]
         : [],
     );
@@ -672,7 +678,7 @@ export async function appsResources(args: string[]): Promise<string> {
   const help: string[] = [];
   if (shown.length < selected.length)
     help.push(
-      `Run \`argocd-axi apps resources ${name} --limit ${selected.length}${scope}\` to see all`,
+      `Run \`argocd-axi apps resources ${name} --limit ${selected.length}${carriedFlags(parsed, ["--limit"])}\` to see all`,
     );
   if (!problemsOnly && problems.length > 0)
     help.push(
@@ -951,7 +957,6 @@ export async function appsManifests(args: string[]): Promise<string> {
     throw validationError("--revision only applies to --source git");
   const kind = getString(parsed, "--kind");
   const full = getBool(parsed, "--full");
-  const scope = contextSuffix(parsed);
 
   const argv = [name, "--source", source];
   if (revision !== undefined) argv.push("--revision", revision);
@@ -1011,7 +1016,7 @@ export async function appsManifests(args: string[]): Promise<string> {
     full
       ? []
       : [
-          `Run \`argocd-axi apps manifests ${name} --source ${source}${kind ? ` --kind ${kind}` : ""} --full${scope}\` to see the YAML`,
+          `Run \`argocd-axi apps manifests ${name} --full${carriedFlags(parsed)}\` to see the YAML`,
         ],
   );
 }

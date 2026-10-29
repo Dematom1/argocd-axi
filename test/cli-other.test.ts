@@ -265,6 +265,11 @@ describe("guards", () => {
       const help = runCli(["apps", verb, "--help"]);
       expect(help.exitCode).toBe(0);
       expect(help.stdout).toContain("subcommands[8]:");
+      const top = runCli([verb]);
+      expect(top.exitCode).toBe(2);
+      expect(top.stdout).toContain("code: VALIDATION_ERROR");
+      expect(top.stdout).not.toContain("spells this");
+      expect(top.calls).toEqual([]);
     }
   });
 });

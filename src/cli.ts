@@ -42,7 +42,9 @@ export function formatError(error: unknown): {
 }
 
 function renderUnknownCommand(command: string): string {
-  const native = NATIVE_NOUNS[command];
+  const native = Object.hasOwn(NATIVE_NOUNS, command)
+    ? NATIVE_NOUNS[command]
+    : undefined;
   const help = native
     ? [
         `argocd-axi spells this \`${native}\`: run \`argocd-axi ${native === "--version" ? "--version" : `${native} --help`}\``,
@@ -60,20 +62,23 @@ const TOP_LEVEL_REFUSALS = Object.keys(REFUSALS).filter(
   (key) => !key.includes(" "),
 );
 
-export const COMMANDS: Record<string, AxiCliCommand<undefined>> = {
-  ctx: ctxCommand,
-  whoami: whoamiCommand,
-  "can-i": canICommand,
-  apps: appsCommand,
-  projects: projectsCommand,
-  appsets: appsetsCommand,
-  repos: reposCommand,
-  clusters: clustersCommand,
-  setup: setupCommand,
-  ...Object.fromEntries(
-    TOP_LEVEL_REFUSALS.map((key) => [key, refusalCommand(key)]),
-  ),
-};
+export const COMMANDS: Record<string, AxiCliCommand<undefined>> = Object.assign(
+  Object.create(null) as Record<string, AxiCliCommand<undefined>>,
+  {
+    ctx: ctxCommand,
+    whoami: whoamiCommand,
+    "can-i": canICommand,
+    apps: appsCommand,
+    projects: projectsCommand,
+    appsets: appsetsCommand,
+    repos: reposCommand,
+    clusters: clustersCommand,
+    setup: setupCommand,
+    ...Object.fromEntries(
+      TOP_LEVEL_REFUSALS.map((key) => [key, refusalCommand(key)]),
+    ),
+  },
+);
 
 export async function main(
   argv: string[] = process.argv.slice(2),
