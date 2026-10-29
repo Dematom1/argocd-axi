@@ -177,6 +177,14 @@ describe("apps", () => {
     expect(runCli(["apps", "view", "secret-app"]).stdout).toContain(
       "error: Permission denied by Argo CD RBAC\ncode: FORBIDDEN",
     );
+    const jsonMissing = runCli(["apps", "view", "gone"]);
+    expect(jsonMissing.exitCode).toBe(1);
+    expect(jsonMissing.stdout).toContain(
+      'error: "Not found: applications.argoproj.io \\"gone\\" not found"\ncode: NOT_FOUND',
+    );
+    expect(runCli(["apps", "view", "locked-app"]).stdout).toContain(
+      "error: Permission denied by Argo CD RBAC\ncode: FORBIDDEN",
+    );
     const usage = runCli(["apps", "view"]);
     expect(usage.exitCode).toBe(2);
     expect(usage.calls).toEqual([]);

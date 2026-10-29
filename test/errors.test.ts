@@ -11,6 +11,11 @@ describe("argocd error translation", () => {
         fatal('rpc error: code = NotFound desc = app \\"x\\" not found'),
       ),
     ).toBe('rpc error: code = NotFound desc = app "x" not found');
+    expect(
+      cleanArgocdStderr(
+        '{"level":"warning","msg":"error looking for plugin","time":"t"}\n{"level":"fatal","msg":"rpc error: code = NotFound desc = app \\"x\\" not found","time":"2026-10-29T06:23:17-06:00"}\n',
+      ),
+    ).toBe('rpc error: code = NotFound desc = app "x" not found');
     expect(cleanArgocdStderr("Error: unknown flag: --bogus\n")).toBe(
       "unknown flag: --bogus",
     );

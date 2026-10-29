@@ -18,6 +18,8 @@
     { "argv": ["app", "get", "team-a/billing"], "stdoutFile": "app-billing.json" },
     { "argv": ["app", "get", "nope"], "exit": 20, "stderr": "time=\"2026-10-28T10:00:00Z\" level=fatal msg=\"rpc error: code = NotFound desc = applications.argoproj.io \\\"nope\\\" not found\"\n" },
     { "argv": ["app", "get", "secret-app"], "exit": 20, "stderr": "time=\"2026-10-28T10:00:00Z\" level=fatal msg=\"rpc error: code = PermissionDenied desc = permission denied\"\n" },
+    { "argv": ["app", "get", "gone"], "exit": 20, "stderr": "{\"level\":\"warning\",\"msg\":\"error looking for plugin 'argocd-x'\",\"time\":\"2026-10-29T06:23:17-06:00\"}\n{\"level\":\"fatal\",\"msg\":\"rpc error: code = NotFound desc = applications.argoproj.io \\\"gone\\\" not found\",\"time\":\"2026-10-29T06:23:17-06:00\"}\n" },
+    { "argv": ["app", "get", "locked-app"], "exit": 20, "stderr": "{\"level\":\"fatal\",\"msg\":\"rpc error: code = PermissionDenied desc = permission denied\",\"time\":\"2026-10-29T06:23:17-06:00\"}\n" },
     { "argv": ["app", "diff", "payments-api"], "stdoutFile": "diff-payments-api.txt" },
     { "argv": ["app", "diff", "guestbook"], "stdout": "" },
     { "argv": ["app", "manifests", "payments-api"], "stdoutFile": "manifests-payments-api.yaml" },

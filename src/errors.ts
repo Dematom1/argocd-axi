@@ -51,15 +51,22 @@ const MAX_MESSAGE_CHARS = 300;
 
 /**
  * Pull the meaningful message out of argocd stderr. argocd logs fatal errors
- * as `time=... level=fatal msg="..."` and also prints plugin-lookup warnings
- * that are pure noise for an agent.
+ * as `time=... level=fatal msg="..."` (2.x) or as a JSON line
+ * `{"level":"fatal","msg":"...","time":"..."}` (3.x), and also prints
+ * plugin-lookup warnings that are pure noise for an agent.
  */
 export function cleanArgocdStderr(stderr: string): string {
-  const lines = stderr
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .filter((line) => !/level=(warning|info|debug)/.test(line));
+  const lines: string[] = [];
+  for (const raw of stderr.split("\n")) {
+    const line = raw.trim();
+    if (line.length === 0) continue;
+    const json = parseJsonLogLine(line);
+    if (json) {
+      if (json.level === "fatal" || json.level === "error") return json.msg;
+      continue;
+    }
+    if (!/level=(warning|info|debug)/.test(line)) lines.push(line);
+  }
 
   for (const line of lines) {
     const fatal = line.match(/level=(?:fatal|error) msg="((?:[^"\\]|\\.)*)"/);
@@ -68,6 +75,21 @@ export function cleanArgocdStderr(stderr: string): string {
 
   const last = lines.at(-1) ?? "";
   return last.replace(/^(?:Error|FATA\[\d+\]):?\s*/, "");
+}
+
+function parseJsonLogLine(
+  line: string,
+): { level: string; msg: string } | undefined {
+  if (!line.startsWith("{")) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(line);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const { level, msg } = parsed as Record<string, unknown>;
+    if (typeof level !== "string" || typeof msg !== "string") return undefined;
+    return { level, msg };
+  } catch {
+    return undefined;
+  }
 }
 
 function unescapeGo(value: string): string {
