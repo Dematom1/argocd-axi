@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -42,13 +42,20 @@ export function makeHome(): string {
   return mkdtempSync(join(tmpdir(), "argocd-axi-test-"));
 }
 
-export function runCli(args: string[], options: RunOptions = {}): RunResult {
+/**
+ * Run the CLI as a child process without blocking the test worker, so a
+ * loaded machine cannot starve Vitest's worker RPC.
+ */
+export async function runCli(
+  args: string[],
+  options: RunOptions = {},
+): Promise<RunResult> {
   const home = options.home ?? makeHome();
   const log = join(home, "argocd-calls.log");
   writeFileSync(log, "");
   const entry = join(ROOT, "dist", "bin", `${options.bin ?? "argocd-axi"}.js`);
-  const result = spawnSync(process.execPath, [entry, ...args], {
-    encoding: "utf8",
+  const child = spawn(process.execPath, [entry, ...args], {
+    stdio: ["ignore", "pipe", "ignore"],
     timeout: 30_000,
     env: {
       PATH: FAKE_BIN,
@@ -62,13 +69,20 @@ export function runCli(args: string[], options: RunOptions = {}): RunResult {
       ...options.env,
     },
   });
+  let stdout = "";
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => (stdout += chunk));
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => resolve(code ?? -1));
+  });
   const calls = existsSync(log)
     ? readFileSync(log, "utf8")
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as string[])
     : [];
-  return { stdout: result.stdout, exitCode: result.status ?? -1, calls, home };
+  return { stdout, exitCode, calls, home };
 }
 
 /** Write a one-off scenario next to the default fixtures. */

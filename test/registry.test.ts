@@ -45,7 +45,7 @@ const WRITE_VERBS = [
 ];
 
 describe("allowlist registry", () => {
-  it("is exactly the reviewed set of operations", () => {
+  it("is exactly the reviewed set of operations", async () => {
     expect(
       Object.fromEntries(
         Object.entries(OPERATIONS).map(([id, op]) => [
@@ -79,19 +79,19 @@ describe("allowlist registry", () => {
     });
   });
 
-  it("never names a write verb", () => {
+  it("never names a write verb", async () => {
     for (const op of Object.values(OPERATIONS)) {
       for (const token of op.argv) expect(WRITE_VERBS).not.toContain(token);
     }
   });
 
-  it("only local operations skip the network", () => {
+  it("only local operations skip the network", async () => {
     for (const op of Object.values(OPERATIONS)) {
       expect(op.network).toBe(op.tier === "read");
     }
   });
 
-  it("refuses forbidden arguments at the seam", () => {
+  it("refuses forbidden arguments at the seam", async () => {
     for (const arg of FORBIDDEN_ARGS) {
       expect(() => buildArgv("app get", ["guestbook", arg])).toThrow(
         /never passed to argocd/,
@@ -111,7 +111,7 @@ describe("allowlist registry", () => {
     ]);
   });
 
-  it("gives every refusal a reason and a route", () => {
+  it("gives every refusal a reason and a route", async () => {
     for (const refusal of [
       ...Object.values(REFUSALS),
       ...Object.values(PLANNED_WRITES),
@@ -136,7 +136,7 @@ describe("one subprocess seam", () => {
     ).rejects.toMatchObject({ code: CODES.REFUSED });
   });
 
-  it("never surfaces the argocd CLI config or a kubeconfig, on any command", () => {
+  it("never surfaces the argocd CLI config or a kubeconfig, on any command", async () => {
     const home = makeHome();
     const sentinel = "SENTINEL-do-not-read";
     mkdirSync(join(home, ".config", "argocd"), { recursive: true });
@@ -172,7 +172,7 @@ describe("one subprocess seam", () => {
     ];
     let callCount = 0;
     for (const args of commands) {
-      const { stdout, calls } = runCli(args, {
+      const { stdout, calls } = await runCli(args, {
         home,
         env: { KUBECONFIG: kubeconfig },
       });
@@ -191,8 +191,8 @@ describe("one subprocess seam", () => {
 });
 
 describe("update built-in", () => {
-  it("reaches the SDK's update --check offline instead of Unknown command", () => {
-    const { stdout, exitCode, calls } = runCli(["update", "--check"], {
+  it("reaches the SDK's update --check offline instead of Unknown command", async () => {
+    const { stdout, exitCode, calls } = await runCli(["update", "--check"], {
       env: {
         NODE_OPTIONS:
           "--import=data:text/javascript,globalThis.fetch=async()=>{throw{}}",

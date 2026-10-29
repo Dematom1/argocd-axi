@@ -57,21 +57,30 @@ const MAX_MESSAGE_CHARS = 300;
  */
 export function cleanArgocdStderr(stderr: string): string {
   const lines: string[] = [];
+  // The fatal line carries the cause and gRPC code; an earlier error-level
+  // line (such as core mode's `finished call` log) is only a fallback.
+  let fatal: string | undefined;
+  let error: string | undefined;
   for (const raw of stderr.split("\n")) {
     const line = raw.trim();
     if (line.length === 0) continue;
     const json = parseJsonLogLine(line);
     if (json) {
-      if (json.level === "fatal" || json.level === "error") return json.msg;
+      if (json.level === "fatal") fatal ??= json.msg;
+      else if (json.level === "error") error ??= json.msg;
+      continue;
+    }
+    const logfmt = line.match(/level=(fatal|error) msg="((?:[^"\\]|\\.)*)"/);
+    if (logfmt?.[2] !== undefined) {
+      const msg = unescapeGo(logfmt[2]);
+      if (logfmt[1] === "fatal") fatal ??= msg;
+      else error ??= msg;
       continue;
     }
     if (!/level=(warning|info|debug)/.test(line)) lines.push(line);
   }
-
-  for (const line of lines) {
-    const fatal = line.match(/level=(?:fatal|error) msg="((?:[^"\\]|\\.)*)"/);
-    if (fatal?.[1] !== undefined) return unescapeGo(fatal[1]);
-  }
+  if (fatal !== undefined) return fatal;
+  if (error !== undefined) return error;
 
   const last = lines.at(-1) ?? "";
   return last.replace(/^(?:Error|FATA\[\d+\]):?\s*/, "");

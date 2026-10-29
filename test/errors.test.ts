@@ -21,6 +21,21 @@ describe("argocd error translation", () => {
     );
   });
 
+  it("prefers the fatal message over an earlier error-level log", () => {
+    const json =
+      '{"level":"error","msg":"finished call","grpc.code":"NotFound","time":"t"}\n{"level":"fatal","msg":"rpc error: code = NotFound desc = app \\"x\\" not found","time":"t"}\n';
+    expect(cleanArgocdStderr(json)).toBe(
+      'rpc error: code = NotFound desc = app "x" not found',
+    );
+    expect(mapArgocdFailure(json).code).toBe("NOT_FOUND");
+    const logfmt =
+      'time="t" level=error msg="finished call"\ntime="t" level=fatal msg="rpc error: code = PermissionDenied desc = permission denied"\n';
+    expect(mapArgocdFailure(logfmt).code).toBe("FORBIDDEN");
+    expect(
+      cleanArgocdStderr('time="t" level=error msg="only an error"\n'),
+    ).toBe("only an error");
+  });
+
   it.each([
     [
       "rpc error: code = Unauthenticated desc = invalid session: token has invalid claims",

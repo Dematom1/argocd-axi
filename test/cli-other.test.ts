@@ -19,8 +19,8 @@ describe("refusals (A2, A-c22)", () => {
     ["apps", "terminate-op", "payments-api"],
     ["apps", "refresh", "payments-api"],
     ["apps", "action", "run", "web", "restart"],
-  ])("plans the write tier for %s %s", (...args) => {
-    const { stdout, exitCode, calls } = runCli(args);
+  ])("plans the write tier for %s %s", async (...args) => {
+    const { stdout, exitCode, calls } = await runCli(args);
     expect(exitCode).toBe(1);
     expect(stdout).toContain("code: REFUSED");
     expect(stdout).toContain("not in v1 (see ROADMAP.md)");
@@ -48,60 +48,62 @@ describe("refusals (A2, A-c22)", () => {
     ["apps", "edit", "x"],
     ["apps", "patch-resource", "x"],
     ["apps", "delete-resource", "x"],
-  ])("refuses %s with a reason and a route", (...args) => {
-    const { stdout, exitCode, calls } = runCli(args);
+  ])("refuses %s with a reason and a route", async (...args) => {
+    const { stdout, exitCode, calls } = await runCli(args);
     expect(exitCode).toBe(1);
     expect(stdout).toContain("code: REFUSED");
     expect(stdout).toMatch(/help\[\d+\]:/);
     expect(calls).toEqual([]);
   });
 
-  it("points argocd's own nouns at the argocd-axi spelling", () => {
-    const { stdout, exitCode } = runCli(["app", "list"]);
+  it("points argocd's own nouns at the argocd-axi spelling", async () => {
+    const { stdout, exitCode } = await runCli(["app", "list"]);
     expect(exitCode).toBe(2);
     expect(stdout).toContain("argocd-axi spells this `apps`");
   });
 });
 
 describe("account, projects, appsets, inventory", () => {
-  it("whoami and can-i", () => {
-    const who = runCli(["whoami"]);
+  it("whoami and can-i", async () => {
+    const who = await runCli(["whoami"]);
     expect(who.stdout).toContain(
       'user: alice\nissuer: "https://dex.example.com"\ngroups[2]: platform,payments',
     );
-    const yes = runCli(["can-i", "sync", "applications", "payments/*"]);
+    const yes = await runCli(["can-i", "sync", "applications", "payments/*"]);
     expect(yes.stdout).toContain(
       "answer: yes\ncheck: sync applications payments/*",
     );
-    const no = runCli(["can-i", "delete", "applications", "*"]);
+    const no = await runCli(["can-i", "delete", "applications", "*"]);
     expect(no.exitCode).toBe(0);
     expect(no.stdout).toContain("answer: no");
-    expect(runCli(["can-i", "destroy", "applications", "*"]).exitCode).toBe(2);
-    const odd = runCli(["can-i", "get", "applications", "*"]);
+    expect(
+      (await runCli(["can-i", "destroy", "applications", "*"])).exitCode,
+    ).toBe(2);
+    const odd = await runCli(["can-i", "get", "applications", "*"]);
     expect(odd.exitCode).toBe(1);
     expect(odd.stdout).toContain("code: UPSTREAM_ERROR");
     expect(odd.stdout).not.toContain("answer:");
   });
 
-  it("projects, view and sync windows", () => {
-    expect(runCli(["projects"]).stdout).toContain(
+  it("projects, view and sync windows", async () => {
+    expect((await runCli(["projects"])).stdout).toContain(
       'projects[2]{project,description,destinations,windows}:\n  default,"",1,0\n  payments,Payments team services,2,2',
     );
-    const view = runCli(["projects", "view", "payments"]);
+    const view = await runCli(["projects", "view", "payments"]);
     expect(view.stdout).toContain(
       "roles[1]{role,policies,groups,tokens}:\n  ci,1,0,1",
     );
     expect(view.stdout).not.toContain("a1b2c3");
-    const frozen = runCli(["projects", "windows", "frozen"]);
+    const frozen = await runCli(["projects", "windows", "frozen"]);
     expect(frozen.stdout).toContain(
       "sync:\n  automated: blocked\n  manual: blocked\n  reason: 1 deny window is active",
     );
-    expect(runCli(["projects", "windows", "default"]).stdout).toContain(
+    expect((await runCli(["projects", "windows", "default"])).stdout).toContain(
       "windows: 0 sync windows in project default",
     );
   });
 
-  it("redacts secrets in a project description in list and view (S12)", () => {
+  it("redacts secrets in a project description in list and view (S12)", async () => {
     const project = {
       metadata: { name: "leaky" },
       spec: { description: "deploy bot uses token=supersecretvalue123" },
@@ -111,7 +113,7 @@ describe("account, projects, appsets, inventory", () => {
       { argv: ["proj", "get", "leaky"], stdout: JSON.stringify(project) },
     ]);
     for (const args of [["projects"], ["projects", "view", "leaky"]]) {
-      const { stdout } = runCli(args, { scenario: leaky });
+      const { stdout } = await runCli(args, { scenario: leaky });
       const label = args.join(" ");
       expect(stdout, label).not.toContain("supersecretvalue123");
       expect(stdout, label).toContain("token=[redacted]");
@@ -119,18 +121,18 @@ describe("account, projects, appsets, inventory", () => {
     }
   });
 
-  it("appsets, view and generate", () => {
-    const list = runCli(["appsets"]);
+  it("appsets, view and generate", async () => {
+    const list = await runCli(["appsets"]);
     expect(list.stdout).toContain(
       'broken,default,clusters,"error: failed to execute go template: missing key"',
     );
-    expect(runCli(["appsets", "view", "team-apps"]).stdout).toContain(
+    expect((await runCli(["appsets", "view", "team-apps"])).stdout).toContain(
       "apps[2]{app,sync,health}:\n  team-blue,OutOfSync,Healthy",
     );
     const home = makeHome();
     const file = join(home, "appset.yaml");
     writeFileSync(file, "kind: ApplicationSet\n");
-    const generated = runCli(["appsets", "generate", file], { home });
+    const generated = await runCli(["appsets", "generate", file], { home });
     expect(generated.stdout).toContain(
       "count: 1 application would be generated",
     );
@@ -142,26 +144,27 @@ describe("account, projects, appsets, inventory", () => {
       "json",
     ]);
     expect(
-      runCli(["appsets", "generate", "/does/not/exist.yaml"]).stdout,
+      (await runCli(["appsets", "generate", "/does/not/exist.yaml"])).stdout,
     ).toContain("file not found");
     expect(
-      runCli(["appsets", "generate", "https://example.com/a.yaml"]).exitCode,
+      (await runCli(["appsets", "generate", "https://example.com/a.yaml"]))
+        .exitCode,
     ).toBe(2);
   });
 
-  it("repos and clusters never print credentials", () => {
-    const repos = runCli(["repos"]);
+  it("repos and clusters never print credentials", async () => {
+    const repos = await runCli(["repos"]);
     expect(repos.stdout).toContain(
       '"https://charts.example.com",helm,charts,"","Failed: unable to connect: 401 Unauthorized"',
     );
     expect(repos.stdout).not.toContain("ghp_should_never_be_printed");
     expect(repos.stdout).not.toContain("deploy-bot");
-    const clusters = runCli(["clusters"]);
+    const clusters = await runCli(["clusters"]);
     expect(clusters.stdout).toContain('count: "2 clusters, 1 failing"');
     expect(clusters.stdout).not.toContain("should-never-print");
   });
 
-  it("repos masks credentials embedded in a repository URL", () => {
+  it("repos masks credentials embedded in a repository URL", async () => {
     const embedded = scenario([
       { argv: ["context"], exact: true, stdoutFile: "context.txt" },
       {
@@ -176,7 +179,7 @@ describe("account, projects, appsets, inventory", () => {
         ]),
       },
     ]);
-    const { stdout } = runCli(["repos"], { scenario: embedded });
+    const { stdout } = await runCli(["repos"], { scenario: embedded });
     expect(stdout).toContain("github.com/example/infra.git");
     expect(stdout).not.toContain("ghp_url_token_never_printed");
     expect(stdout).toMatch(/redacted/);
@@ -184,38 +187,42 @@ describe("account, projects, appsets, inventory", () => {
 });
 
 describe("help, version and setup", () => {
-  it("answers --version from the fast path", () => {
+  it("answers --version from the fast path", async () => {
     const pkg = JSON.parse(
       readFileSync(join(ROOT, "package.json"), "utf8"),
     ) as { version: string };
     expect(VERSION).toBe(pkg.version);
     for (const flag of ["--version", "-v", "-V"]) {
-      const { stdout, calls } = runCli([flag]);
+      const { stdout, calls } = await runCli([flag]);
       expect(stdout).toBe(`${VERSION}\n`);
       expect(calls).toEqual([]);
     }
   });
 
-  it("prints top-level and per-command help without calling argocd", () => {
-    const top = runCli(["--help"]);
+  it("prints top-level and per-command help without calling argocd", async () => {
+    const top = await runCli(["--help"]);
     expect(top.stdout).toContain("commands[18]:");
     expect(top.calls).toEqual([]);
-    const view = runCli(["apps", "view", "--help"]);
+    const view = await runCli(["apps", "view", "--help"]);
     expect(view.stdout).toContain("usage: argocd-axi apps view <app> [flags]");
     expect(view.stdout).toContain("examples[2]:");
     expect(view.calls).toEqual([]);
-    expect(runCli(["apps", "--help"]).stdout).toContain("subcommands[8]:");
+    expect((await runCli(["apps", "--help"])).stdout).toContain(
+      "subcommands[8]:",
+    );
   });
 
-  it("rejects flags before the command", () => {
-    const { stdout, exitCode } = runCli(["--context", "prod", "apps"]);
+  it("rejects flags before the command", async () => {
+    const { stdout, exitCode } = await runCli(["--context", "prod", "apps"]);
     expect(exitCode).toBe(2);
     expect(stdout).toContain("Flags must come after the command");
   });
 
-  it("installs a SessionStart hook that runs the offline ctx entrypoint", () => {
+  it("installs a SessionStart hook that runs the offline ctx entrypoint", async () => {
     const home = makeHome();
-    const { stdout, exitCode, calls } = runCli(["setup", "hooks"], { home });
+    const { stdout, exitCode, calls } = await runCli(["setup", "hooks"], {
+      home,
+    });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("hooks: installed or already up to date");
     expect(calls).toEqual([]);
@@ -227,7 +234,7 @@ describe("help, version and setup", () => {
     expect(settings).not.toMatch(/"command": "[^"]*argocd-axi\.js"/);
   });
 
-  it("refuses to install hooks from a temporary npx cache", () => {
+  it("refuses to install hooks from a temporary npx cache", async () => {
     const home = makeHome();
     const pkg = join(home, "_npx", "0a1b2c", "node_modules", "argocd-axi");
     mkdirSync(pkg, { recursive: true });
@@ -247,25 +254,25 @@ describe("help, version and setup", () => {
 });
 
 describe("guards", () => {
-  it("refuses sync-window changes and hints ctx use", () => {
-    const windows = runCli(["projects", "windows", "add", "payments"]);
+  it("refuses sync-window changes and hints ctx use", async () => {
+    const windows = await runCli(["projects", "windows", "add", "payments"]);
     expect(windows.stdout).toContain("code: REFUSED");
     expect(windows.calls).toEqual([]);
-    const ctx = runCli(["ctx", "staging"]);
+    const ctx = await runCli(["ctx", "staging"]);
     expect(ctx.exitCode).toBe(2);
     expect(ctx.stdout).toContain("argocd-axi ctx use staging");
   });
 
-  it("does not treat Object.prototype names as subcommands", () => {
+  it("does not treat Object.prototype names as subcommands", async () => {
     for (const verb of ["constructor", "toString", "__proto__"]) {
-      const run = runCli(["apps", verb]);
+      const run = await runCli(["apps", verb]);
       expect(run.exitCode).toBe(2);
       expect(run.stdout).toContain("code: VALIDATION_ERROR");
       expect(run.calls).toEqual([]);
-      const help = runCli(["apps", verb, "--help"]);
+      const help = await runCli(["apps", verb, "--help"]);
       expect(help.exitCode).toBe(0);
       expect(help.stdout).toContain("subcommands[8]:");
-      const top = runCli([verb]);
+      const top = await runCli([verb]);
       expect(top.exitCode).toBe(2);
       expect(top.stdout).toContain("code: VALIDATION_ERROR");
       expect(top.stdout).not.toContain("spells this");

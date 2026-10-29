@@ -10,16 +10,16 @@ import {
 } from "./helpers.js";
 
 describe("test isolation", () => {
-  it("can only reach the fake argocd", () => {
-    const result = runCli(["apps"], { scenario: scenario([]) });
+  it("can only reach the fake argocd", async () => {
+    const result = await runCli(["apps"], { scenario: scenario([]) });
     expect(result.stdout).toContain("fake argocd: no fixture");
     expect(result.exitCode).toBe(1);
   });
 });
 
 describe("home view", () => {
-  it("shows the target, user, apps needing attention and running operations", () => {
-    const { stdout, exitCode, calls } = runCli([]);
+  it("shows the target, user, apps needing attention and running operations", async () => {
+    const { stdout, exitCode, calls } = await runCli([]);
     expect(exitCode).toBe(0);
     expect(stdout).toMatch(/^bin: .*argocd-axi\.js\ndescription: /);
     expect(stdout).toContain("context: prod\nserver: argocd.example.com\n");
@@ -41,20 +41,20 @@ describe("home view", () => {
     expectSafeCalls(calls);
   });
 
-  it("refreshes the version check at most every 12 hours and warns on major skew", () => {
+  const skewed = scenario([
+    { argv: ["context"], exact: true, stdoutFile: "context.txt" },
+    {
+      argv: ["version"],
+      stdout: '{"client":{"Version":"v3.3.6"},"server":{"Version":"v2.13.1"}}',
+    },
+    { argv: ["app", "list"], stdout: "[]" },
+    { argv: ["account", "get-user-info"], stdoutFile: "user.json" },
+    { argv: ["version", "--client"], stdoutFile: "version-client.json" },
+  ]);
+
+  it("refreshes the version check at most every 12 hours and warns on major skew", async () => {
     const home = makeHome();
-    const skewed = scenario([
-      { argv: ["context"], exact: true, stdoutFile: "context.txt" },
-      {
-        argv: ["version"],
-        stdout:
-          '{"client":{"Version":"v3.3.6"},"server":{"Version":"v2.13.1"}}',
-      },
-      { argv: ["app", "list"], stdout: "[]" },
-      { argv: ["account", "get-user-info"], stdoutFile: "user.json" },
-      { argv: ["version", "--client"], stdoutFile: "version-client.json" },
-    ]);
-    const first = runCli([], { home, scenario: skewed });
+    const first = await runCli([], { home, scenario: skewed });
     expect(first.stdout).toContain(
       "warning: argocd CLI v3.3.6 and server v2.13.1 differ by a major version",
     );
@@ -64,30 +64,32 @@ describe("home view", () => {
     expect(
       first.calls.filter((c) => c[0] === "version" && c[1] !== "--client"),
     ).toHaveLength(1);
-    const second = runCli([], { home, scenario: skewed });
+    const second = await runCli([], { home, scenario: skewed });
     expect(
       second.calls.filter((c) => c[0] === "version" && c[1] !== "--client"),
     ).toHaveLength(0);
     expect(second.stdout).toContain("warning:");
-    const ctx = runCli(["ctx"], { home, scenario: skewed });
+    const ctx = await runCli(["ctx"], { home, scenario: skewed });
     expect(ctx.stdout).toContain("serverVersion: v2.13.1 (checked just now)");
     expect(ctx.stdout).toContain(
       "warning: argocd CLI v3.3.6 and server v2.13.1",
     );
-    // A check made against ARGOCD_SERVER is cached under that server, so it
-    // neither shows for nor replaces the context's own server.
+  });
+
+  it("caches a check made against ARGOCD_SERVER under that server", async () => {
+    // It neither shows for nor replaces the context's own server.
     const env = { ARGOCD_SERVER: "other.example.com" };
     const envHome = makeHome();
-    runCli([], { home: envHome, scenario: skewed, env });
+    await runCli([], { home: envHome, scenario: skewed, env });
     expect(
-      runCli(["ctx"], { home: envHome, scenario: skewed, env }).stdout,
+      (await runCli(["ctx"], { home: envHome, scenario: skewed, env })).stdout,
     ).toContain("serverVersion: v2.13.1");
     expect(
-      runCli(["ctx"], { home: envHome, scenario: skewed }).stdout,
+      (await runCli(["ctx"], { home: envHome, scenario: skewed })).stdout,
     ).not.toContain("serverVersion:");
   });
 
-  it("degrades each read to unavailable instead of failing", () => {
+  it("degrades each read to unavailable instead of failing", async () => {
     const broken = scenario([
       { argv: ["context"], exact: true, stdoutFile: "context.txt" },
       {
@@ -104,7 +106,7 @@ describe("home view", () => {
       },
       { argv: ["version"], exit: 20, stderr: "boom" },
     ]);
-    const { stdout, exitCode } = runCli([], { scenario: broken });
+    const { stdout, exitCode } = await runCli([], { scenario: broken });
     expect(exitCode).toBe(0);
     expect(stdout).toContain(
       'apps: "unavailable - Argo CD server unreachable: dial tcp 1.2.3.4:443: connect: connection refused"',
@@ -117,7 +119,7 @@ describe("home view", () => {
     );
   });
 
-  it("makes no server call when no context is configured", () => {
+  it("makes no server call when no context is configured", async () => {
     const empty = scenario([
       {
         argv: ["context"],
@@ -126,7 +128,7 @@ describe("home view", () => {
         stderr: 'level=fatal msg="No contexts defined"\n',
       },
     ]);
-    const { stdout, exitCode, calls } = runCli([], { scenario: empty });
+    const { stdout, exitCode, calls } = await runCli([], { scenario: empty });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("context: none configured");
     expect(stdout).toContain("A human runs `argocd login <server> --sso`");
@@ -135,9 +137,9 @@ describe("home view", () => {
 });
 
 describe("ctx and the session hook (S17)", () => {
-  it("is offline: only local argocd commands run", () => {
+  it("is offline: only local argocd commands run", async () => {
     for (const bin of ["argocd-axi", "argocd-axi-ctx"] as const) {
-      const { stdout, exitCode, calls } = runCli(
+      const { stdout, exitCode, calls } = await runCli(
         bin === "argocd-axi" ? ["ctx"] : [],
         { bin },
       );
@@ -157,14 +159,14 @@ describe("ctx and the session hook (S17)", () => {
     }
   });
 
-  it("degrades with exit 0 when the argocd CLI is not on PATH", () => {
+  it("degrades with exit 0 when the argocd CLI is not on PATH", async () => {
     const emptyPath = makeHome();
     for (const [bin, args] of [
       ["argocd-axi", ["ctx"]],
       ["argocd-axi-ctx", []],
       ["argocd-axi", []],
     ] as const) {
-      const { stdout, exitCode } = runCli([...args], {
+      const { stdout, exitCode } = await runCli([...args], {
         bin,
         env: { PATH: emptyPath },
       });
@@ -179,7 +181,7 @@ describe("ctx and the session hook (S17)", () => {
       expect(stdout, label).toContain("A human installs the argocd CLI");
       expect(stdout, label).not.toContain("argocd login");
     }
-    const use = runCli(["ctx", "use", "staging"], {
+    const use = await runCli(["ctx", "use", "staging"], {
       env: { PATH: emptyPath },
     });
     expect(use.exitCode).toBe(1);
@@ -187,7 +189,7 @@ describe("ctx and the session hook (S17)", () => {
     expect(use.stdout).toContain("A human installs the argocd CLI");
   });
 
-  it("points env-credential setups without a context at the live view", () => {
+  it("points env-credential setups without a context at the live view", async () => {
     const empty = scenario([
       {
         argv: ["context"],
@@ -197,14 +199,17 @@ describe("ctx and the session hook (S17)", () => {
       },
     ]);
     for (const bin of ["argocd-axi", "argocd-axi-ctx"] as const) {
-      const { stdout, exitCode } = runCli(bin === "argocd-axi" ? ["ctx"] : [], {
-        bin,
-        scenario: empty,
-        env: {
-          ARGOCD_AUTH_TOKEN: "eyJ.secret.value",
-          ARGOCD_SERVER: "cd.example.com",
+      const { stdout, exitCode } = await runCli(
+        bin === "argocd-axi" ? ["ctx"] : [],
+        {
+          bin,
+          scenario: empty,
+          env: {
+            ARGOCD_AUTH_TOKEN: "eyJ.secret.value",
+            ARGOCD_SERVER: "cd.example.com",
+          },
         },
-      });
+      );
       expect(exitCode, bin).toBe(0);
       expect(stdout, bin).toContain(
         "server: cd.example.com (from ARGOCD_SERVER)",
@@ -214,8 +219,8 @@ describe("ctx and the session hook (S17)", () => {
     }
   });
 
-  it("reports the environment token and server without reading them out", () => {
-    const { stdout } = runCli(["ctx"], {
+  it("reports the environment token and server without reading them out", async () => {
+    const { stdout } = await runCli(["ctx"], {
       env: {
         ARGOCD_AUTH_TOKEN: "eyJ.secret.value",
         ARGOCD_SERVER: "cd.example.com",
@@ -226,38 +231,38 @@ describe("ctx and the session hook (S17)", () => {
     expect(stdout).not.toContain("eyJ.secret.value");
   });
 
-  it("shows the writable-contexts allowlist from the tool's own config", () => {
+  it("shows the writable-contexts allowlist from the tool's own config", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
     writeFileSync(
       join(home, ".config", "argocd-axi", "config"),
       "writable-contexts: [staging]\n",
     );
-    expect(runCli(["ctx"], { home }).stdout).toContain(
+    expect((await runCli(["ctx"], { home })).stdout).toContain(
       "writableContexts: staging",
     );
     writeFileSync(
       join(home, ".config", "argocd-axi", "config"),
       "writable-contexts: staging\n",
     );
-    const broken = runCli(["ctx"], { home });
+    const broken = await runCli(["ctx"], { home });
     expect(broken.exitCode).toBe(0);
     expect(broken.stdout).toMatch(
       /writableContexts: "?unavailable - argocd-axi config .* is invalid: writable-contexts must be a list/,
     );
   });
 
-  it("switches context with ctx use, idempotently (A11)", () => {
-    const switched = runCli(["ctx", "use", "staging"]);
+  it("switches context with ctx use, idempotently (A11)", async () => {
+    const switched = await runCli(["ctx", "use", "staging"]);
     expect(switched.stdout).toContain("context: switched to staging");
     expect(switched.calls.at(-1)).toEqual(["context", "staging"]);
-    const already = runCli(["ctx", "use", "prod"]);
+    const already = await runCli(["ctx", "use", "prod"]);
     expect(already.exitCode).toBe(0);
     expect(already.stdout).toContain(
       "prod is already the current context (no-op)",
     );
     expect(already.calls).toEqual([["context"]]);
-    const missing = runCli(["ctx", "use", "nope"]);
+    const missing = await runCli(["ctx", "use", "nope"]);
     expect(missing.exitCode).toBe(1);
     expect(missing.stdout).toContain("code: CONTEXT_NOT_FOUND");
   });
