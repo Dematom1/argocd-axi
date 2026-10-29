@@ -91,8 +91,11 @@ A project role only adds permissions. Argo CD also grants every token the
 server's `policy.default` role (from `argocd-rbac-cm`), so with
 `policy.default: role:readonly` this token can read every project, not just
 `payments`. For a token that is really project-scoped, keep `policy.default`
-empty or minimal, then check what the token can do with
-`argocd-axi can-i get applications 'other-project/*'`.
+empty or minimal and review the effective policies in `argocd-rbac-cm`.
+`can-i` checks one object literally (`'other-project/*'` is not "any app in
+other-project"), so a `no` there proves nothing about other apps; spot-check
+concrete apps instead, e.g. `argocd-axi can-i get applications
+'other-project/some-app'`.
 
 argocd-axi itself refuses `proj role create-token`, `account generate-token`
 and every other command that prints or changes a credential.
