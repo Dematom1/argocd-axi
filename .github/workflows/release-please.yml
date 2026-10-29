@@ -122,7 +122,8 @@ jobs:
     permissions:
       id-token: write # npm trusted publishing and provenance
     steps:
-      # npm trusted publishing needs npm >= 11.5.1, which ships with Node 24.
+      # npm trusted publishing needs npm >= 11.5.1 and `npm stage` needs
+      # npm >= 11.15.0; the current Node 24 release ships a newer npm.
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -142,4 +143,4 @@ jobs:
             echo "$SPEC is already published; nothing to do."
             exit 0
           fi
-          npm publish "./$TARBALL" --access public --provenance --ignore-scripts
+          npm stage publish "./$TARBALL" --access public --provenance --ignore-scripts
