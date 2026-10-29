@@ -146,6 +146,28 @@ describe("ctx and the session hook (S17)", () => {
     }
   });
 
+  it("degrades with exit 0 when the argocd CLI is not on PATH", () => {
+    const emptyPath = makeHome();
+    for (const [bin, args] of [
+      ["argocd-axi", ["ctx"]],
+      ["argocd-axi-ctx", []],
+      ["argocd-axi", []],
+    ] as const) {
+      const { stdout, exitCode } = runCli([...args], {
+        bin,
+        env: { PATH: emptyPath },
+      });
+      const label = [bin, ...args].join(" ");
+      expect(exitCode, label).toBe(0);
+      expect(stdout, label).toContain("context: none configured");
+      expect(stdout, label).toContain(
+        "contexts: unavailable - The argocd CLI is not installed or not on PATH",
+      );
+      if (label !== "argocd-axi")
+        expect(stdout, label).toContain("cli: argocd CLI not found on PATH");
+    }
+  });
+
   it("reports the environment token and server without reading them out", () => {
     const { stdout } = runCli(["ctx"], {
       env: {

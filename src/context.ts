@@ -1,4 +1,5 @@
-import { runArgocd } from "./argocd.js";
+import { AxiError } from "axi-sdk-js";
+import { runArgocd, type RunResult } from "./argocd.js";
 import {
   CODES,
   axiError,
@@ -71,7 +72,14 @@ export function parseTable(text: string): Array<Record<string, string>> {
 }
 
 export async function listContexts(): Promise<ContextListing> {
-  const result = await runArgocd("context list", [], { allowFailure: true });
+  let result: RunResult;
+  try {
+    result = await runArgocd("context list", [], { allowFailure: true });
+  } catch (error) {
+    if (error instanceof AxiError && error.code === CODES.ARGOCD_NOT_INSTALLED)
+      return { contexts: [], unavailable: error.message };
+    throw error;
+  }
   if (result.exitCode !== 0) {
     return {
       contexts: [],

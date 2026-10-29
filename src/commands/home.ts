@@ -38,7 +38,15 @@ export async function homeCommand(): Promise<string> {
 
   if (!target.context && !target.envServer) {
     return finish(
-      [encodeObject({ ...where, writableContexts: writableLine() })],
+      [
+        encodeObject({
+          ...where,
+          writableContexts: writableLine(),
+          contexts: listing.unavailable
+            ? `unavailable - ${listing.unavailable}`
+            : undefined,
+        }),
+      ],
       undefined,
       [...LOGIN_HELP, "Run `argocd-axi ctx` to see configured contexts"],
     );
