@@ -2,7 +2,7 @@ name: Guard generated files
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened]
     branches:
       - main
 
@@ -35,10 +35,11 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eu
-          files=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
+          files=$(git diff --no-renames --name-only "${BASE_SHA}...${HEAD_SHA}")
+          # --no-renames reports a renamed file's original path as a deletion.
           # Creating the manifest is the one-time release-please bootstrap;
           # every later change to it must come from release-please.
-          non_added=$(git diff --name-only --diff-filter=a "${BASE_SHA}...${HEAD_SHA}")
+          non_added=$(git diff --no-renames --name-only --diff-filter=a "${BASE_SHA}...${HEAD_SHA}")
 
           violated=""
           if printf '%s\n' "$files" | grep -qxF -- CHANGELOG.md; then
