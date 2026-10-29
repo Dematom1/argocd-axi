@@ -105,7 +105,7 @@ export const CAN_I_SPEC: CommandSpec = {
   flags: [CONTEXT_FLAG],
   examples: [
     "argocd-axi can-i sync applications 'payments/payments-api'",
-    "argocd-axi can-i get logs 'payments/*'",
+    "argocd-axi can-i get logs 'payments/payments-api'",
   ],
   notes: ['"no" is an answer, not an error: the command exits 0 either way'],
 };

@@ -123,7 +123,7 @@ argocd-axi                                   live overview (needs the server)
 argocd-axi ctx [--context <c>]               current context, server, CLI version (local only)
 argocd-axi ctx use <context>                 switch the argocd CLI's current context
 argocd-axi whoami                            user, issuer and groups
-argocd-axi can-i <action> <resource> <obj>   ask Argo CD RBAC, e.g. can-i sync applications 'payments/checkout'
+argocd-axi can-i <action> <resource> <obj>   ask Argo CD RBAC, e.g. can-i sync applications 'payments/payments-api'
 argocd-axi apps [--problems --project --selector --repo --cluster --sync --health --limit --fields]
 argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]

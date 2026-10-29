@@ -36,7 +36,7 @@ commands[18]:
   ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)
   ctx use <context>: switch the argocd CLI's current context (local config only)
   whoami: user, issuer and groups of the current credential
-  can-i <action> <resource> <object>: ask Argo CD RBAC, e.g. can-i sync applications 'payments/*'
+  can-i <action> <resource> <object>: ask Argo CD RBAC, e.g. can-i sync applications 'payments/payments-api'
   apps [--project --selector --repo --cluster --sync --health --problems --limit --fields]: applications, problems first
   apps view <app>: source, destination, sync, health, operation, conditions, auto-sync, problem resources
   apps resources <app> [--problems --orphaned]: managed resources with sync and health
