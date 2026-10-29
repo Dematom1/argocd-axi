@@ -90,7 +90,8 @@ Default list limits, the attention threshold for Progressing apps
 app-of-apps, apps in any namespace) are tuned once the target Argo CD
 instances (version, SSO provider, app count) are known.
 
-## Publishing
+## AXI community catalog
 
-npm publication and submission to the
-[AXI community catalog](https://github.com/kunchenguid/axi) come after v1.
+Submission to the [AXI community catalog](https://github.com/kunchenguid/axi)
+comes after v1. npm releases are automated; see the Releases section in
+[README.md](README.md).
