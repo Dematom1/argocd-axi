@@ -247,6 +247,16 @@ the recorded fixtures in `test/fixtures/`, and each test gets a throwaway
 `HOME`. After changing help text, run `npm run build:skill` to regenerate the
 skill.
 
+## Releases
+
+Releases are cut by [release-please](https://github.com/googleapis/release-please)
+from conventional commits (`feat:`, `fix:`, `docs:`, ...) on `main`. It keeps
+a release PR open that bumps the version and updates `CHANGELOG.md`; merging
+that PR tags the release and publishes it to npm from
+`.github/workflows/release-please.yml` through npm trusted publishing, with
+provenance and no stored npm token. `CHANGELOG.md` and
+`.release-please-manifest.json` are generated, so never edit them by hand.
+
 ## License
 
 [MIT](LICENSE)
