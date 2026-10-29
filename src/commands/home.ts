@@ -91,7 +91,10 @@ export async function homeCommand(): Promise<string> {
               project: app.spec?.project ?? "",
               sync: syncStatus(app),
               health: healthStatus(app),
-              why: truncate(attentionReasons(app, now).join("; "), 160),
+              why: truncate(
+                attentionReasons(app, now, redactor).join("; "),
+                160,
+              ),
             })),
           ),
         }),

@@ -3,6 +3,8 @@
  * `argocd app get|list -o json`) and the derived state agents need.
  */
 
+import { Redactor } from "./redact.js";
+
 export interface AppSource {
   repoURL?: string;
   path?: string;
@@ -156,11 +158,16 @@ function formatMinutes(minutes: number): string {
   return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
 }
 
-/** Why an app needs attention (empty when it does not), per decision A6. */
+/**
+ * Why an app needs attention (empty when it does not), per decision A6.
+ * Messages are redacted before they are cut, counted on `redactor`.
+ */
 export function attentionReasons(
   app: Application,
   now: number = Date.now(),
+  redactor: Redactor = new Redactor(),
 ): string[] {
+  const clip = (text: string) => truncate(redactor.text(text), REASON_CHARS);
   const reasons: string[] = [];
   const sync = syncStatus(app);
   if (sync === "OutOfSync") reasons.push("OutOfSync");
@@ -170,11 +177,7 @@ export function attentionReasons(
   const healthMessage = app.status?.health?.message;
   if (health === "Degraded" || health === "Missing" || health === "Unknown") {
     const label = health === "Unknown" ? "health Unknown" : health;
-    reasons.push(
-      healthMessage
-        ? `${label}: ${truncate(healthMessage, REASON_CHARS)}`
-        : label,
-    );
+    reasons.push(healthMessage ? `${label}: ${clip(healthMessage)}` : label);
   } else if (health === "Progressing") {
     const minutes = minutesSince(app.status?.health?.lastTransitionTime, now);
     if (minutes !== undefined && minutes > PROGRESSING_ATTENTION_MINUTES) {
@@ -186,7 +189,7 @@ export function attentionReasons(
   if (op?.phase === "Failed" || op?.phase === "Error") {
     reasons.push(
       op.message
-        ? `last sync ${op.phase}: ${truncate(op.message, REASON_CHARS)}`
+        ? `last sync ${op.phase}: ${clip(op.message)}`
         : `last sync ${op.phase}`,
     );
   }
@@ -194,7 +197,7 @@ export function attentionReasons(
   for (const condition of app.status?.conditions ?? []) {
     reasons.push(
       condition.message
-        ? `${condition.type ?? "Condition"}: ${truncate(condition.message, REASON_CHARS)}`
+        ? `${condition.type ?? "Condition"}: ${clip(condition.message)}`
         : (condition.type ?? "Condition"),
     );
   }

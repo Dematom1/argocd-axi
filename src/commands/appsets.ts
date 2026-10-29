@@ -71,18 +71,18 @@ function generatorKinds(appset: ApplicationSet): string {
   return kinds.length > 0 ? kinds.join(", ") : "none";
 }
 
-function appsetStatus(appset: ApplicationSet): string {
+function appsetStatus(appset: ApplicationSet, redactor: Redactor): string {
   const conditions = appset.status?.conditions ?? [];
   const error = conditions.find(
     (c) => c.type === "ErrorOccurred" && c.status === "True",
   );
   if (error)
-    return `error: ${truncate(error.message ?? error.reason ?? "unknown", 100)}`;
+    return `error: ${truncate(redactor.text(error.message ?? error.reason ?? "unknown"), 100)}`;
   const upToDate = conditions.find((c) => c.type === "ResourcesUpToDate");
   if (upToDate?.status === "True") return "up to date";
   if (upToDate)
     return truncate(
-      upToDate.message ?? upToDate.reason ?? "not up to date",
+      redactor.text(upToDate.message ?? upToDate.reason ?? "not up to date"),
       100,
     );
   return "unknown";
@@ -131,12 +131,13 @@ export async function appsetsList(args: string[]): Promise<string> {
       undefined,
     );
   }
+  const redactor = new Redactor();
   const rows = appsets
     .map((a) => ({
       appset: a.metadata?.name ?? "",
       project: a.spec?.template?.spec?.project ?? "",
       generators: generatorKinds(a),
-      status: appsetStatus(a),
+      status: appsetStatus(a, redactor),
     }))
     .sort(
       (a, b) =>
@@ -160,7 +161,7 @@ export async function appsetsList(args: string[]): Promise<string> {
         appsets: shown,
       }),
     ],
-    undefined,
+    redactor,
     help,
   );
 }
@@ -205,7 +206,7 @@ export async function appsetsView(args: string[]): Promise<string> {
   );
   const summary = {
     name: appset.metadata?.name ?? name,
-    status: appsetStatus(appset),
+    status: appsetStatus(appset, redactor),
     generators: generatorKinds(appset),
     appName: appset.spec?.template?.metadata?.name,
     project: template?.project,

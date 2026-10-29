@@ -92,9 +92,10 @@ export async function projectsList(args: string[]): Promise<string> {
   const sorted = [...projects].sort((a, b) =>
     (a.metadata?.name ?? "").localeCompare(b.metadata?.name ?? ""),
   );
+  const redactor = new Redactor();
   const rows = sorted.slice(0, limit).map((p) => ({
     project: p.metadata?.name ?? "",
-    description: truncate(p.spec?.description ?? "", 60),
+    description: truncate(redactor.text(p.spec?.description ?? ""), 60),
     destinations: p.spec?.destinations?.length ?? 0,
     windows: p.spec?.syncWindows?.length ?? 0,
   }));
@@ -117,7 +118,7 @@ export async function projectsList(args: string[]): Promise<string> {
         projects: rows,
       }),
     ],
-    undefined,
+    redactor,
     help,
   );
 }

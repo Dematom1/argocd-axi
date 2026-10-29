@@ -288,6 +288,7 @@ export async function appsList(args: string[]): Promise<string> {
 
   const name = displayNames(matching);
   const showWhy = matching.some((app) => needsAttention(app, now));
+  const redactor = new Redactor();
   const rows = matching.slice(0, limit).map((app) => {
     const row: Record<string, string> = {
       app: name(app),
@@ -295,12 +296,12 @@ export async function appsList(args: string[]): Promise<string> {
       sync: syncStatus(app),
       health: healthStatus(app),
     };
-    if (showWhy) row.why = truncate(attentionReasons(app, now).join("; "), 160);
+    if (showWhy)
+      row.why = truncate(attentionReasons(app, now, redactor).join("; "), 160);
     for (const field of fields) row[field] = fieldValue(app, field);
     return row;
   });
 
-  const redactor = new Redactor();
   const count = filtered
     ? `${rows.length} of ${matching.length} matching (${all.length} total, ${attention} need attention)`
     : `${rows.length} of ${all.length} total (${attention} need attention)`;
@@ -362,7 +363,7 @@ export async function appsView(args: string[]): Promise<string> {
     return result.text;
   };
 
-  const reasons = attentionReasons(app, now);
+  const reasons = attentionReasons(app, now, redactor);
   const summary: Record<string, unknown> = {
     name: appName(app),
     namespace: app.metadata?.namespace,
@@ -1202,6 +1203,7 @@ export async function appsWait(args: string[]): Promise<string> {
 
   const elapsed = Math.round((Date.now() - started) / 1000);
   const app = await getApp(name, options);
+  const redactor = new Redactor();
   const waited =
     conditions.length > 0
       ? conditions.map((c) => c.slice(2)).join(", ")
@@ -1219,10 +1221,11 @@ export async function appsWait(args: string[]): Promise<string> {
           ? `condition met (${waited}) after ${elapsed}s`
           : `timed out after ${timeout}s; condition not met (${waited})`,
         app: state,
-        attention: attentionReasons(app).join("; ") || "none",
+        attention:
+          attentionReasons(app, Date.now(), redactor).join("; ") || "none",
       }),
     ],
-    undefined,
+    redactor,
     met
       ? []
       : [

@@ -354,6 +354,51 @@ describe("apps", () => {
     }
   });
 
+  it("redacts messages before cutting them in list views (S12)", () => {
+    const token = "ghp_SECRETTOKEN1234567890abcdefghijklmnop";
+    const cutInUrl = (prefix: number) =>
+      `${"x".repeat(prefix)} clone https://bot:${token}@github.com/org/repo.git failed`;
+    const keyValue = "rendering failed: token=supersecretvalue123";
+    const app = {
+      metadata: { name: "leaky", namespace: "argocd" },
+      spec: { project: "default" },
+      status: {
+        sync: { status: "Synced" },
+        health: { status: "Degraded", message: keyValue },
+        conditions: [{ type: "ComparisonError", message: cutInUrl(50) }],
+      },
+    };
+    const appset = (name: string, message: string) => ({
+      metadata: { name },
+      spec: { generators: [{ list: {} }] },
+      status: {
+        conditions: [{ type: "ErrorOccurred", status: "True", message }],
+      },
+    });
+    const leaky = scenario([
+      { argv: ["context"], exact: true, stdoutFile: "context.txt" },
+      { argv: ["version"], stdoutFile: "version.json" },
+      { argv: ["version", "--client"], stdoutFile: "version-client.json" },
+      { argv: ["account", "get-user-info"], stdoutFile: "user.json" },
+      { argv: ["app", "list"], stdout: JSON.stringify([app]) },
+      {
+        argv: ["appset", "list"],
+        stdout: JSON.stringify([
+          appset("cut", cutInUrl(70)),
+          appset("kv", keyValue),
+        ]),
+      },
+    ]);
+    for (const args of [["apps"], [], ["appsets"]]) {
+      const { stdout } = runCli(args, { scenario: leaky });
+      const label = args.join(" ") || "home";
+      expect(stdout, label).not.toContain("ghp_SECRET");
+      expect(stdout, label).not.toContain("supersecretvalue123");
+      expect(stdout, label).toContain("[redacted]");
+      expect(stdout, label).toMatch(/sensitive values? hidden/);
+    }
+  });
+
   it("shows an unknown Progressing duration without flagging it (A6)", () => {
     const app = {
       metadata: { name: "rolling", namespace: "argocd" },
