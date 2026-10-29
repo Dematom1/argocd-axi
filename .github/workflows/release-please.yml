@@ -88,4 +88,15 @@ jobs:
             echo "$spec is already published; nothing to do."
             exit 0
           fi
-          npm stage publish --access public --provenance
+          output="$(npm stage publish --access public --provenance 2>&1)" || {
+            printf '%s\n' "$output" >&2
+            exit 1
+          }
+          printf '%s\n' "$output"
+          stage_id="$(printf '%s\n' "$output" | sed -nE 's/.*stage[^[:alnum:]]+([[:alnum:]-]+).*/\1/ip' | tail -n 1)"
+          {
+            echo "Package: ${spec%@*}"
+            echo "Version: ${spec#*@}"
+            if [ -n "$stage_id" ]; then echo "Stage ID: $stage_id"; fi
+            echo "Waiting for approval: run axi-approve"
+          } >> "$GITHUB_STEP_SUMMARY"
