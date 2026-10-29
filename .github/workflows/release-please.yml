@@ -88,4 +88,4 @@ jobs:
             echo "$spec is already published; nothing to do."
             exit 0
           fi
-          npm publish --access public --provenance
+          npm stage publish --access public --provenance

@@ -246,7 +246,9 @@ from conventional commits (`feat:`, `fix:`, `docs:`, ...) on `main`. It keeps
 a release PR open that bumps the version and updates `CHANGELOG.md`; merging
 that PR tags the release and publishes it to npm from
 `.github/workflows/release-please.yml` through npm trusted publishing, with
-provenance and no stored npm token. `CHANGELOG.md` and
+provenance and no stored npm token. Each release is staged: after the workflow
+runs, approve the staged version with 2FA using `npm stage approve <id>` or
+npmjs.com. The version is not live on npm until approved. `CHANGELOG.md` and
 `.release-please-manifest.json` are generated, so never edit them by hand.
 
 ## License
