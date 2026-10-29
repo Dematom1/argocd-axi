@@ -257,6 +257,10 @@ that PR tags the release and publishes it to npm from
 provenance and no stored npm token. `CHANGELOG.md` and
 `.release-please-manifest.json` are generated, so never edit them by hand.
 
+Release PRs show the required "PR must be raised via no-mistakes" check as
+missing, because that check never runs for them; the maintainer merges them
+with an admin bypass.
+
 If a release was tagged but its publish failed, re-run the publish on that tag
 (the run must be dispatched on the tag so the provenance names its commit):
 
