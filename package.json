@@ -1,0 +1,71 @@
+{
+  "name": "argocd-axi",
+  "version": "0.1.0",
+  "description": "Agent-ergonomic, read-only Argo CD CLI - AXI-compliant argocd wrapper with token-efficient TOON output",
+  "type": "module",
+  "license": "MIT",
+  "author": "Laszlo Horanszky",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dematom1/argocd-axi.git"
+  },
+  "homepage": "https://github.com/Dematom1/argocd-axi#readme",
+  "bugs": {
+    "url": "https://github.com/Dematom1/argocd-axi/issues"
+  },
+  "keywords": [
+    "argocd",
+    "argo-cd",
+    "gitops",
+    "cli",
+    "agent",
+    "axi",
+    "toon"
+  ],
+  "bin": {
+    "argocd-axi": "./dist/bin/argocd-axi.js",
+    "argocd-axi-ctx": "./dist/bin/argocd-axi-ctx.js"
+  },
+  "files": [
+    "dist/bin",
+    "dist/src",
+    "skills/argocd-axi",
+    "LICENSE",
+    "README.md",
+    "ROADMAP.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build:skill": "npm run build && node dist/scripts/build-skill.js",
+    "check:skill": "npm run build && node dist/scripts/build-skill.js --check",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && node dist/scripts/build-skill.js --check",
+    "prepublishOnly": "npm run check"
+  },
+  "dependencies": {
+    "@toon-format/toon": "2.3.1",
+    "axi-sdk-js": "0.1.13",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "3.2.7"
+  }
+}

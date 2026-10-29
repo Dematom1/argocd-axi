@@ -1,0 +1,44 @@
+{
+  "metadata": { "name": "payments-api", "namespace": "argocd" },
+  "spec": {
+    "project": "payments",
+    "source": {
+      "repoURL": "https://github.com/example/payments.git",
+      "path": "charts/payments-api",
+      "targetRevision": "main",
+      "helm": {
+        "parameters": [
+          { "name": "image.tag", "value": "1.42.0" },
+          { "name": "db.password", "value": "hunter2-super-secret" }
+        ],
+        "values": "replicas: 3\napiToken: tok-abc123-very-secret\nlogLevel: info\n"
+      }
+    },
+    "destination": { "name": "prod-eu", "namespace": "payments" }
+  },
+  "status": {
+    "sync": { "status": "OutOfSync", "revision": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432" },
+    "health": { "status": "Degraded", "message": "Deployment \"payments-api\" exceeded its progress deadline" },
+    "reconciledAt": "{{now-1m}}",
+    "operationState": {
+      "phase": "Failed",
+      "message": "one or more objects failed to apply, reason: Deployment.apps \"payments-api\" is invalid: spec.template.spec.containers[0].image: Required value",
+      "startedAt": "{{now-12m}}",
+      "finishedAt": "{{now-11m}}",
+      "operation": { "initiatedBy": { "username": "bob" } }
+    },
+    "conditions": [
+      { "type": "SyncError", "message": "Failed sync attempt to 9f8e7d6: one or more objects failed to apply", "lastTransitionTime": "{{now-11m}}" }
+    ],
+    "resources": [
+      { "version": "v1", "kind": "Service", "namespace": "payments", "name": "payments-api", "status": "Synced", "health": { "status": "Healthy" } },
+      { "group": "apps", "version": "v1", "kind": "Deployment", "namespace": "payments", "name": "payments-api", "status": "OutOfSync", "health": { "status": "Degraded", "message": "Deployment \"payments-api\" exceeded its progress deadline" } },
+      { "version": "v1", "kind": "ConfigMap", "namespace": "payments", "name": "payments-flags", "status": "OutOfSync", "health": { "status": "Missing" } },
+      { "version": "v1", "kind": "ConfigMap", "namespace": "payments", "name": "payments-old", "status": "OutOfSync", "requiresPruning": true }
+    ],
+    "history": [
+      { "id": 7, "revision": "aaaaaaa111111111111111111111111111111111", "deployedAt": "{{now-2d}}", "initiatedBy": { "username": "bob" } },
+      { "id": 8, "revision": "bbbbbbb222222222222222222222222222222222", "deployedAt": "{{now-1d}}", "initiatedBy": { "automated": true } }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+[
+  { "server": "https://kubernetes.default.svc", "name": "in-cluster", "config": { "tlsClientConfig": { "insecure": false } }, "info": { "connectionState": { "status": "Successful" }, "serverVersion": "1.30", "applicationsCount": 5 } },
+  { "server": "https://prod-eu.example.com", "name": "prod-eu", "config": { "bearerToken": "eyJhbGciOiJSUzI1NiJ9.should-never-print.signature" }, "info": { "connectionState": { "status": "Failed", "message": "dial tcp 10.0.0.1:443: i/o timeout" }, "applicationsCount": 1 } }
+]

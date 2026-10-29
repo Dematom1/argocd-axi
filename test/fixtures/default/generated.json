@@ -1,0 +1,3 @@
+[
+  { "metadata": { "name": "team-red" }, "spec": { "project": "teams", "source": { "repoURL": "https://github.com/example/teams.git", "path": "teams/red" }, "destination": { "server": "https://kubernetes.default.svc", "namespace": "red" } } }
+]

@@ -1,0 +1,29 @@
+{
+  "metadata": { "name": "guestbook", "namespace": "argocd", "creationTimestamp": "2026-01-10T09:00:00Z" },
+  "spec": {
+    "project": "default",
+    "source": { "repoURL": "https://github.com/argoproj/argocd-example-apps.git", "path": "guestbook", "targetRevision": "HEAD" },
+    "destination": { "server": "https://kubernetes.default.svc", "namespace": "guestbook" },
+    "syncPolicy": { "automated": { "prune": true, "selfHeal": true } }
+  },
+  "status": {
+    "sync": { "status": "Synced", "revision": "4c1a3d7f9e2b6a8c0d1e2f3a4b5c6d7e8f9a0b1c" },
+    "health": { "status": "Healthy" },
+    "reconciledAt": "{{now-2m}}",
+    "operationState": {
+      "phase": "Succeeded",
+      "message": "successfully synced (all tasks run)",
+      "startedAt": "{{now-3h}}",
+      "finishedAt": "{{now-3h}}",
+      "operation": { "initiatedBy": { "automated": true } }
+    },
+    "resources": [
+      { "version": "v1", "kind": "Service", "namespace": "guestbook", "name": "guestbook-ui", "status": "Synced", "health": { "status": "Healthy" } },
+      { "group": "apps", "version": "v1", "kind": "Deployment", "namespace": "guestbook", "name": "guestbook-ui", "status": "Synced", "health": { "status": "Healthy" } }
+    ],
+    "history": [
+      { "id": 1, "revision": "1111111f9e2b6a8c0d1e2f3a4b5c6d7e8f9a0b1c", "deployedAt": "{{now-5d}}", "initiatedBy": { "username": "alice" } },
+      { "id": 2, "revision": "4c1a3d7f9e2b6a8c0d1e2f3a4b5c6d7e8f9a0b1c", "deployedAt": "{{now-3h}}", "initiatedBy": { "automated": true } }
+    ]
+  }
+}

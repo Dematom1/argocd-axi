@@ -1,0 +1,13 @@
+{
+  "metadata": { "name": "legacy", "namespace": "argocd" },
+  "spec": {
+    "project": "default",
+    "source": { "repoURL": "https://github.com/example/legacy.git", "path": "deploy", "targetRevision": "master" },
+    "destination": { "server": "https://kubernetes.default.svc", "namespace": "legacy" }
+  },
+  "status": {
+    "sync": { "status": "Unknown" },
+    "health": { "status": "Unknown" },
+    "conditions": [ { "type": "ComparisonError", "message": "rpc error: code = Unknown desc = authentication required" } ]
+  }
+}

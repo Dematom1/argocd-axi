@@ -1,0 +1,1 @@
+{ "loggedIn": true, "username": "alice", "iss": "https://dex.example.com", "groups": ["platform", "payments"] }

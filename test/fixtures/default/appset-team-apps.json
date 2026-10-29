@@ -1,0 +1,21 @@
+{
+  "metadata": { "name": "team-apps", "namespace": "argocd" },
+  "spec": {
+    "generators": [ { "git": { "repoURL": "https://github.com/example/teams.git", "revision": "main", "directories": [ { "path": "teams/*" } ] } } ],
+    "template": {
+      "metadata": { "name": "{{path.basename}}" },
+      "spec": {
+        "project": "teams",
+        "source": { "repoURL": "https://github.com/example/teams.git", "path": "{{path}}", "targetRevision": "main" },
+        "destination": { "server": "https://kubernetes.default.svc", "namespace": "{{path.basename}}" }
+      }
+    }
+  },
+  "status": {
+    "conditions": [ { "type": "ResourcesUpToDate", "status": "True", "reason": "ApplicationSetUpToDate", "message": "All applications have been generated successfully" } ],
+    "resources": [
+      { "name": "team-red", "status": "Synced", "health": { "status": "Healthy" } },
+      { "name": "team-blue", "status": "OutOfSync", "health": { "status": "Healthy" } }
+    ]
+  }
+}

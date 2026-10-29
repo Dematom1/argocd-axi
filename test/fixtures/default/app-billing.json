@@ -1,0 +1,16 @@
+{
+  "metadata": { "name": "billing", "namespace": "team-a" },
+  "spec": {
+    "project": "team-a",
+    "sources": [
+      { "repoURL": "https://charts.example.com", "chart": "billing", "targetRevision": "4.1.2", "helm": { "valueFiles": ["$values/billing/values-prod.yaml"] } },
+      { "repoURL": "https://github.com/example/values.git", "targetRevision": "main", "ref": "values" }
+    ],
+    "destination": { "server": "https://kubernetes.default.svc", "namespace": "billing" },
+    "syncPolicy": { "automated": {} }
+  },
+  "status": {
+    "sync": { "status": "Synced", "revisions": ["4.1.2", "0123456789abcdef0123456789abcdef01234567"] },
+    "health": { "status": "Healthy" }
+  }
+}

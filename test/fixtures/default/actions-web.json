@@ -1,0 +1,5 @@
+[
+  { "Group": "argoproj.io", "Kind": "Rollout", "Name": "web", "Action": "promote-full", "Disabled": false },
+  { "Group": "argoproj.io", "Kind": "Rollout", "Name": "web", "Action": "abort", "Disabled": false },
+  { "Group": "argoproj.io", "Kind": "Rollout", "Name": "web", "Action": "resume", "Disabled": true }
+]
