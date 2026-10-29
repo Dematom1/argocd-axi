@@ -1,5 +1,5 @@
 import { argocdJson } from "../argocd.js";
-import { describeTarget, resolveTarget } from "../context.js";
+import { describeTarget, effectiveServer, resolveTarget } from "../context.js";
 import { LOGIN_HELP } from "../errors.js";
 import {
   attentionReasons,
@@ -61,7 +61,7 @@ export async function homeCommand(): Promise<string> {
       ["-o", "json"],
     ),
     target.context
-      ? refreshVersionCheck(target.context, target.server)
+      ? refreshVersionCheck(target.context, effectiveServer(target))
       : Promise.resolve(undefined),
   ]);
 

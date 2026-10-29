@@ -108,6 +108,11 @@ function envToken(): boolean {
   return Boolean(process.env.ARGOCD_AUTH_TOKEN?.trim());
 }
 
+/** The server argocd actually talks to: ARGOCD_SERVER wins over the context's. */
+export function effectiveServer(target: Target): string | undefined {
+  return target.envServer ?? target.server;
+}
+
 export function describeTarget(target: Target, listing: ContextListing) {
   return {
     context: target.context ?? "none configured",

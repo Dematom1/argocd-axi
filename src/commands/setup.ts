@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { installSessionStartHooks } from "axi-sdk-js";
+import { detectInstallMethod, installSessionStartHooks } from "axi-sdk-js";
 import { parseArgs, renderCommandHelp, type CommandSpec } from "../args.js";
 import { CODES, axiError, validationError } from "../errors.js";
 import { encodeObject } from "../toon.js";
@@ -42,10 +42,24 @@ export async function setupCommand(args: string[]): Promise<string> {
   if (args.includes("--help")) return renderCommandHelp(SETUP_HOOKS_SPEC);
   parseArgs(SETUP_HOOKS_SPEC, args.slice(1));
 
+  // An npx (or pnpm dlx, bunx) run lives in a cache that later sessions may
+  // not have on PATH or may have evicted, so a hook pointing at it would
+  // silently stop working. Require a persistent install instead.
+  const entrypoint = ctxEntrypoint();
+  if (detectInstallMethod({ entry: realpathSync(entrypoint) }).kind === "npx") {
+    throw axiError(
+      "setup hooks needs a persistent install; this argocd-axi runs from a temporary npx cache",
+      CODES.REFUSED,
+      [
+        "Install it first: `npm install -g argocd-axi`, then run `argocd-axi setup hooks`",
+      ],
+    );
+  }
+
   const errors: string[] = [];
   installSessionStartHooks({
     marker: "argocd-axi",
-    execPath: ctxEntrypoint(),
+    execPath: entrypoint,
     binaryNames: ["argocd-axi-ctx"],
     distEntrypoints: ["dist/bin/argocd-axi-ctx.js"],
     onError: (message) => errors.push(message),

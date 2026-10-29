@@ -87,6 +87,13 @@ argocd proj role add-policy payments agent-read --action get --permission allow 
 export ARGOCD_AUTH_TOKEN="$(argocd proj role create-token payments agent-read --expires-in 8h --token-only)"
 ```
 
+A project role only adds permissions. Argo CD also grants every token the
+server's `policy.default` role (from `argocd-rbac-cm`), so with
+`policy.default: role:readonly` this token can read every project, not just
+`payments`. For a token that is really project-scoped, keep `policy.default`
+empty or minimal, then check what the token can do with
+`argocd-axi can-i get applications 'other-project/*'`.
+
 argocd-axi itself refuses `proj role create-token`, `account generate-token`
 and every other command that prints or changes a credential.
 
@@ -99,7 +106,9 @@ Pick one; you do not need both.
   `argocd-axi-ctx`, which is local only: current context, server, CLI version
   and the cached server version. It makes no network call, triggers no SSO
   refresh and reads no credential, so a dead context can never hang a session
-  start.
+  start. It needs a persistent install (`npm install -g argocd-axi`); run from
+  an npx cache, it answers `REFUSED` because the hook would point at a
+  temporary path.
 - **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi`
   installs [`skills/argocd-axi/SKILL.md`](skills/argocd-axi/SKILL.md), which
   is generated from the CLI's own help and loads when a task is about Argo CD.

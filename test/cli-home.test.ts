@@ -74,6 +74,17 @@ describe("home view", () => {
     expect(ctx.stdout).toContain(
       "warning: argocd CLI v3.3.6 and server v2.13.1",
     );
+    // A check made against ARGOCD_SERVER is cached under that server, so it
+    // neither shows for nor replaces the context's own server.
+    const env = { ARGOCD_SERVER: "other.example.com" };
+    const envHome = makeHome();
+    runCli([], { home: envHome, scenario: skewed, env });
+    expect(
+      runCli(["ctx"], { home: envHome, scenario: skewed, env }).stdout,
+    ).toContain("serverVersion: v2.13.1");
+    expect(
+      runCli(["ctx"], { home: envHome, scenario: skewed }).stdout,
+    ).not.toContain("serverVersion:");
   });
 
   it("degrades each read to unavailable instead of failing", () => {

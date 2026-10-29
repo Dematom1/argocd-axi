@@ -76,7 +76,9 @@ function parseField(
   nameOffset = 0,
 ): CronField {
   const values = new Set<number>();
-  const star = text.startsWith("*") || text.startsWith("?");
+  // robfig/cron marks a field as a wildcard only for a `*` or `?` part with
+  // no step above 1 (`*/2` is restricted, `5,*` is a wildcard).
+  let star = false;
   for (const part of text.split(",")) {
     const [range, stepText] = part.split("/");
     const step = stepText === undefined ? 1 : Number(stepText);
@@ -87,6 +89,7 @@ function parseField(
     if (range === "*" || range === "?") {
       start = min;
       end = max;
+      if (step === 1) star = true;
     } else if (range?.includes("-")) {
       const [a, b] = range.split("-");
       start = parseValue(a ?? "", names, nameOffset);
@@ -180,10 +183,10 @@ function localTime(instant: number, timeZone: string): LocalTime {
   };
 }
 
-function matches(cron: Cron, t: LocalTime): boolean {
-  if (!cron.minute.values.has(t.minute) || !cron.hour.values.has(t.hour))
+/** Whether the cron can fire at some minute of this local hour. */
+function hourMatches(cron: Cron, t: LocalTime): boolean {
+  if (!cron.hour.values.has(t.hour) || !cron.month.values.has(t.month))
     return false;
-  if (!cron.month.values.has(t.month)) return false;
   const domMatch = cron.dom.values.has(t.dom);
   const dowMatch = cron.dow.values.has(t.dow);
   // robfig/cron semantics: when either day field is a wildcard both must
@@ -194,7 +197,37 @@ function matches(cron: Cron, t: LocalTime): boolean {
 }
 
 const MINUTE = 60_000;
-const LOOKAHEAD_MS = 31 * 24 * 60 * MINUTE;
+const DAY = 24 * 60 * MINUTE;
+const LOOKAHEAD_MS = 31 * DAY;
+/**
+ * How far back a window's start is searched. A longer duration is still
+ * evaluated exactly when a start falls inside this range; otherwise the
+ * window is reported as not evaluable rather than guessed.
+ */
+export const MAX_LOOKBACK_MS = 366 * DAY;
+
+/**
+ * First cron fire at or after `from` and before `to`. Local hours that cannot
+ * match are skipped whole, so a long range costs about one step per hour.
+ */
+function firstFire(
+  cron: Cron,
+  from: number,
+  to: number,
+  timeZone: string,
+): number | undefined {
+  let t = Math.ceil(from / MINUTE) * MINUTE;
+  while (t < to) {
+    const local = localTime(t, timeZone);
+    if (!hourMatches(cron, local)) {
+      t += (60 - local.minute) * MINUTE;
+      continue;
+    }
+    if (cron.minute.values.has(local.minute)) return t;
+    t += MINUTE;
+  }
+  return undefined;
+}
 
 export interface WindowState {
   active: boolean;
@@ -231,16 +264,21 @@ export function windowState(window: SyncWindow, now: number): WindowState {
     return { active: false, error: `unknown time zone ${timeZone}` };
   }
 
-  const first = Math.floor((now - durationMs) / MINUTE) * MINUTE + MINUTE;
-  for (let t = first; t < now; t += MINUTE) {
-    if (matches(cron, localTime(t, timeZone))) return { active: true };
+  // Argo CD's window is (now - duration, now): a start exactly at
+  // now - duration has already ended.
+  const lookback = Math.min(durationMs, MAX_LOOKBACK_MS);
+  if (firstFire(cron, now - lookback + 1, now, timeZone) !== undefined)
+    return { active: true };
+  if (durationMs > MAX_LOOKBACK_MS) {
+    return {
+      active: false,
+      error: `no start in the last 366 days and duration ${window.duration} reaches further back`,
+    };
   }
-  const nextFirst = Math.floor(now / MINUTE) * MINUTE + MINUTE;
-  for (let t = nextFirst; t < now + LOOKAHEAD_MS; t += MINUTE) {
-    if (matches(cron, localTime(t, timeZone)))
-      return { active: false, nextStart: t };
-  }
-  return { active: false };
+  const nextStart = firstFire(cron, now + 1, now + LOOKAHEAD_MS, timeZone);
+  return nextStart === undefined
+    ? { active: false }
+    : { active: false, nextStart };
 }
 
 export type Verdict = "allowed" | "blocked" | "unknown";
@@ -267,7 +305,11 @@ function unparsedReason(
  * A window that cannot be evaluated makes the verdict unknown wherever it
  * could change the outcome.
  */
-export function syncVerdict(windows: SyncWindow[], now: number): SyncVerdict {
+export function syncVerdict(
+  windows: SyncWindow[],
+  now: number,
+  evaluated: WindowState[] = windows.map((w) => windowState(w, now)),
+): SyncVerdict {
   if (windows.length === 0) {
     return {
       automated: "allowed",
@@ -275,9 +317,9 @@ export function syncVerdict(windows: SyncWindow[], now: number): SyncVerdict {
       reason: "no sync windows",
     };
   }
-  const states = windows.map((w) => ({
+  const states = windows.map((w, i) => ({
     window: w,
-    state: windowState(w, now),
+    state: evaluated[i] ?? windowState(w, now),
   }));
   const unparsed = states.filter((s) => s.state.error !== undefined);
   const activeDeny = states.filter(

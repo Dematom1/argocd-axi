@@ -1,4 +1,12 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { VERSION } from "../src/version.js";
@@ -69,6 +77,10 @@ describe("account, projects, appsets, inventory", () => {
     expect(no.exitCode).toBe(0);
     expect(no.stdout).toContain("answer: no");
     expect(runCli(["can-i", "destroy", "applications", "*"]).exitCode).toBe(2);
+    const odd = runCli(["can-i", "get", "applications", "*"]);
+    expect(odd.exitCode).toBe(1);
+    expect(odd.stdout).toContain("code: UPSTREAM_ERROR");
+    expect(odd.stdout).not.toContain("answer:");
   });
 
   it("projects, view and sync windows", () => {
@@ -148,6 +160,27 @@ describe("account, projects, appsets, inventory", () => {
     expect(clusters.stdout).toContain('count: "2 clusters, 1 failing"');
     expect(clusters.stdout).not.toContain("should-never-print");
   });
+
+  it("repos masks credentials embedded in a repository URL", () => {
+    const embedded = scenario([
+      { argv: ["context"], exact: true, stdoutFile: "context.txt" },
+      {
+        argv: ["repo", "list"],
+        stdout: JSON.stringify([
+          {
+            repo: "https://bot:ghp_url_token_never_printed@github.com/example/infra.git",
+            type: "git",
+            name: "infra",
+            connectionState: { status: "Successful" },
+          },
+        ]),
+      },
+    ]);
+    const { stdout } = runCli(["repos"], { scenario: embedded });
+    expect(stdout).toContain("github.com/example/infra.git");
+    expect(stdout).not.toContain("ghp_url_token_never_printed");
+    expect(stdout).toMatch(/redacted/);
+  });
 });
 
 describe("help, version and setup", () => {
@@ -193,6 +226,24 @@ describe("help, version and setup", () => {
     expect(settings).toMatch(/argocd-axi-ctx/);
     expect(settings).not.toMatch(/"command": "[^"]*argocd-axi\.js"/);
   });
+
+  it("refuses to install hooks from a temporary npx cache", () => {
+    const home = makeHome();
+    const pkg = join(home, "_npx", "0a1b2c", "node_modules", "argocd-axi");
+    mkdirSync(pkg, { recursive: true });
+    cpSync(join(ROOT, "dist"), join(pkg, "dist"), { recursive: true });
+    cpSync(join(ROOT, "package.json"), join(pkg, "package.json"));
+    symlinkSync(join(ROOT, "node_modules"), join(pkg, "node_modules"));
+    const result = spawnSync(
+      process.execPath,
+      [join(pkg, "dist", "bin", "argocd-axi.js"), "setup", "hooks"],
+      { encoding: "utf8", env: { PATH: "", HOME: home } },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("code: REFUSED");
+    expect(result.stdout).toContain("npm install -g argocd-axi");
+    expect(existsSync(join(home, ".claude", "settings.json"))).toBe(false);
+  });
 });
 
 describe("guards", () => {
@@ -203,5 +254,17 @@ describe("guards", () => {
     const ctx = runCli(["ctx", "staging"]);
     expect(ctx.exitCode).toBe(2);
     expect(ctx.stdout).toContain("argocd-axi ctx use staging");
+  });
+
+  it("does not treat Object.prototype names as subcommands", () => {
+    for (const verb of ["constructor", "toString", "__proto__"]) {
+      const run = runCli(["apps", verb]);
+      expect(run.exitCode).toBe(2);
+      expect(run.stdout).toContain("code: VALIDATION_ERROR");
+      expect(run.calls).toEqual([]);
+      const help = runCli(["apps", verb, "--help"]);
+      expect(help.exitCode).toBe(0);
+      expect(help.stdout).toContain("subcommands[8]:");
+    }
   });
 });

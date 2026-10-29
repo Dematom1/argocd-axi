@@ -55,7 +55,10 @@ export async function dispatch(
 ): Promise<string> {
   const verb = args[0];
   if (verb !== undefined && !verb.startsWith("-")) {
-    const sub = subcommands[verb];
+    // Own properties only: `apps constructor` must not reach Object.prototype.
+    const sub = Object.hasOwn(subcommands, verb)
+      ? subcommands[verb]
+      : undefined;
     if (sub) {
       if (args.includes("--help")) return renderCommandHelp(sub.spec);
       return sub.run(args.slice(1));

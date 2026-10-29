@@ -8,6 +8,7 @@ import {
 import { loadConfig } from "../config.js";
 import {
   describeTarget,
+  effectiveServer,
   listContexts,
   resolveTarget,
   validateContextName,
@@ -122,7 +123,9 @@ export async function ctxView(args: string[]): Promise<string> {
         ...describeTarget(target, listing),
         ...versionSummary(
           target.context
-            ? readVersionCheck(cacheKey(target.context, target.server))
+            ? readVersionCheck(
+                cacheKey(target.context, effectiveServer(target)),
+              )
             : undefined,
           client,
         ),

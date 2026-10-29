@@ -6,7 +6,7 @@ import {
   type CommandSpec,
 } from "../args.js";
 import { describeTarget, resolveTarget } from "../context.js";
-import { LOGIN_HELP, validationError } from "../errors.js";
+import { CODES, LOGIN_HELP, axiError, validationError } from "../errors.js";
 import { encodeObject } from "../toon.js";
 import { contextOption, contextSuffix, finish } from "./common.js";
 
@@ -134,6 +134,18 @@ export async function canICommand(args: string[]): Promise<string> {
     contextOption(parsed),
   );
   const answer = result.stdout.trim().toLowerCase();
+  // Anything but a bare yes or no (a banner, a changed output format) is not
+  // an answer; reporting it as "no" would send a human to grant rights that
+  // may already exist.
+  if (answer !== "yes" && answer !== "no") {
+    throw axiError(
+      "argocd returned an unexpected answer for account can-i",
+      CODES.UPSTREAM_ERROR,
+      [
+        "Run `argocd-axi ctx` to check that the argocd CLI version matches the server",
+      ],
+    );
+  }
   const allowed = answer === "yes";
   return finish(
     [

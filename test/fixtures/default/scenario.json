@@ -7,6 +7,7 @@
     { "argv": ["account", "get-user-info"], "stdoutFile": "user.json" },
     { "argv": ["account", "can-i", "sync", "applications"], "stdout": "yes\n" },
     { "argv": ["account", "can-i", "delete"], "stdout": "no\n" },
+    { "argv": ["account", "can-i", "get"], "stdout": "WARNING: plugin lookup failed\nyes\n" },
     { "argv": ["app", "list"], "jsonArrayOf": ["app-guestbook.json", "app-payments-api.json", "app-checkout.json", "app-web.json", "app-legacy.json"] },
     { "argv": ["app", "list"], "contains": ["-p", "payments"], "jsonArrayOf": ["app-payments-api.json"] },
     { "argv": ["app", "list"], "context": "staging", "jsonArrayOf": ["app-guestbook.json", "app-billing.json"] },

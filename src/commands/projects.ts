@@ -255,15 +255,16 @@ export async function projectsWindows(args: string[]): Promise<string> {
       },
     )) ?? [];
   const now = Date.now();
-  const sync = syncVerdict(windows, now);
+  const states = windows.map((w) => windowState(w, now));
+  const sync = syncVerdict(windows, now, states);
   if (windows.length === 0) {
     return finish(
       [encodeObject({ sync, windows: `0 sync windows in project ${name}` })],
       undefined,
     );
   }
-  const rows = windows.map((w) => {
-    const state = windowState(w, now);
+  const rows = windows.map((w, i) => {
+    const state = states[i] ?? windowState(w, now);
     return {
       kind: w.kind ?? "",
       schedule: w.schedule ?? "",

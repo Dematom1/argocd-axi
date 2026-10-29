@@ -69,6 +69,41 @@ describe("window state (Argo CD semantics)", () => {
     expect(windowState(either, at("2026-11-03T12:30:00Z")).active).toBe(false);
   });
 
+  it("treats a stepped day field as restricted and a `*` part as a wildcard", () => {
+    const stepped = {
+      kind: "deny",
+      schedule: "0 12 */2 * mon",
+      duration: "1h",
+    };
+    // Tuesday the 3rd matches */2 alone, so OR semantics apply.
+    expect(windowState(stepped, at("2026-11-03T12:30:00Z")).active).toBe(true);
+    expect(windowState(stepped, at("2026-11-02T12:30:00Z")).active).toBe(true);
+    expect(windowState(stepped, at("2026-11-04T12:30:00Z")).active).toBe(false);
+    const listed = { kind: "deny", schedule: "0 12 5,* * mon", duration: "1h" };
+    // `5,*` is a wildcard, so both day fields must match.
+    expect(windowState(listed, at("2026-11-03T12:30:00Z")).active).toBe(false);
+    expect(windowState(listed, at("2026-11-02T12:30:00Z")).active).toBe(true);
+  });
+
+  it("evaluates long durations without guessing past the lookback", () => {
+    const now = at("2026-10-28T23:00:00Z");
+    const yearly = { kind: "deny", schedule: "0 0 1 1 *", duration: "8760h" };
+    expect(windowState(yearly, now)).toEqual({ active: true });
+    expect(windowState({ ...yearly, duration: "87600h" }, now)).toEqual({
+      active: true,
+    });
+    const leapDay = {
+      kind: "deny",
+      schedule: "0 0 29 2 *",
+      duration: "87600h",
+    };
+    expect(windowState(leapDay, now).error).toMatch(/366 days/);
+    expect(syncVerdict([leapDay], now).automated).toBe("unknown");
+    expect(windowState({ ...leapDay, duration: "24h" }, now)).toEqual({
+      active: false,
+    });
+  });
+
   it("treats @hourly like its cron form", () => {
     const hourly = { kind: "deny", schedule: "@hourly", duration: "10m" };
     expect(windowState(hourly, at("2026-10-28T23:05:00Z")).active).toBe(true);
