@@ -295,8 +295,16 @@ describe("apps", () => {
     expect(stdout.length).toBeLessThan(21_000);
   });
 
-  it("masks credentials embedded in repo URLs everywhere (S12)", () => {
-    const repoURL = "https://bot:ghp_secret123@github.com/org/repo.git";
+  it.each([
+    [
+      "https://bot:ghp_secret123@github.com/org/repo.git",
+      "https://bot:[redacted]@github.com/org/repo.git",
+    ],
+    [
+      "https://ghp_secret123@github.com/org/repo.git",
+      "https://[redacted]@github.com/org/repo.git",
+    ],
+  ])("masks credentials in repo URL %s everywhere (S12)", (repoURL, masked) => {
     const app = {
       metadata: { name: "cred", namespace: "argocd" },
       spec: {
@@ -336,9 +344,7 @@ describe("apps", () => {
         home,
       });
       expect(exitCode, args.join(" ")).toBe(0);
-      expect(stdout, args.join(" ")).toContain(
-        "https://bot:[redacted]@github.com/org/repo.git",
-      );
+      expect(stdout, args.join(" ")).toContain(masked);
       expect(stdout, args.join(" ")).not.toContain("ghp_secret123");
       expect(stdout, args.join(" ")).toMatch(/sensitive values? hidden/);
     }

@@ -7,6 +7,29 @@ import {
 } from "../src/redact.js";
 
 describe("structured redaction", () => {
+  it("masks token-only userinfo in http(s) and oci URLs but not ssh users", () => {
+    const redactor = new Redactor();
+    expect(
+      redactor.deep({
+        repo: "https://ghp_abc123@github.com/org/repo.git",
+        chart: "oci://glpat-xyz@registry.example.com/charts",
+        ssh: "ssh://git@github.com/org/repo.git",
+        scp: "git@github.com:org/repo.git",
+      }),
+    ).toEqual({
+      repo: `https://${REDACTED}@github.com/org/repo.git`,
+      chart: `oci://${REDACTED}@registry.example.com/charts`,
+      ssh: "ssh://git@github.com/org/repo.git",
+      scp: "git@github.com:org/repo.git",
+    });
+    expect(redactor.count).toBe(2);
+    const text = redactText(
+      `clone https://ghp_abc123@github.com/o/r.git failed; again: https://${REDACTED}@github.com/o/r.git`,
+    );
+    expect(text.text).not.toContain("ghp_abc123");
+    expect(text.count).toBe(1);
+  });
+
   it("masks URL userinfo in any string value, once", () => {
     const redactor = new Redactor();
     const masked = redactor.text("https://bot:ghp_x@github.com/o/r.git");
