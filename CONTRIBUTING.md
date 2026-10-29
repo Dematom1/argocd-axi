@@ -1,6 +1,6 @@
 # Contributing
 
-All contributions must be raised through the no-mistakes pipeline. The PR body must contain the pipeline's required signature and attestation; the required status check verifies them. Fork CI must receive maintainer approval only after a security review of the proposed changes and workflows.
+All contributions must be raised through the no-mistakes pipeline. The PR body must contain the pipeline's required signature and attestation; the workflow check verifies them. Fork CI must receive maintainer approval only after a security review of the proposed changes and workflows.
 
 Before review, classify the PR's effect on the existing project contract:
 
