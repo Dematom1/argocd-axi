@@ -165,7 +165,15 @@ describe("ctx and the session hook (S17)", () => {
       );
       if (label !== "argocd-axi")
         expect(stdout, label).toContain("cli: argocd CLI not found on PATH");
+      expect(stdout, label).toContain("A human installs the argocd CLI");
+      expect(stdout, label).not.toContain("argocd login");
     }
+    const use = runCli(["ctx", "use", "staging"], {
+      env: { PATH: emptyPath },
+    });
+    expect(use.exitCode).toBe(1);
+    expect(use.stdout).toContain("code: ARGOCD_NOT_INSTALLED");
+    expect(use.stdout).toContain("A human installs the argocd CLI");
   });
 
   it("reports the environment token and server without reading them out", () => {

@@ -23,6 +23,8 @@ export interface ContextListing {
   contexts: ArgoContext[];
   /** Why the listing is empty, when argocd could not list contexts. */
   unavailable?: string;
+  /** Set when the argocd CLI itself is missing; carries the install help. */
+  notInstalled?: AxiError;
 }
 
 export interface Target {
@@ -77,7 +79,7 @@ export async function listContexts(): Promise<ContextListing> {
     result = await runArgocd("context list", [], { allowFailure: true });
   } catch (error) {
     if (error instanceof AxiError && error.code === CODES.ARGOCD_NOT_INSTALLED)
-      return { contexts: [], unavailable: error.message };
+      return { contexts: [], unavailable: error.message, notInstalled: error };
     throw error;
   }
   if (result.exitCode !== 0) {

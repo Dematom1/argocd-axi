@@ -48,7 +48,9 @@ export async function homeCommand(): Promise<string> {
         }),
       ],
       undefined,
-      [...LOGIN_HELP, "Run `argocd-axi ctx` to see configured contexts"],
+      listing.notInstalled
+        ? listing.notInstalled.suggestions
+        : [...LOGIN_HELP, "Run `argocd-axi ctx` to see configured contexts"],
     );
   }
 

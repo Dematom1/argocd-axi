@@ -107,7 +107,8 @@ export async function ctxView(args: string[]): Promise<string> {
   ]);
   const others = listing.contexts.filter((c) => c.name !== target.context);
   const help: string[] = [];
-  if (!target.context) help.push(...LOGIN_HELP);
+  if (listing.notInstalled) help.push(...listing.notInstalled.suggestions);
+  else if (!target.context) help.push(...LOGIN_HELP);
   else
     help.push(
       "Run `argocd-axi` for a live overview of this context's applications",
@@ -148,6 +149,7 @@ export async function ctxUse(args: string[]): Promise<string> {
   const parsed = parseArgs(CTX_USE_SPEC, args);
   const name = validateContextName(parsed.positionals[0] as string);
   const listing = await listContexts();
+  if (listing.notInstalled) throw listing.notInstalled;
   if (listing.unavailable) {
     throw axiError(
       `cannot list Argo CD contexts: ${listing.unavailable}`,
