@@ -399,6 +399,33 @@ describe("apps", () => {
     }
   });
 
+  it("counts each hidden secret once in apps view", () => {
+    const app = {
+      metadata: { name: "leaky", namespace: "argocd" },
+      spec: { project: "default" },
+      status: {
+        sync: { status: "Synced" },
+        health: { status: "Healthy" },
+        conditions: [
+          {
+            type: "ComparisonError",
+            message: "rendering failed: token=supersecretvalue123",
+          },
+        ],
+      },
+    };
+    const { stdout } = runCli(["apps", "view", "leaky"], {
+      scenario: scenario([
+        { argv: ["app", "get", "leaky"], stdout: JSON.stringify(app) },
+      ]),
+    });
+    expect(stdout).not.toContain("supersecretvalue123");
+    expect(stdout).toContain(
+      "ComparisonError: rendering failed: token=[redacted]",
+    );
+    expect(stdout).toContain("1 sensitive value hidden");
+  });
+
   it("shows an unknown Progressing duration without flagging it (A6)", () => {
     const app = {
       metadata: { name: "rolling", namespace: "argocd" },

@@ -363,7 +363,7 @@ export async function appsView(args: string[]): Promise<string> {
     return result.text;
   };
 
-  const reasons = attentionReasons(app, now, redactor);
+  const reasons = attentionReasons(app, now, new Redactor());
   const summary: Record<string, unknown> = {
     name: appName(app),
     namespace: app.metadata?.namespace,
