@@ -63,7 +63,12 @@ export class Redactor {
       );
     }
     if (!isRecord(value)) {
-      return underSensitiveKey ? this.replace(value) : value;
+      if (underSensitiveKey) return this.replace(value);
+      if (typeof value !== "string") return value;
+      const count = { n: 0 };
+      const masked = maskUserinfo(value, count);
+      this.count += count.n;
+      return masked;
     }
 
     const isSecret = value.kind === "Secret";
@@ -125,6 +130,17 @@ const URL_USERINFO = /(:\/\/[^/\s:@]+:)([^@\s/]+)(@)/g;
 const PAIR_NAME = /\bname:[ \t]*["']?([A-Za-z0-9_.-]+)["']?[ \t]*$/;
 const PAIR_VALUE = /^([^A-Za-z]*value:[ \t]*)(\S.*)$/;
 
+function maskUserinfo(text: string, count: { n: number }): string {
+  return text.replace(
+    URL_USERINFO,
+    (match, head: string, secret: string, at: string) => {
+      if (secret === REDACTED) return match;
+      count.n += 1;
+      return `${head}${REDACTED}${at}`;
+    },
+  );
+}
+
 function redactLine(line: string, count: { n: number }): string {
   let text = line.replace(JWT, () => {
     count.n += 1;
@@ -138,13 +154,7 @@ function redactLine(line: string, count: { n: number }): string {
       return `${scheme}${space}${REDACTED}`;
     },
   );
-  text = text.replace(
-    URL_USERINFO,
-    (_m, head: string, _secret: string, at: string) => {
-      count.n += 1;
-      return `${head}${REDACTED}${at}`;
-    },
-  );
+  text = maskUserinfo(text, count);
   return text.replace(
     KEY_VALUE,
     (

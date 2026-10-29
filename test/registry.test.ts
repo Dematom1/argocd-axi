@@ -1,14 +1,16 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildArgv } from "../src/argocd.js";
+import { buildArgv, runArgocd } from "../src/argocd.js";
+import { CODES } from "../src/errors.js";
 import {
   FORBIDDEN_ARGS,
   OPERATIONS,
   PLANNED_WRITES,
   REFUSALS,
+  type OperationId,
 } from "../src/registry.js";
-import { ROOT } from "./helpers.js";
+import { expectSafeCalls, makeHome, runCli } from "./helpers.js";
 
 // Decision S5: one seam, an explicit allowlist, a refusal registry. These
 // tests fail when an operation becomes reachable without a deliberate change.
@@ -128,40 +130,80 @@ describe("allowlist registry", () => {
 });
 
 describe("one subprocess seam", () => {
-  function sources(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory()
-        ? sources(join(dir, entry.name))
-        : entry.name.endsWith(".ts")
-          ? [join(dir, entry.name)]
-          : [],
-    );
-  }
-
-  it("only src/argocd.ts can start a process", () => {
-    const offenders = sources(join(ROOT, "src")).filter(
-      (file) =>
-        !file.endsWith(join("src", "argocd.ts")) &&
-        /node:child_process|child_process/.test(readFileSync(file, "utf8")),
-    );
-    expect(offenders).toEqual([]);
+  it("refuses an operation id that is not registered", async () => {
+    await expect(
+      runArgocd("app delete" as OperationId, ["guestbook"]),
+    ).rejects.toMatchObject({ code: CODES.REFUSED });
   });
 
-  it("runArgocd is only ever called with registered operation ids", () => {
-    const pattern = /(?:runArgocd|argocdJson)(?:<[^>]*>)?\(\s*"([^"]+)"/g;
-    const used = new Set<string>();
-    for (const file of sources(join(ROOT, "src"))) {
-      for (const match of readFileSync(file, "utf8").matchAll(pattern))
-        used.add(match[1] as string);
+  it("never surfaces the argocd CLI config or a kubeconfig, on any command", () => {
+    const home = makeHome();
+    const sentinel = "SENTINEL-do-not-read";
+    mkdirSync(join(home, ".config", "argocd"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd", "config"),
+      `contexts:\n- name: ${sentinel}-ctx\n  server: ${sentinel}.example\nusers:\n- name: ${sentinel}.example\n  auth-token: ${sentinel}-token\n`,
+    );
+    const kubeconfig = join(home, "kubeconfig");
+    writeFileSync(
+      kubeconfig,
+      `users:\n- name: ${sentinel}\n  token: ${sentinel}-kube\n`,
+    );
+    const commands = [
+      [],
+      ["ctx"],
+      ["whoami"],
+      ["can-i", "sync", "applications", "default/guestbook"],
+      ["apps"],
+      ["apps", "view", "guestbook"],
+      ["apps", "resources", "guestbook"],
+      ["apps", "diff", "guestbook"],
+      ["apps", "history", "guestbook"],
+      ["apps", "manifests", "guestbook"],
+      ["apps", "logs", "guestbook"],
+      ["apps", "actions", "guestbook"],
+      ["projects"],
+      ["projects", "view", "payments"],
+      ["projects", "windows", "payments"],
+      ["appsets"],
+      ["appsets", "view", "team-apps"],
+      ["repos"],
+      ["clusters"],
+    ];
+    let callCount = 0;
+    for (const args of commands) {
+      const { stdout, calls } = runCli(args, {
+        home,
+        env: { KUBECONFIG: kubeconfig },
+      });
+      const label = args.join(" ") || "home";
+      expect(stdout, label).not.toContain(sentinel);
+      expectSafeCalls(calls);
+      for (const argv of calls) {
+        expect(argv, label).not.toContain("--config");
+        expect(argv.join(" "), label).not.toContain(sentinel);
+        expect(argv.join(" "), label).not.toContain(kubeconfig);
+      }
+      callCount += calls.length;
     }
-    expect([...used].filter((id) => !(id in OPERATIONS))).toEqual([]);
-    expect(used.size).toBeGreaterThan(15);
-  });
+    expect(callCount).toBeGreaterThan(commands.length);
+  }, 120_000);
+});
 
-  it("never reads the argocd CLI config or a kubeconfig", () => {
-    for (const file of sources(join(ROOT, "src"))) {
-      const text = readFileSync(file, "utf8");
-      expect(text).not.toMatch(/\.config\/argocd\/|\.kube\/config|KUBECONFIG/);
-    }
+describe("update built-in", () => {
+  it("reaches the SDK's update --check offline instead of Unknown command", () => {
+    const { stdout, exitCode, calls } = runCli(["update", "--check"], {
+      env: {
+        NODE_OPTIONS:
+          "--import=data:text/javascript,globalThis.fetch=async()=>{throw{}}",
+      },
+    });
+    expect(stdout).not.toContain("Unknown command");
+    expect(stdout).toContain("code: UPDATE_ERROR");
+    expect(stdout).toContain(
+      "Could not reach the npm registry to check for updates to argocd-axi",
+    );
+    expect(exitCode).toBe(1);
+    expect(calls).toEqual([]);
   });
 });

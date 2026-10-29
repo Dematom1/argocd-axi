@@ -82,8 +82,9 @@ export interface Application {
 
 /**
  * Decision A6: an app that has been Progressing for longer than this many
- * minutes needs attention. Shorter Progressing spells are shown on both axes
- * but not counted, so a normal rollout does not look like a problem.
+ * minutes needs attention. Shorter Progressing spells, and those whose start
+ * (health.lastTransitionTime) is unknown, are shown on both axes but not
+ * counted, so a normal rollout does not look like a problem.
  */
 export const PROGRESSING_ATTENTION_MINUTES = 10;
 
@@ -175,14 +176,8 @@ export function attentionReasons(
         : label,
     );
   } else if (health === "Progressing") {
-    const since =
-      app.status?.health?.lastTransitionTime ??
-      app.status?.operationState?.finishedAt ??
-      app.status?.operationState?.startedAt;
-    const minutes = minutesSince(since, now);
-    if (minutes === undefined) {
-      reasons.push("Progressing (since unknown)");
-    } else if (minutes > PROGRESSING_ATTENTION_MINUTES) {
+    const minutes = minutesSince(app.status?.health?.lastTransitionTime, now);
+    if (minutes !== undefined && minutes > PROGRESSING_ATTENTION_MINUTES) {
       reasons.push(`Progressing for ${formatMinutes(minutes)}`);
     }
   }

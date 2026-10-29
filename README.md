@@ -138,14 +138,17 @@ An app needs attention when its sync status is OutOfSync or Unknown; its
 health is Degraded, Missing or Unknown; it has been Progressing for more than
 10 minutes; its last sync Failed or Errored; or it has conditions. Both axes
 and the reason are always shown, and Progressing is never folded into
-healthy.
+healthy. When Argo CD does not report when health turned Progressing, the
+duration is shown as unknown and the app is not counted as needing attention.
 
 ### Sync windows
 
 `projects windows <project>` lists each window, whether it is active now, and
 when an inactive one next opens, then says whether automated and manual syncs
 are allowed right now. It evaluates the windows the way Argo CD does (5-field
-cron schedule, duration, the window's time zone or UTC). The verdict assumes
+cron schedule or a descriptor such as `@daily` or `@every 1h`, duration, the
+window's time zone or UTC). When a window that could change the outcome cannot
+be evaluated, the verdict is `unknown` and names that window. The verdict assumes
 every window applies; check each window's apps, namespaces and clusters for a
 specific app.
 

@@ -51,23 +51,23 @@ describe("needs attention (decision A6)", () => {
     expect(progressing(180)).toEqual(["Progressing for 3h"]);
   });
 
-  it("falls back to the operation time, and flags an unknown start", () => {
+  it("never derives a Progressing duration from the last operation", () => {
     expect(
       attentionReasons(
         app({
           sync: { status: "Synced" },
           health: { status: "Progressing" },
-          operationState: { startedAt: ago(30) },
+          operationState: { startedAt: ago(3 * 24 * 60), finishedAt: ago(30) },
         }),
         now,
       ),
-    ).toEqual(["Progressing for 30m"]);
+    ).toEqual([]);
     expect(
       attentionReasons(
         app({ sync: { status: "Synced" }, health: { status: "Progressing" } }),
         now,
       ),
-    ).toEqual(["Progressing (since unknown)"]);
+    ).toEqual([]);
   });
 
   it("collects every reason: sync, health, failed operation, conditions", () => {

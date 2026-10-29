@@ -370,6 +370,10 @@ export async function appsView(args: string[]): Promise<string> {
     sync: syncStatus(app),
     revision: syncRevision(app) || undefined,
     health: healthStatus(app),
+    progressingSince:
+      healthStatus(app) === "Progressing"
+        ? formatAge(app.status?.health?.lastTransitionTime, now)
+        : undefined,
     healthMessage: cut(app.status?.health?.message),
     autoSync: autoSyncSummary(app),
     destination: destinationSummary(app),
@@ -1105,9 +1109,15 @@ export async function appsLogs(args: string[]): Promise<string> {
     kept.unshift(line);
     chars += line.length + 1;
   }
+  const newest = kept[0] as string;
+  const lineCut = newest.length > LOG_CHAR_CAP;
+  if (lineCut) kept[0] = newest.slice(-LOG_CHAR_CAP);
+  const cutNote = lineCut
+    ? ` and only the last ${LOG_CHAR_CAP} of the newest line's ${newest.length} chars`
+    : "";
   const header =
-    kept.length < redacted.length
-      ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${LOG_CHAR_CAP} chars)`
+    kept.length < redacted.length || lineCut
+      ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${LOG_CHAR_CAP} chars)${cutNote}`
       : `${kept.length} lines (--tail ${tail})`;
   return finish(
     [encodeObject({ logs: header }), renderTextBlock("lines", kept)],

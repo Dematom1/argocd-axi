@@ -226,6 +226,7 @@ export const PROJECTS_WINDOWS_SPEC: CommandSpec = {
   notes: [
     "The verdict assumes every window applies; check each window's apps, namespaces and clusters for a specific app",
     "Evaluated like Argo CD: a window is active when its cron schedule fired within the last duration, in its time zone (UTC when unset)",
+    "A verdict is unknown when a window that could change it cannot be evaluated",
   ],
 };
 
@@ -253,12 +254,7 @@ export async function projectsWindows(args: string[]): Promise<string> {
       },
     )) ?? [];
   const now = Date.now();
-  const verdict = syncVerdict(windows, now);
-  const sync = {
-    automated: verdict.automated ? "allowed" : "blocked",
-    manual: verdict.manual ? "allowed" : "blocked",
-    reason: verdict.reason,
-  };
+  const sync = syncVerdict(windows, now);
   if (windows.length === 0) {
     return finish(
       [encodeObject({ sync, windows: `0 sync windows in project ${name}` })],

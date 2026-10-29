@@ -1,7 +1,7 @@
 /**
  * Project sync windows: whether each window is active now and whether a sync
- * would be allowed, mirroring Argo CD's own evaluation (5-field cron, Go
- * duration, IANA time zone; `SyncWindows.CanSync`). `argocd proj windows list
+ * would be allowed, mirroring Argo CD's own evaluation (5-field cron or robfig
+ * descriptor, Go duration, IANA time zone; `SyncWindows.CanSync`). `argocd proj windows list
  * -o json` returns only the window specs, so the active state is computed here.
  */
 
@@ -45,6 +45,16 @@ const MONTHS = [
   "dec",
 ];
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+const DESCRIPTORS: Record<string, string> = {
+  "@yearly": "0 0 1 1 *",
+  "@annually": "0 0 1 1 *",
+  "@monthly": "0 0 1 * *",
+  "@weekly": "0 0 * * 0",
+  "@daily": "0 0 * * *",
+  "@midnight": "0 0 * * *",
+  "@hourly": "0 * * * *",
+};
 
 function parseValue(
   token: string,
@@ -94,7 +104,8 @@ function parseField(
 }
 
 export function parseCron(expression: string): Cron {
-  const fields = expression.trim().split(/\s+/);
+  const trimmed = expression.trim();
+  const fields = (DESCRIPTORS[trimmed.toLowerCase()] ?? trimmed).split(/\s+/);
   if (fields.length !== 5)
     throw new Error(`expected 5 cron fields, got ${fields.length}`);
   const [minute, hour, dom, month, dow] = fields as [
@@ -192,16 +203,24 @@ export interface WindowState {
   error?: string;
 }
 
+const EVERY = /^@every\s+(\S+)$/i;
+
 /**
  * Argo CD treats a window as active when a cron fire falls in
- * (now - duration, now).
+ * (now - duration, now). For `@every <interval>` the next fire after
+ * now - duration is always interval later, so the window is active exactly
+ * when the interval is shorter than the duration.
  */
 export function windowState(window: SyncWindow, now: number): WindowState {
   let cron: Cron;
   let durationMs: number;
   try {
-    cron = parseCron(window.schedule ?? "");
     durationMs = parseGoDuration(window.duration ?? "");
+    const every = (window.schedule ?? "").trim().match(EVERY);
+    if (every) {
+      return { active: parseGoDuration(every[1] as string) < durationMs };
+    }
+    cron = parseCron(window.schedule ?? "");
   } catch (error) {
     return { active: false, error: (error as Error).message };
   }
@@ -224,46 +243,95 @@ export function windowState(window: SyncWindow, now: number): WindowState {
   return { active: false };
 }
 
+export type Verdict = "allowed" | "blocked" | "unknown";
+
 export interface SyncVerdict {
-  automated: boolean;
-  manual: boolean;
+  automated: Verdict;
+  manual: Verdict;
   reason: string;
 }
 
-/** Mirror of Argo CD's `SyncWindows.CanSync` for automated and manual syncs. */
+function unparsedReason(
+  states: Array<{ window: SyncWindow; state: WindowState }>,
+): string {
+  return states
+    .map(
+      (s) =>
+        `${s.window.kind ?? "unknown"} window ${JSON.stringify(s.window.schedule ?? "")} could not be evaluated (${s.state.error})`,
+    )
+    .join("; ");
+}
+
+/**
+ * Mirror of Argo CD's `SyncWindows.CanSync` for automated and manual syncs.
+ * A window that cannot be evaluated makes the verdict unknown wherever it
+ * could change the outcome.
+ */
 export function syncVerdict(windows: SyncWindow[], now: number): SyncVerdict {
   if (windows.length === 0) {
-    return { automated: true, manual: true, reason: "no sync windows" };
+    return {
+      automated: "allowed",
+      manual: "allowed",
+      reason: "no sync windows",
+    };
   }
   const states = windows.map((w) => ({
     window: w,
     state: windowState(w, now),
   }));
+  const unparsed = states.filter((s) => s.state.error !== undefined);
   const activeDeny = states.filter(
     (s) => s.state.active && s.window.kind === "deny",
   );
   if (activeDeny.length > 0) {
-    const manual = activeDeny.every((s) => s.window.manualSync === true);
+    const reason = `${activeDeny.length} deny ${activeDeny.length === 1 ? "window is" : "windows are"} active`;
+    if (activeDeny.some((s) => s.window.manualSync !== true)) {
+      return { automated: "blocked", manual: "blocked", reason };
+    }
+    const doubtful = unparsed.filter(
+      (s) => s.window.kind === "deny" && s.window.manualSync !== true,
+    );
+    return doubtful.length > 0
+      ? {
+          automated: "blocked",
+          manual: "unknown",
+          reason: `${reason}; ${unparsedReason(doubtful)}`,
+        }
+      : { automated: "blocked", manual: "allowed", reason };
+  }
+  const activeAllow = states.some(
+    (s) => s.state.active && s.window.kind === "allow",
+  );
+  const doubtful = activeAllow
+    ? unparsed.filter((s) => s.window.kind === "deny")
+    : unparsed;
+  if (doubtful.length > 0) {
     return {
-      automated: false,
-      manual,
-      reason: `${activeDeny.length} deny ${activeDeny.length === 1 ? "window is" : "windows are"} active`,
+      automated: "unknown",
+      manual: "unknown",
+      reason: unparsedReason(doubtful),
     };
   }
-  if (states.some((s) => s.state.active && s.window.kind === "allow")) {
+  if (activeAllow) {
     return {
-      automated: true,
-      manual: true,
+      automated: "allowed",
+      manual: "allowed",
       reason: "an allow window is active",
     };
   }
   const inactiveAllows = states.filter((s) => s.window.kind === "allow");
   if (inactiveAllows.length > 0) {
     return {
-      automated: false,
-      manual: inactiveAllows.some((s) => s.window.manualSync === true),
+      automated: "blocked",
+      manual: inactiveAllows.some((s) => s.window.manualSync === true)
+        ? "allowed"
+        : "blocked",
       reason: "allow windows exist but none is active",
     };
   }
-  return { automated: true, manual: true, reason: "no window is active" };
+  return {
+    automated: "allowed",
+    manual: "allowed",
+    reason: "no window is active",
+  };
 }

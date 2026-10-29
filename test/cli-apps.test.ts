@@ -1,5 +1,7 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { runCli, scenario } from "./helpers.js";
+import { makeHome, runCli, scenario } from "./helpers.js";
 
 describe("apps", () => {
   it("lists problems first with the reason and a total", () => {
@@ -275,6 +277,96 @@ describe("apps", () => {
     );
     expect(stdout).toContain("line 399 ");
     expect(stdout).not.toContain("line 0 ");
+  });
+
+  it("keeps only the tail of a newest line longer than the cap", () => {
+    const line = `head ${"y".repeat(30_000)} tail-marker`;
+    const { stdout } = runCli(["apps", "logs", "big"], {
+      scenario: scenario([
+        { argv: ["app", "logs", "big"], stdout: `older line\n${line}\n` },
+      ]),
+    });
+    expect(stdout).toContain(
+      `logs: showing the newest 1 of 2 lines (output capped at 20000 chars) and only the last 20000 of the newest line's ${line.length} chars`,
+    );
+    expect(stdout).toContain("tail-marker");
+    expect(stdout).not.toContain("head ");
+    expect(stdout).not.toContain("older line");
+    expect(stdout.length).toBeLessThan(21_000);
+  });
+
+  it("masks credentials embedded in repo URLs everywhere (S12)", () => {
+    const repoURL = "https://bot:ghp_secret123@github.com/org/repo.git";
+    const app = {
+      metadata: { name: "cred", namespace: "argocd" },
+      spec: {
+        project: "default",
+        source: { repoURL, path: "app", targetRevision: "HEAD" },
+        destination: { server: "https://kubernetes.default.svc" },
+      },
+      status: { sync: { status: "Synced" }, health: { status: "Healthy" } },
+    };
+    const appset = {
+      metadata: { name: "cred-set", namespace: "argocd" },
+      spec: {
+        generators: [{ list: { elements: [] } }],
+        template: {
+          metadata: { name: "x" },
+          spec: { project: "default", source: { repoURL, path: "app" } },
+        },
+      },
+    };
+    const credScenario = scenario([
+      { argv: ["app", "list"], stdout: JSON.stringify([app]) },
+      { argv: ["app", "get", "cred"], stdout: JSON.stringify(app) },
+      { argv: ["appset", "get", "cred-set"], stdout: JSON.stringify(appset) },
+      { argv: ["appset", "generate"], stdout: JSON.stringify([app]) },
+    ]);
+    const home = makeHome();
+    const file = join(home, "appset.json");
+    writeFileSync(file, JSON.stringify(appset));
+    for (const args of [
+      ["apps", "--fields", "repo"],
+      ["apps", "view", "cred"],
+      ["appsets", "view", "cred-set"],
+      ["appsets", "generate", file],
+    ]) {
+      const { stdout, exitCode } = runCli(args, {
+        scenario: credScenario,
+        home,
+      });
+      expect(exitCode, args.join(" ")).toBe(0);
+      expect(stdout, args.join(" ")).toContain(
+        "https://bot:[redacted]@github.com/org/repo.git",
+      );
+      expect(stdout, args.join(" ")).not.toContain("ghp_secret123");
+      expect(stdout, args.join(" ")).toMatch(/sensitive values? hidden/);
+    }
+  });
+
+  it("shows an unknown Progressing duration without flagging it (A6)", () => {
+    const app = {
+      metadata: { name: "rolling", namespace: "argocd" },
+      spec: { project: "default" },
+      status: {
+        sync: { status: "Synced" },
+        health: { status: "Progressing" },
+        operationState: {
+          phase: "Succeeded",
+          finishedAt: "2026-01-01T00:00:00Z",
+        },
+      },
+    };
+    const progressing = scenario([
+      { argv: ["app", "list"], stdout: JSON.stringify([app]) },
+      { argv: ["app", "get", "rolling"], stdout: JSON.stringify(app) },
+    ]);
+    expect(runCli(["apps"], { scenario: progressing }).stdout).toContain(
+      "count: 1 of 1 total (0 need attention)",
+    );
+    const view = runCli(["apps", "view", "rolling"], { scenario: progressing });
+    expect(view.stdout).toContain("progressingSince: unknown");
+    expect(view.stdout).toContain("attention: none");
   });
 
   it("waits with a bound and returns the state either way (S16)", () => {

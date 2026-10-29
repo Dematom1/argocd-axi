@@ -7,6 +7,23 @@ import {
 } from "../src/redact.js";
 
 describe("structured redaction", () => {
+  it("masks URL userinfo in any string value, once", () => {
+    const redactor = new Redactor();
+    const masked = redactor.text("https://bot:ghp_x@github.com/o/r.git");
+    expect(
+      redactor.deep({
+        repo: "https://bot:ghp_x@github.com/o/r.git",
+        source: "git@github.com:o/r.git app",
+        message: masked,
+      }),
+    ).toEqual({
+      repo: `https://bot:${REDACTED}@github.com/o/r.git`,
+      source: "git@github.com:o/r.git app",
+      message: `https://bot:${REDACTED}@github.com/o/r.git`,
+    });
+    expect(redactor.count).toBe(2);
+  });
+
   it("redacts every value of a Secret's data, stringData and last-applied annotation", () => {
     const redactor = new Redactor();
     const out = redactor.deep({

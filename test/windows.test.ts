@@ -20,6 +20,20 @@ describe("cron and durations", () => {
     expect(() => parseCron("61 * * * *")).toThrow(/out of range/);
   });
 
+  it("expands robfig descriptors", () => {
+    for (const [descriptor, cron] of [
+      ["@yearly", "0 0 1 1 *"],
+      ["@annually", "0 0 1 1 *"],
+      ["@monthly", "0 0 1 * *"],
+      ["@weekly", "0 0 * * 0"],
+      ["@daily", "0 0 * * *"],
+      ["@midnight", "0 0 * * *"],
+      ["@hourly", "0 * * * *"],
+    ] as const)
+      expect(parseCron(descriptor), descriptor).toEqual(parseCron(cron));
+    expect(() => parseCron("@sometimes")).toThrow();
+  });
+
   it("parses Go durations", () => {
     expect(parseGoDuration("1h30m")).toBe(90 * 60_000);
     expect(parseGoDuration("45s")).toBe(45_000);
@@ -55,6 +69,12 @@ describe("window state (Argo CD semantics)", () => {
     expect(windowState(either, at("2026-11-03T12:30:00Z")).active).toBe(false);
   });
 
+  it("treats @hourly like its cron form", () => {
+    const hourly = { kind: "deny", schedule: "@hourly", duration: "10m" };
+    expect(windowState(hourly, at("2026-10-28T23:05:00Z")).active).toBe(true);
+    expect(windowState(hourly, at("2026-10-28T23:30:00Z")).active).toBe(false);
+  });
+
   it("reports invalid schedules and zones instead of guessing", () => {
     expect(windowState({ schedule: "bad", duration: "1h" }, 0).error).toMatch(
       /cron/,
@@ -80,19 +100,19 @@ describe("sync verdict (CanSync)", () => {
 
   it("allows everything without windows", () => {
     expect(syncVerdict([], now)).toMatchObject({
-      automated: true,
-      manual: true,
+      automated: "allowed",
+      manual: "allowed",
     });
   });
 
   it("blocks on an active deny; manual only if every active deny allows it", () => {
     expect(syncVerdict([activeDeny], now)).toMatchObject({
-      automated: false,
-      manual: false,
+      automated: "blocked",
+      manual: "blocked",
     });
     expect(
       syncVerdict([{ ...activeDeny, manualSync: true }], now),
-    ).toMatchObject({ automated: false, manual: true });
+    ).toMatchObject({ automated: "blocked", manual: "allowed" });
     expect(
       syncVerdict(
         [
@@ -101,26 +121,72 @@ describe("sync verdict (CanSync)", () => {
         ],
         now,
       ),
-    ).toMatchObject({ manual: false });
+    ).toMatchObject({ manual: "blocked" });
   });
 
   it("deny wins over an active allow", () => {
     expect(syncVerdict([activeDeny, activeAllow], now)).toMatchObject({
-      automated: false,
+      automated: "blocked",
     });
   });
 
   it("needs an active allow when allow windows exist", () => {
     expect(syncVerdict([activeAllow], now)).toMatchObject({
-      automated: true,
-      manual: true,
+      automated: "allowed",
+      manual: "allowed",
     });
     expect(syncVerdict([inactiveAllow], now)).toMatchObject({
-      automated: false,
-      manual: false,
+      automated: "blocked",
+      manual: "blocked",
     });
     expect(
       syncVerdict([{ ...inactiveAllow, manualSync: true }], now),
-    ).toMatchObject({ automated: false, manual: true });
+    ).toMatchObject({ automated: "blocked", manual: "allowed" });
+  });
+
+  it("is unknown when an unparseable window could change the outcome", () => {
+    const broken = { kind: "deny", schedule: "every night", duration: "8h" };
+    const none = syncVerdict([broken], now);
+    expect(none).toMatchObject({ automated: "unknown", manual: "unknown" });
+    expect(none.reason).toContain(
+      'deny window "every night" could not be evaluated',
+    );
+    expect(
+      syncVerdict([inactiveAllow, { ...broken, kind: "allow" }], now),
+    ).toMatchObject({ automated: "unknown", manual: "unknown" });
+    expect(
+      syncVerdict([activeAllow, { ...broken, kind: "allow" }], now),
+    ).toMatchObject({ automated: "allowed", manual: "allowed" });
+    expect(syncVerdict([activeAllow, broken], now)).toMatchObject({
+      automated: "unknown",
+    });
+    expect(
+      syncVerdict([{ ...activeDeny, manualSync: true }, broken], now),
+    ).toMatchObject({ automated: "blocked", manual: "unknown" });
+    expect(syncVerdict([activeDeny, broken], now)).toMatchObject({
+      automated: "blocked",
+      manual: "blocked",
+    });
+    expect(
+      syncVerdict([{ ...activeDeny, timeZone: "Mars/Base" }], now),
+    ).toMatchObject({ automated: "unknown", manual: "unknown" });
+  });
+
+  it("evaluates descriptor schedules instead of ignoring them", () => {
+    expect(
+      syncVerdict([{ kind: "deny", schedule: "@daily", duration: "24h" }], now),
+    ).toMatchObject({ automated: "blocked", manual: "blocked" });
+    expect(
+      syncVerdict(
+        [{ kind: "deny", schedule: "@every 1h", duration: "2h" }],
+        now,
+      ),
+    ).toMatchObject({ automated: "blocked" });
+    expect(
+      syncVerdict(
+        [{ kind: "deny", schedule: "@every 3h", duration: "2h" }],
+        now,
+      ),
+    ).toMatchObject({ automated: "allowed" });
   });
 });
