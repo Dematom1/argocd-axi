@@ -3,37 +3,73 @@ name: release-please
 on:
   push:
     branches: [main]
+  # Recovery path: re-publish an existing release tag whose publish failed.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (for example v0.1.1)
+        required: true
+        type: string
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
 
 permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
+  contents: read
 
 jobs:
   release-please:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Publishing runs in its own job so the release job's write token never
+  # reaches dependency install scripts; this job can only mint an npm OIDC token.
+  publish:
+    needs: release-please
+    if: >-
+      ${{ !cancelled() && (
+        needs.release-please.outputs.release_created == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      ) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
       - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.release_created }}
+        with:
+          ref: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
+          persist-credentials: false
 
       # npm trusted publishing needs npm >= 11.5.1, which ships with Node 24.
       - uses: actions/setup-node@v6
-        if: ${{ steps.release.outputs.release_created }}
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
           cache: npm
 
       - run: npm ci
-        if: ${{ steps.release.outputs.release_created }}
 
       - run: npm run build
-        if: ${{ steps.release.outputs.release_created }}
 
-      - run: npm publish --access public --provenance
-        if: ${{ steps.release.outputs.release_created }}
+      - name: Publish unless this version is already on npm
+        run: |
+          set -eu
+          spec="$(node -p 'require("./package.json").name')@$(node -p 'require("./package.json").version')"
+          if [ -n "$(npm view "$spec" version 2>/dev/null)" ]; then
+            echo "$spec is already published; nothing to do."
+            exit 0
+          fi
+          npm publish --access public --provenance
