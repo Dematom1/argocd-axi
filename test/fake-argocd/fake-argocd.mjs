@@ -75,10 +75,12 @@ if (response.jsonArrayOf) {
   );
 }
 
+// Set exitCode instead of calling process.exit so piped output larger than
+// the pipe buffer is fully flushed (pipe writes are async on macOS).
 const finish = () => {
   if (stdout) process.stdout.write(relativeTimes(stdout));
   if (response.stderr) process.stderr.write(response.stderr);
-  process.exit(response.exit ?? 0);
+  process.exitCode = response.exit ?? 0;
 };
 if (response.delayMs) setTimeout(finish, response.delayMs);
 else finish();
