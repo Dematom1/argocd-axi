@@ -1,4 +1,6 @@
 import { writeFileSync } from "node:fs";
+import { decode } from "@toon-format/toon";
+import { renderTextBlock } from "../src/toon.js";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeHome, runCli, scenario } from "./helpers.js";
@@ -145,7 +147,7 @@ describe("apps", () => {
     );
     expect(stdout).toContain("destination: prod-eu ns/payments");
     expect(stdout).toContain('1,db.password,"[redacted]"');
-    expect(stdout).toContain('apiToken: "[redacted]"');
+    expect(stdout).toContain('apiToken: \\"[redacted]\\"');
     expect(stdout).not.toContain("hunter2");
     expect(stdout).not.toContain("tok-abc123");
     expect(stdout).toContain(
@@ -234,8 +236,9 @@ describe("apps", () => {
       "payments-api",
       "--exit-code=false",
     ]);
+    expect(full.stdout).toContain("diff[17]");
     expect(full.stdout).toContain(
-      "diff[17]:\n  ===== apps/Deployment payments/payments-api ======",
+      "===== apps/Deployment payments/payments-api ======",
     );
     expect(full.stdout).toContain(">           value: [redacted]");
     expect(full.stdout).not.toContain("hunter2");
@@ -271,6 +274,14 @@ describe("apps", () => {
     expect(calls.some((c) => c[1] === "history")).toBe(false);
   });
 
+  it("encodes arbitrary text blocks as valid TOON", () => {
+    expect(
+      decode(renderTextBlock("lines", ["a,b", 'say "hi"', "one\ntwo"])),
+    ).toEqual({
+      lines: ["a,b", 'say "hi"', "one\ntwo"],
+    });
+  });
+
   it("lists manifests, redacting Secret data and sensitive env values", async () => {
     const summary = await runCli(["apps", "manifests", "payments-api"]);
     expect(summary.stdout).toContain(
@@ -292,7 +303,7 @@ describe("apps", () => {
       "--source",
       "live",
     ]);
-    expect(full.stdout).toContain('password: "[redacted]"');
+    expect(full.stdout).toContain('password: \\"[redacted]\\"');
     expect(full.stdout).not.toMatch(/aHVudGVyMg|cGF5bWVudHM|hunter2/);
     expect(
       (await runCli(["apps", "manifests", "payments-api", "--kind", "service"]))

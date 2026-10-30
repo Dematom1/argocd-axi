@@ -13,7 +13,7 @@ import {
   encodeObject,
   renderBlocks,
   renderHelp,
-  renderTextBlock,
+  renderHelpBlock,
 } from "../toon.js";
 
 export { CONTEXT_FLAG };
@@ -95,7 +95,7 @@ function renderGroupHelp(
 ): string {
   return renderBlocks([
     renderCommandHelp(spec),
-    renderTextBlock(
+    renderHelpBlock(
       "subcommands",
       Object.values(subcommands).map(
         (sub) => `${sub.spec.path}: ${sub.spec.summary}`,

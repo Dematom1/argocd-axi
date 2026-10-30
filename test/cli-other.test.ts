@@ -10,6 +10,7 @@ import {
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { VERSION } from "../src/version.js";
+import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
 describe("refusals (A2, A-c22)", () => {
@@ -195,6 +196,43 @@ describe("help, version and setup", () => {
     for (const flag of ["--version", "-v", "-V"]) {
       const { stdout, calls } = await runCli([flag]);
       expect(stdout).toBe(`${VERSION}\n`);
+      expect(calls).toEqual([]);
+    }
+  });
+
+  it("keeps help output in its original indented format", async () => {
+    expect(renderHelp(["first, with comma", "second"])).toBe(
+      "help[2]:\n  first, with comma\n  second",
+    );
+    const top = await runCli(["--help"]);
+    expect(top.stdout).toContain(
+      "commands[18]:\n  (no command): live overview - context, server, user, apps needing attention with the reason, running operations\n  ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)",
+    );
+    const view = await runCli(["apps", "view", "--help"]);
+    expect(view.stdout).toBe(
+      "usage: argocd-axi apps view <app> [flags]\n" +
+        "description: One application: source, destination, sync, health, operation, conditions, auto-sync, unhealthy resources\n" +
+        "args[1]:\n  <app>: Application name, or namespace/name\n" +
+        "flags[2]:\n  --full: Do not truncate messages or Helm values\n  --context <name>: Argo CD context to use (as listed by `argocd-axi ctx`); default: the current context\n" +
+        "examples[2]:\n  argocd-axi apps view guestbook\n  argocd-axi apps view team-a/billing --context staging\n",
+    );
+  });
+
+  it("prints each group subcommand on its own help line", async () => {
+    for (const [group, count] of [
+      ["apps", 8],
+      ["projects", 2],
+      ["appsets", 2],
+    ] as const) {
+      const { stdout, calls } = await runCli([group, "--help"]);
+      const start = stdout.indexOf(`subcommands[${count}]:`);
+      const section = stdout.slice(start).split("\nhelp[")[0] ?? "";
+      const lines = section.split("\n").slice(1);
+      expect(lines, group).toHaveLength(count);
+      expect(
+        lines.every((line) => line.startsWith(`  ${group} `)),
+        group,
+      ).toBe(true);
       expect(calls).toEqual([]);
     }
   });

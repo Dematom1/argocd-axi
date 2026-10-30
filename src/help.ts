@@ -1,4 +1,4 @@
-import { renderBlocks, renderTextBlock } from "./toon.js";
+import { renderBlocks, renderHelpBlock } from "./toon.js";
 
 export const DESCRIPTION =
   "Read-only Argo CD for agents: applications needing attention, diffs, history, health, logs, projects and sync windows";
@@ -28,19 +28,19 @@ export const COMMAND_LINES = [
 export const TOP_HELP = `${renderBlocks([
   "usage: argocd-axi <command> [args] [flags]",
   `description: ${DESCRIPTION}`,
-  renderTextBlock("commands", COMMAND_LINES),
-  renderTextBlock("flags", [
+  renderHelpBlock("commands", COMMAND_LINES),
+  renderHelpBlock("flags", [
     "--context <name>: Argo CD context to target (default: the current context); accepted by every command that reads Argo CD",
     "--help: per-command usage, flags and examples, e.g. `argocd-axi apps view --help`",
     "-v, --version: print the version",
   ]),
-  renderTextBlock("examples", [
+  renderHelpBlock("examples", [
     "argocd-axi",
     "argocd-axi apps --problems",
     "argocd-axi apps view payments-api --context prod",
     "argocd-axi apps diff payments-api",
   ]),
-  renderTextBlock("notes", [
+  renderHelpBlock("notes", [
     "Read-only: v1 never syncs, rolls back, refreshes or deletes; those verbs answer REFUSED with the raw argocd route (writes are on the roadmap)",
     "Output is TOON on stdout, errors included; exit 0 = success (an unhealthy app is data, not an error), 1 = error, 2 = usage",
     "Secret-looking values are redacted and counted; no flag reveals them",

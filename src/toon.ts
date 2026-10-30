@@ -23,14 +23,18 @@ export function encodeObject(value: Record<string, unknown>): string {
  * sentences, so help is formatted by hand like other AXI tools do.
  */
 export function renderHelp(lines: string[]): string {
-  return renderTextBlock("help", lines);
+  return renderHelpBlock("help", lines);
 }
 
-/** Render multi-line text (logs, diffs, manifests) as an indented block. */
-export function renderTextBlock(label: string, lines: string[]): string {
+/** Render help sections as readable indented lines, not data arrays. */
+export function renderHelpBlock(label: string, lines: string[]): string {
   if (lines.length === 0) return "";
-  const body = lines.map((line) => `  ${line}`).join("\n");
-  return `${label}[${lines.length}]:\n${body}`;
+  return `${label}[${lines.length}]:\n${lines.map((line) => `  ${line}`).join("\n")}`;
+}
+
+/** Encode multi-line text (logs, diffs, manifests) as a TOON array. */
+export function renderTextBlock(label: string, lines: string[]): string {
+  return lines.length === 0 ? "" : encodeObject({ [label]: lines });
 }
 
 /** Join non-empty TOON blocks into one output string. */
