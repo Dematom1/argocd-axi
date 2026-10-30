@@ -5,7 +5,8 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "argocd-axi"
+      "package-name": "argocd-axi",
+      "extra-files": ["src/version.ts"]
     }
   }
 }
