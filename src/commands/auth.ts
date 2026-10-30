@@ -1,5 +1,5 @@
 import { parseArgs, CONTEXT_FLAG, type CommandSpec } from "../args.js";
-import { describeTarget, resolveTarget } from "../context.js";
+import { describeTarget, listContexts, resolveTarget } from "../context.js";
 import { validationError } from "../errors.js";
 import { encodeObject } from "../toon.js";
 import { contextOption, finish } from "./common.js";
@@ -15,9 +15,14 @@ const GUIDE_SPEC: CommandSpec = {
 export async function authCommand(args: string[]): Promise<string> {
   if (args[0] !== "guide") throw validationError("expected auth guide");
   const parsed = parseArgs(GUIDE_SPEC, args.slice(1));
-  const { target, listing } = await resolveTarget(
-    contextOption(parsed).context,
-  );
+  const explicitContext = contextOption(parsed).context;
+  let listing: Awaited<ReturnType<typeof listContexts>>;
+  try {
+    listing = await listContexts();
+  } catch {
+    listing = { contexts: [], unavailable: "argocd could not list contexts" };
+  }
+  const { target } = await resolveTarget(explicitContext, listing);
   const server = target.envServer ?? target.server;
   const login = server
     ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
