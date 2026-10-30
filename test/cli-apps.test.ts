@@ -39,13 +39,20 @@ describe("apps", () => {
       {
         home,
         scenario: scenario([
-          { argv: ["app", "get", "payments-api"], stdoutFile: "app-payments-api.json" },
+          {
+            argv: ["app", "get", "payments-api"],
+            stdoutFile: "app-payments-api.json",
+          },
           { argv: ["proj", "windows", "list", "payments"], stdout: "[]" },
-          { argv: ["account", "can-i", "sync", "applications"], stdout: "yes\n" },
+          {
+            argv: ["account", "can-i", "sync", "applications"],
+            stdout: "yes\n",
+          },
           {
             argv: ["app", "sync", "payments-api"],
             exit: 20,
-            stderr: 'time="2026-01-01T00:00:00Z" level=fatal msg="rpc error: code = FailedPrecondition desc = SyncWindow blocks this application"\n',
+            stderr:
+              'time="2026-01-01T00:00:00Z" level=fatal msg="rpc error: code = FailedPrecondition desc = SyncWindow blocks this application"\n',
           },
         ]),
       },
@@ -79,7 +86,10 @@ describe("apps", () => {
         scenario: scenario([
           { argv: ["app", "get", "demo"], stdout: app },
           { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
-          { argv: ["account", "can-i", "sync", "applications"], stdout: "yes\n" },
+          {
+            argv: ["account", "can-i", "sync", "applications"],
+            stdout: "yes\n",
+          },
           { argv: ["app", "sync", "demo"], stdout: "" },
           { argv: ["app", "wait", "demo"], stdout: "" },
         ]),
