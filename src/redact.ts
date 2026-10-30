@@ -154,6 +154,12 @@ function redactLine(line: string, count: { n: number }): string {
     },
   );
   text = maskUserinfo(text, count);
+  if (
+    !/passw|passwd|secret|token|api[-_.]?key|private[-_.]?key|credential|access[-_.]?key|client[-_.]?secret/i.test(
+      text,
+    )
+  )
+    return text;
   return text.replace(
     KEY_VALUE,
     (

@@ -120,9 +120,7 @@ describe("apps", () => {
       "--context",
       "prod",
     ]);
-    expect(manifests.stdout).toContain(
-      "Run `argocd-axi apps manifests payments-api --full --revision abc123 --kind Service --context prod` to see the YAML",
-    );
+    expect(manifests.stdout).not.toContain("to see the YAML");
   });
 
   it("qualifies names with the namespace when apps span namespaces", async () => {
@@ -284,10 +282,13 @@ describe("apps", () => {
 
   it("lists manifests, redacting Secret data and sensitive env values", async () => {
     const summary = await runCli(["apps", "manifests", "payments-api"]);
+    expect(summary.exitCode).toBe(0);
+    expect(summary.stdout).toContain("yaml[");
+    expect(summary.stdout).not.toContain("to see the YAML");
     expect(summary.stdout).toContain(
       "manifests[3]{kind,name,namespace}:\n  Secret,payments-db,payments",
     );
-    expect(summary.stdout).toContain("redacted: 4 sensitive values hidden");
+    expect(summary.stdout).toContain("redacted: 5 sensitive values hidden");
     const full = await runCli([
       "apps",
       "manifests",
@@ -305,6 +306,28 @@ describe("apps", () => {
     ]);
     expect(full.stdout).toContain('password: \\"[redacted]\\"');
     expect(full.stdout).not.toMatch(/aHVudGVyMg|cGF5bWVudHM|hunter2/);
+
+    const yaml = `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: long\ndata:\n  config.yaml: |\n    password: hunter2\n    filler: ${"x".repeat(900)}\n`;
+    const long = await runCli(["apps", "manifests", "long"], {
+      scenario: scenario([
+        { argv: ["app", "manifests", "long"], stdout: yaml },
+      ]),
+    });
+    expect(long.exitCode).toBe(0);
+    expect(long.stdout).toContain("password: [redacted]");
+    expect(long.stdout).not.toContain("hunter2");
+    expect(long.stdout).toContain("truncated,");
+    expect(long.stdout).toContain(
+      "Run `argocd-axi apps manifests long --full` to see the YAML",
+    );
+    const longFull = await runCli(["apps", "manifests", "long", "--full"], {
+      scenario: scenario([
+        { argv: ["app", "manifests", "long"], stdout: yaml },
+      ]),
+    });
+    expect(longFull.stdout).toContain("password: [redacted]");
+    expect(longFull.stdout).not.toContain("hunter2");
+
     expect(
       (await runCli(["apps", "manifests", "payments-api", "--kind", "service"]))
         .stdout,
@@ -362,19 +385,125 @@ describe("apps", () => {
     );
   });
 
+  it("caps merged log lines at --tail, including with --full", async () => {
+    const { stdout } = await runCli(
+      ["apps", "logs", "multi", "--tail", "3", "--full"],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "logs", "multi"],
+            stdout: "line 0\nline 1\nline 2\nline 3\nline 4\n",
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain(
+      "showing the newest 3 of 5 merged lines (--tail 3 limit)",
+    );
+    expect(stdout).not.toContain("line 1");
+    expect(stdout).toContain("line 2");
+    expect(stdout).toContain("line 4");
+    expect(stdout).toContain(
+      "Run `argocd-axi apps logs multi --tail 5000 --full` to read more merged lines",
+    );
+  });
+
   it("caps log output keeping the newest lines", async () => {
     const lines = Array.from(
       { length: 400 },
       (_, i) => `line ${i} ${"x".repeat(80)}`,
     ).join("\n");
-    const { stdout } = await runCli(["apps", "logs", "big", "--tail", "400"], {
-      scenario: scenario([{ argv: ["app", "logs", "big"], stdout: lines }]),
-    });
+    const { stdout } = await runCli(
+      ["apps", "logs", "big", "--tail", "400", "--filter", "password=hunter2"],
+      {
+        scenario: scenario([{ argv: ["app", "logs", "big"], stdout: lines }]),
+      },
+    );
     expect(stdout).toMatch(
       /logs: showing the newest \d+ of 400 lines \(output capped at 20000 chars\)/,
     );
     expect(stdout).toContain("line 399 ");
     expect(stdout).not.toContain("line 0 ");
+    expect(stdout).not.toContain("hunter2");
+    expect(stdout).toContain("reapply --filter manually if needed");
+    expect(stdout).toContain(
+      "Run `argocd-axi apps logs big --full --tail 400` to see all requested lines",
+    );
+    const full = await runCli(
+      ["apps", "logs", "big", "--tail", "400", "--full"],
+      {
+        scenario: scenario([{ argv: ["app", "logs", "big"], stdout: lines }]),
+      },
+    );
+    expect(full.stdout).toContain("line 0 ");
+    expect(full.stdout).toContain("line 399 ");
+    expect(full.stdout).not.toContain("to see all requested lines");
+  });
+
+  it("reports the hard tail ceiling and any simultaneous character cap", async () => {
+    const lines = Array.from({ length: 5001 }, (_, index) => `line ${index}`);
+    const { stdout } = await runCli(
+      ["apps", "logs", "ceiling", "--tail", "5000"],
+      {
+        scenario: scenario([
+          { argv: ["app", "logs", "ceiling"], stdout: lines.join("\n") },
+        ]),
+      },
+    );
+    expect(stdout).toContain(
+      "The --tail limit is 5000 lines; no larger tail is supported",
+    );
+    expect(stdout).not.toContain("to see all requested lines");
+
+    const longLines = Array.from(
+      { length: 5001 },
+      (_, index) => `line ${index} ${"x".repeat(100)}`,
+    );
+    const capped = await runCli(["apps", "logs", "ceiling", "--tail", "5000"], {
+      scenario: scenario([
+        { argv: ["app", "logs", "ceiling"], stdout: longLines.join("\n") },
+      ]),
+    });
+    expect(capped.stdout).toContain("no larger tail is supported");
+    expect(capped.stdout).toContain(
+      "--full output is capped at 1000000 characters",
+    );
+    expect(capped.stdout).not.toContain("to see all requested lines");
+  });
+
+  it("bounds --full output and reports the exact omitted line count", async () => {
+    const lines = Array.from(
+      { length: 11 },
+      (_, index) => `line ${index} ${"x".repeat(100_000)}`,
+    ).join("\n");
+    const { stdout } = await runCli(
+      ["apps", "logs", "large", "--tail", "20", "--full"],
+      {
+        scenario: scenario([{ argv: ["app", "logs", "large"], stdout: lines }]),
+      },
+    );
+    expect(stdout).toContain(
+      "2 requested lines omitted by the 1000000-character cap",
+    );
+    expect(stdout).toContain("narrow with --tail, --since, --kind, or --name");
+    expect(stdout.length).toBeLessThan(1_010_000);
+    expect(stdout).toContain("line 10 ");
+    expect(stdout).not.toContain("line 0 ");
+
+    const oversizedLine = `line ${"y".repeat(1_000_001)}`;
+    const oversized = await runCli(
+      ["apps", "logs", "large", "--tail", "1", "--full"],
+      {
+        scenario: scenario([
+          { argv: ["app", "logs", "large"], stdout: oversizedLine },
+        ]),
+      },
+    );
+    expect(oversized.stdout).toContain(
+      "0 requested lines omitted by the 1000000-character cap",
+    );
+    expect(oversized.stdout).toContain("6 chars omitted from the newest line");
+    expect(oversized.stdout.length).toBeLessThan(1_010_000);
   });
 
   it("keeps only the tail of a newest line longer than the cap", async () => {
@@ -388,6 +517,9 @@ describe("apps", () => {
       `logs: showing the newest 1 of 2 lines (output capped at 20000 chars) and only the last 20000 of the newest line's ${line.length} chars`,
     );
     expect(stdout).toContain("tail-marker");
+    expect(stdout).toContain(
+      `${line.length - 20_000} chars omitted from the newest line`,
+    );
     expect(stdout).not.toContain("head ");
     expect(stdout).not.toContain("older line");
     expect(stdout.length).toBeLessThan(21_000);
@@ -454,6 +586,30 @@ describe("apps", () => {
       }
     },
   );
+
+  it("reports the original size of a long list attention reason", async () => {
+    const message = "failure detail ".repeat(20);
+    const app = {
+      metadata: { name: "long-reason", namespace: "argocd" },
+      spec: { project: "default" },
+      status: {
+        sync: { status: "Synced" },
+        health: { status: "Degraded", message },
+        conditions: Array.from({ length: 50 }, (_, index) => ({
+          type: `Condition${index}`,
+          message,
+        })),
+      },
+    };
+    const { stdout } = await runCli(["apps"], {
+      scenario: scenario([
+        { argv: ["app", "list"], stdout: JSON.stringify([app]) },
+      ]),
+    });
+    expect(stdout).toContain(
+      `truncated, ${"Degraded: ".length + message.length + Array.from({ length: 50 }, (_, index) => `; Condition${index}: `.length + message.length).reduce((total, length) => total + length, 0)} chars total`,
+    );
+  });
 
   it("redacts messages before cutting them in list views (S12)", async () => {
     const token = "ghp_SECRETTOKEN1234567890abcdefghijklmnop";

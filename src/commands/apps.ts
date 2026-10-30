@@ -21,6 +21,7 @@ import {
 import {
   appName,
   appSources,
+  attentionReasonPreview,
   attentionReasons,
   autoSyncSummary,
   destinationSummary,
@@ -62,6 +63,7 @@ const APP_ARG = {
 const NOT_FOUND_HELP = ["Run `argocd-axi apps` to list applications"];
 const MESSAGE_CHARS = 300;
 const LOG_CHAR_CAP = 20_000;
+const FULL_LOG_CHAR_CAP = 1_000_000;
 
 async function getApp(
   name: string,
@@ -302,8 +304,10 @@ export async function appsList(args: string[]): Promise<string> {
       sync: syncStatus(app),
       health: healthStatus(app),
     };
-    if (showWhy)
-      row.why = truncate(attentionReasons(app, now, redactor).join("; "), 160);
+    if (showWhy) {
+      const why = attentionReasonPreview(app, 160, now, redactor);
+      row.why = preview(why.text, 160, false, why.totalChars).text;
+    }
     for (const field of fields) row[field] = fieldValue(app, field);
     return row;
   });
@@ -1006,18 +1010,19 @@ export async function appsManifests(args: string[]): Promise<string> {
       manifests: rows,
     }),
   ];
-  if (full) {
-    const yaml = objects.map((obj) => stringify(obj).trimEnd()).join("\n---\n");
-    blocks.push(renderTextBlock("yaml", yaml.split("\n")));
-  }
+  const yaml = redactor.text(
+    objects.map((obj) => stringify(obj).trimEnd()).join("\n---\n"),
+  );
+  const yamlPreview = preview(yaml, 800, full);
+  blocks.push(renderTextBlock("yaml", yamlPreview.text.split("\n")));
   return finish(
     blocks,
     redactor,
-    full
-      ? []
-      : [
+    yamlPreview.truncated
+      ? [
           `Run \`argocd-axi apps manifests ${name} --full${carriedFlags(parsed)}\` to see the YAML`,
-        ],
+        ]
+      : [],
   );
 }
 
@@ -1059,6 +1064,12 @@ export const APPS_LOGS_SPEC: CommandSpec = {
       description: "Only lines containing this text",
     },
     {
+      name: "--full",
+      kind: "bool",
+      description:
+        "Return requested lines up to 5000, capped at 1,000,000 characters after redaction",
+    },
+    {
       name: "--previous",
       short: "-p",
       kind: "bool",
@@ -1072,7 +1083,7 @@ export const APPS_LOGS_SPEC: CommandSpec = {
     "argocd-axi apps logs guestbook --filter error -p",
   ],
   notes: [
-    `Output keeps the newest lines and is capped at ${LOG_CHAR_CAP} characters; secret-looking values are redacted on a best-effort basis`,
+    `Output keeps the newest lines and is capped at ${LOG_CHAR_CAP} characters; --full returns up to 5000 requested lines, capped at ${FULL_LOG_CHAR_CAP} characters after redaction; secret-looking values are redacted on a best-effort basis`,
   ],
 };
 
@@ -1099,6 +1110,7 @@ export async function appsLogs(args: string[]): Promise<string> {
     ...contextOption(parsed),
     failure: { notFoundHelp: NOT_FOUND_HELP },
   });
+  const full = getBool(parsed, "--full");
   const lines = result.stdout.split("\n");
   if (lines.at(-1) === "") lines.pop();
   if (lines.length === 0) {
@@ -1113,28 +1125,68 @@ export async function appsLogs(args: string[]): Promise<string> {
   }
   const redactor = new Redactor();
   const redacted = lines.map((line) => redactor.text(line));
+  const charCap = full ? FULL_LOG_CHAR_CAP : LOG_CHAR_CAP;
   const kept: string[] = [];
   let chars = 0;
+  let charLimitCut = false;
+  let lineCut = false;
+  let cutLineChars = 0;
   for (let i = redacted.length - 1; i >= 0; i--) {
     const line = redacted[i] as string;
-    if (chars + line.length + 1 > LOG_CHAR_CAP && kept.length > 0) break;
+    if (kept.length >= tail) break;
+    if (chars + line.length + 1 > charCap) {
+      charLimitCut = true;
+      if (kept.length === 0) {
+        kept.unshift(line.slice(-charCap));
+        lineCut = true;
+        cutLineChars = line.length;
+      }
+      break;
+    }
     kept.unshift(line);
     chars += line.length + 1;
   }
-  const newest = kept[0] as string;
-  const lineCut = newest.length > LOG_CHAR_CAP;
-  if (lineCut) kept[0] = newest.slice(-LOG_CHAR_CAP);
+  const lineLimitCut = redacted.length > tail;
+  const omittedByCharCap = charLimitCut
+    ? Math.max(0, Math.min(tail, redacted.length) - kept.length)
+    : 0;
   const cutNote = lineCut
-    ? ` and only the last ${LOG_CHAR_CAP} of the newest line's ${newest.length} chars`
+    ? ` and only the last ${charCap} of the newest line's ${cutLineChars} chars`
     : "";
-  const header =
-    kept.length < redacted.length || lineCut
-      ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${LOG_CHAR_CAP} chars)${cutNote}`
+  const header = lineLimitCut
+    ? `showing the newest ${kept.length} of ${redacted.length} merged lines (--tail ${tail} limit)`
+    : charLimitCut
+      ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${charCap} chars)${cutNote}`
       : `${kept.length} lines (--tail ${tail})`;
+  const logHeader = charLimitCut
+    ? [
+        header,
+        `${plural(omittedByCharCap, "requested line")} omitted by the ${charCap}-character cap`,
+        ...(lineCut
+          ? [`${cutLineChars - charCap} chars omitted from the newest line`]
+          : []),
+      ].join("; ")
+    : header;
+  const help: string[] = [];
+  const carried = carriedFlags(parsed, ["--tail", "--full", "--filter"]);
+  if (lineLimitCut && tail < 5000)
+    help.push(
+      `Run \`argocd-axi apps logs ${name} --tail 5000 --full${carried}\` to read more merged lines${filter ? "; reapply --filter manually if needed" : ""}`,
+    );
+  else if (lineLimitCut)
+    help.push("The --tail limit is 5000 lines; no larger tail is supported");
+  if (charLimitCut)
+    help.push(
+      full
+        ? `The --full output reached its ${FULL_LOG_CHAR_CAP}-character cap; narrow with --tail, --since, --kind, or --name${filter ? "; reapply --filter manually if needed" : ""}`
+        : tail >= 5000
+          ? `The --full output is capped at ${FULL_LOG_CHAR_CAP} characters; narrow with --since, --kind, or --name${filter ? "; reapply --filter manually if needed" : ""}`
+          : `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed, ["--full", "--filter"])}\` to see all requested lines (up to ${FULL_LOG_CHAR_CAP} characters); narrow with --tail, --since, --kind, or --name if needed${filter ? "; reapply --filter manually if needed" : ""}`,
+    );
   return finish(
-    [encodeObject({ logs: header }), renderTextBlock("lines", kept)],
+    [encodeObject({ logs: logHeader }), renderTextBlock("lines", kept)],
     redactor,
-    [],
+    help,
   );
 }
 
