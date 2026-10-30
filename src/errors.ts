@@ -158,7 +158,9 @@ export function mapArgocdFailure(
         ? [
             "Check ARGOCD_SERVER and ARGOCD_AUTH_TOKEN; replace the token with a valid scoped account token",
             ...(context.loginCommand
-              ? [`A human runs \`${context.loginCommand}\`; argocd-axi never logs in`]
+              ? [
+                  `A human runs \`${context.loginCommand}\`; argocd-axi never logs in`,
+                ]
               : []),
           ]
         : context.loginCommand
