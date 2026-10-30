@@ -23,7 +23,8 @@ export function encodeObject(value: Record<string, unknown>): string {
  * sentences, so help is formatted by hand like other AXI tools do.
  */
 export function renderHelp(lines: string[]): string {
-  return renderTextBlock("help", lines);
+  if (lines.length === 0) return "";
+  return `help[${lines.length}]:\n${lines.map((line) => `  ${line}`).join("\n")}`;
 }
 
 /** Encode multi-line text (logs, diffs, manifests) as a TOON array. */
