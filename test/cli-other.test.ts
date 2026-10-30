@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { decode } from "@toon-format/toon";
 import { VERSION } from "../src/version.js";
 import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
@@ -202,8 +203,12 @@ describe("help, version and setup", () => {
 
   it("keeps help output in its original indented format", async () => {
     expect(renderHelp(["first, with comma", "second"])).toBe(
-      "help[2]:\n  first, with comma\n  second",
+      "help[2]:\n  - first, with comma\n  - second",
     );
+    expect(decode(`value: ok\n${renderHelp(["first", "second"])}`)).toEqual({
+      value: "ok",
+      help: ["first", "second"],
+    });
     const top = await runCli(["--help"]);
     expect(top.stdout).toContain(
       "commands[18]:\n  (no command): live overview - context, server, user, apps needing attention with the reason, running operations\n  ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)",
@@ -227,7 +232,7 @@ describe("help, version and setup", () => {
       const { stdout, calls } = await runCli([group, "--help"]);
       const start = stdout.indexOf(`subcommands[${count}]:`);
       const section = stdout.slice(start).split("\nhelp[")[0] ?? "";
-      const lines = section.split("\n").slice(1);
+      const lines = section.split("\n").slice(1).map((line) => line.replace(/^  - /, "  "));
       expect(lines, group).toHaveLength(count);
       expect(
         lines.every((line) => line.startsWith(`  ${group} `)),
