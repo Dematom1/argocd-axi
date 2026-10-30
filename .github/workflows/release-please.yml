@@ -39,14 +39,16 @@ jobs:
             exit 1
           fi
 
-      # v1.11.5
-      - uses: actions/create-github-app-token@0d564482f06ca65fa9e77e2510873638c82206f2
+      # v2.2.2
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
         id: release-app-token
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
 
       - uses: googleapis/release-please-action@v4
         id: release
