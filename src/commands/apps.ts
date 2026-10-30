@@ -1364,29 +1364,37 @@ export async function appsSync(args: string[]): Promise<string> {
   if (prune) syncArgs.push("--prune");
   await runArgocd("app sync", syncArgs, options);
   let waitTimedOut = false;
-  let waitExitCode = 0;
+  let waitError: string | undefined;
   try {
     const wait = await runArgocd(
       "app wait",
       [name, "--operation", "--timeout", String(timeout)],
       { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
     );
-    waitExitCode = wait.exitCode;
+    if (wait.exitCode !== 0) {
+      const message = wait.stderr.trim() || wait.stdout.trim() || "app wait failed";
+      if (/timed out|deadline exceeded/i.test(message)) waitTimedOut = true;
+      else waitError = message;
+    }
   } catch (error) {
     if (!(error instanceof AxiError && error.code === CODES.TIMEOUT)) throw error;
     waitTimedOut = true;
   }
   const result = await getApp(name, options);
+  const phase = result.status?.operationState?.phase;
+  const syncResult =
+    phase === "Succeeded"
+      ? "complete"
+      : phase === "Failed" || phase === "Error"
+        ? "failed"
+        : phase === "Running" && waitTimedOut
+          ? "timeout"
+          : "error";
   return finish(
     [
       encodeObject({
-        sync:
-          result.status?.operationState?.phase === "Failed" ||
-          result.status?.operationState?.phase === "Error"
-            ? "failed"
-            : waitExitCode === 0 && !waitTimedOut
-              ? "complete"
-              : "timeout",
+        sync: syncResult,
+        ...(syncResult === "error" && waitError ? { error: waitError } : {}),
         revision: syncRevision(result),
         health: healthStatus(result),
         failedResources: (result.status?.resources ?? [])
