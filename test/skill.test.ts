@@ -21,6 +21,6 @@ describe("installable skill", () => {
       /^---\nname: argocd-axi\ndescription: "Inspect Argo CD/,
     );
     expect(skill).toContain("npx -y argocd-axi");
-    expect(skill).toContain("**read-only**");
+    expect(skill).toContain("read-only except for opt-in writes");
   });
 });

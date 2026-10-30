@@ -16,7 +16,6 @@ import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
 describe("refusals (A2, A-c22)", () => {
   it.each([
-    ["apps", "sync", "payments-api"],
     ["apps", "rollback", "payments-api", "7"],
     ["apps", "terminate-op", "payments-api"],
     ["apps", "refresh", "payments-api"],
@@ -230,7 +229,7 @@ describe("help, version and setup", () => {
 
   it("prints each group subcommand on its own help line", async () => {
     for (const [group, count] of [
-      ["apps", 8],
+      ["apps", 9],
       ["projects", 2],
       ["appsets", 2],
     ] as const) {
@@ -247,14 +246,14 @@ describe("help, version and setup", () => {
 
   it("prints top-level and per-command help without calling argocd", async () => {
     const top = await runCli(["--help"]);
-    expect(top.stdout).toContain("commands[18]:");
+    expect(top.stdout).toContain("commands[19]:");
     expect(top.calls).toEqual([]);
     const view = await runCli(["apps", "view", "--help"]);
     expect(view.stdout).toContain("usage: argocd-axi apps view <app> [flags]");
     expect(view.stdout).toContain("examples[2]:");
     expect(view.calls).toEqual([]);
     expect((await runCli(["apps", "--help"])).stdout).toContain(
-      "subcommands[8]:",
+      "subcommands[9]:",
     );
   });
 
@@ -317,7 +316,7 @@ describe("guards", () => {
       expect(run.calls).toEqual([]);
       const help = await runCli(["apps", verb, "--help"]);
       expect(help.exitCode).toBe(0);
-      expect(help.stdout).toContain("subcommands[8]:");
+      expect(help.stdout).toContain("subcommands[9]:");
       const top = await runCli([verb]);
       expect(top.exitCode).toBe(2);
       expect(top.stdout).toContain("code: VALIDATION_ERROR");

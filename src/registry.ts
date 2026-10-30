@@ -12,7 +12,9 @@ export type Tier =
   /** Reads only the local argocd CLI config or binary; no network. */
   | "local"
   /** Changes only the local argocd CLI config (`ctx use`, decision A11). */
-  | "local-write";
+  | "local-write"
+  /** Changes one Application in Argo CD. */
+  | "write";
 
 export interface Operation {
   argv: readonly string[];
@@ -41,6 +43,12 @@ export const OPERATIONS = {
   "app diff": {
     argv: ["app", "diff"],
     tier: "read",
+    network: true,
+    timeoutMs: READ_TIMEOUT_MS,
+  },
+  "app sync": {
+    argv: ["app", "sync"],
+    tier: "write",
     network: true,
     timeoutMs: READ_TIMEOUT_MS,
   },
@@ -201,13 +209,6 @@ const PLANNED =
  * answer REFUSED with the raw argocd route a human can take today.
  */
 export const PLANNED_WRITES: Record<string, Refusal> = {
-  "apps sync": {
-    reason: `apps sync is ${PLANNED}`,
-    help: [
-      "Preview what a sync would change with `argocd-axi apps diff <app>`",
-      "A human can sync with the raw CLI: `argocd app sync <app>`",
-    ],
-  },
   "apps rollback": {
     reason: `apps rollback is ${PLANNED}`,
     help: [

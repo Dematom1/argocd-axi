@@ -6,6 +6,27 @@ import { describe, expect, it } from "vitest";
 import { makeHome, runCli, scenario } from "./helpers.js";
 
 describe("apps", () => {
+  it("sync preview is explicit-context and never invokes a write", async () => {
+    const { stdout, calls } = await runCli([
+      "apps",
+      "sync",
+      "payments-api",
+      "--context",
+      "prod",
+    ]);
+    expect(stdout).toContain("No changes made; add --confirm to sync");
+    expect(calls).toContainEqual([
+      "app",
+      "get",
+      "payments-api",
+      "-o",
+      "json",
+      "--argocd-context",
+      "prod",
+    ]);
+    expect(calls.some((call) => call[1] === "sync")).toBe(false);
+  });
+
   it("lists problems first with the reason and a total", async () => {
     const { stdout, calls } = await runCli(["apps"]);
     expect(stdout).toContain("count: 5 of 5 total (3 need attention)");
