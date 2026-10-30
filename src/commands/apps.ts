@@ -1325,7 +1325,23 @@ export async function appsSync(args: string[]): Promise<string> {
       [validateName("project", app.spec?.project ?? "default"), "-o", "json"],
       options,
     )) ?? [];
-  const verdict = syncVerdict(windows, Date.now());
+  const destination = app.spec?.destination;
+  const applicableWindows = windows.filter(
+    (window) =>
+      (!window.applications?.length ||
+        window.applications.some((pattern) =>
+          new RegExp(
+            `^${pattern.replace(/[.+?^${}()|[\\]\\]/g, "\\$&").replace(/\\*/g, ".*")}$`,
+          ).test(name),
+        )) &&
+      (!window.namespaces?.length ||
+        window.namespaces.includes(destination?.namespace ?? "default")) &&
+      (!window.clusters?.length ||
+        window.clusters.some((cluster) =>
+          [destination?.name, destination?.server].includes(cluster),
+        )),
+  );
+  const verdict = syncVerdict(applicableWindows, Date.now());
   if (verdict.manual !== "allowed")
     throw axiError(
       `sync window does not allow syncing ${name}: ${verdict.reason}`,
@@ -1353,7 +1369,13 @@ export async function appsSync(args: string[]): Promise<string> {
   return finish(
     [
       encodeObject({
-        sync: wait.exitCode === 0 ? "complete" : "timeout",
+        sync:
+          wait.exitCode === 0
+            ? "complete"
+            : result.status?.operationState?.phase === "Failed" ||
+                result.status?.operationState?.phase === "Error"
+              ? "failed"
+              : "timeout",
         revision: syncRevision(result),
         health: healthStatus(result),
         failedResources: (result.status?.resources ?? [])
