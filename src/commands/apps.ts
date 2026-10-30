@@ -1175,8 +1175,6 @@ export async function appsLogs(args: string[]): Promise<string> {
     );
   else if (lineLimitCut)
     help.push("The --tail limit is 5000 lines; no larger tail is supported");
-  if (lineLimitCut && tail >= 5000 && charLimitCut)
-    help.push("Use --full to see all requested lines when possible");
   if (charLimitCut)
     help.push(
       full

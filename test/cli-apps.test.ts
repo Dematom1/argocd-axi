@@ -465,7 +465,8 @@ describe("apps", () => {
       },
     );
     expect(capped.stdout).toContain("no larger tail is supported");
-    expect(capped.stdout).toContain("to see all requested lines");
+    expect(capped.stdout).toContain("--full output is capped at 1000000 characters");
+    expect(capped.stdout).not.toContain("to see all requested lines");
   });
 
   it("bounds --full output and reports the exact omitted line count", async () => {
