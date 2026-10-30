@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.2...argocd-axi-v0.1.3) (2026-10-30)
+
+
+### Bug Fixes
+
+* exempt release app pull requests from generated-file guard ([#17](https://github.com/Dematom1/argocd-axi/issues/17)) ([e0eaea2](https://github.com/Dematom1/argocd-axi/commit/e0eaea29f727d75edba36468cb71dce9ff151774))
+* trigger CI on release PRs with a GitHub App token ([#14](https://github.com/Dematom1/argocd-axi/issues/14)) ([dda4017](https://github.com/Dematom1/argocd-axi/commit/dda4017bf7a951cd47e8f3b52dedb38c3e7f026e))
+
 ## [0.1.2](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.1...argocd-axi-v0.1.2) (2026-10-30)
 
 
