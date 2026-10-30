@@ -66,7 +66,7 @@ Or run it without installing: `npx -y argocd-axi`.
 
 Requirements:
 
-- Node.js 20 or newer.
+- Node.js 22.12 or newer.
 - The [`argocd` CLI](https://argo-cd.readthedocs.io/en/stable/cli_installation/)
   on `PATH`, ideally matching your server's version. Tested with argocd
   v3.3.6. There is no hard minimum; `ctx` and the home view warn when the CLI

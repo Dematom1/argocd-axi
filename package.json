@@ -35,7 +35,7 @@
     "ROADMAP.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "publishConfig": {
     "access": "public"
@@ -66,6 +66,6 @@
     "prettier": "3.9.10",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.1",
-    "vitest": "3.2.7"
+    "vitest": "^5.0.5"
   }
 }
