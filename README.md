@@ -80,9 +80,12 @@ argocd-axi adds no auth of its own. It uses whatever the `argocd` CLI already
 has: the current context's session, or `ARGOCD_SERVER` and
 `ARGOCD_AUTH_TOKEN` from the environment. It never starts a login, never
 prompts, and never reads the argocd config file (`~/.config/argocd/config`,
-which holds clear-text tokens). When a session is missing or expired, it
-answers `AUTH_REQUIRED` and tells the agent that a human runs
-`argocd login <server> --sso` or `argocd relogin`.
+which holds clear-text tokens). When a session is missing, it answers `AUTH_REQUIRED`; an expired or rejected
+login answers `AUTH_EXPIRED` with the exact operator login command. Run
+`argocd-axi auth guide` for offline setup instructions. Human operators run
+`argocd login <server> --sso --grpc-web` interactively themselves. Agents and
+CI should set `ARGOCD_SERVER` and `ARGOCD_AUTH_TOKEN` from a scoped account
+token. Verify the selected context with `argocd-axi ctx`. The tool never logs in.
 
 An agent that uses your own SSO session has all of your Argo CD permissions.
 The recommended agent credential is a **short-lived project-role token**,
@@ -190,7 +193,8 @@ specific app.
 | Code                              | Meaning                                                                                |
 | --------------------------------- | -------------------------------------------------------------------------------------- |
 | `VALIDATION_ERROR`                | Bad flag or argument (exit 2)                                                          |
-| `AUTH_REQUIRED`                   | No session or an expired one; a human logs in                                          |
+| `AUTH_REQUIRED`                   | No session is configured                                                               |
+| `AUTH_EXPIRED`                    | Argo CD rejected or expired the login; help prints the exact operator command          |
 | `FORBIDDEN`                       | Argo CD RBAC denied it (Argo CD also says this for objects in projects you cannot see) |
 | `NOT_FOUND`                       | No such app, project or ApplicationSet                                                 |
 | `RATE_LIMITED`                    | The server asked to slow down                                                          |

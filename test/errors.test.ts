@@ -39,9 +39,9 @@ describe("argocd error translation", () => {
   it.each([
     [
       "rpc error: code = Unauthenticated desc = invalid session: token has invalid claims",
-      "AUTH_REQUIRED",
+      "AUTH_EXPIRED",
     ],
-    ["rpc error: code = Unknown desc = token is expired", "AUTH_REQUIRED"],
+    ["rpc error: code = Unknown desc = token is expired", "AUTH_EXPIRED"],
     ["Argo CD server address unspecified", "NO_CONTEXT"],
     ["context 'nope' undefined", "CONTEXT_NOT_FOUND"],
     [
@@ -70,13 +70,23 @@ describe("argocd error translation", () => {
     expect(mapArgocdFailure(fatal(message)).code).toBe(code);
   });
 
-  it("tells a human, not the agent, to log in", () => {
-    const error = mapArgocdFailure(
-      fatal("rpc error: code = Unauthenticated desc = no session information"),
-    );
-    expect(error.suggestions.join(" ")).toMatch(
-      /A human runs `argocd login <server> --sso`/,
-    );
+  it("prints the exact human login command and agent credential guidance", () => {
+    expect(
+      mapArgocdFailure(
+        fatal(
+          "rpc error: code = Unauthenticated desc = no session information",
+        ),
+        { loginCommand: "argocd login cd.example.com --sso --grpc-web" },
+      ).suggestions.join(" "),
+    ).toContain("argocd login cd.example.com --sso --grpc-web");
+    expect(
+      mapArgocdFailure(
+        fatal(
+          "rpc error: code = Unauthenticated desc = no session information",
+        ),
+        { agentCredentials: true },
+      ).suggestions.join(" "),
+    ).toContain("ARGOCD_AUTH_TOKEN");
   });
 
   it("redacts secrets that leak into error text", () => {

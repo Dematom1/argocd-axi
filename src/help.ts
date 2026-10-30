@@ -8,6 +8,7 @@ export const COMMAND_LINES = [
   "(no command): live overview - context, server, user, apps needing attention with the reason, running operations",
   "ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)",
   "ctx use <context>: switch the argocd CLI's current context (local config only)",
+  "auth guide [--context <c>]: offline human login and agent token setup instructions",
   "whoami: user, issuer and groups of the current credential",
   "can-i <action> <resource> <object>: ask Argo CD RBAC, e.g. can-i sync applications 'payments/payments-api'",
   "apps [--project --selector --repo --cluster --sync --health --problems --limit --fields]: applications, problems first",

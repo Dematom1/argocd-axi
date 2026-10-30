@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { resolveTarget } from "./context.js";
 import {
   CODES,
   axiError,
@@ -82,9 +83,25 @@ export async function runArgocd(
     );
   }
   if (result.exitCode !== 0 && !options.allowFailure) {
-    throw mapArgocdFailure(result.stderr || result.stdout, options.failure);
+    const failure = options.failure ?? {};
+    const cleaned = result.stderr || result.stdout;
+    if (!failure.loginCommand && isAuthenticationFailure(cleaned)) {
+      const { target } = await resolveTarget(options.context);
+      const server = target.envServer ?? target.server;
+      failure.agentCredentials = Boolean(target.envToken);
+      failure.loginCommand = server
+        ? `argocd login ${server} --sso --grpc-web`
+        : undefined;
+    }
+    throw mapArgocdFailure(cleaned, failure);
   }
   return result;
+}
+
+function isAuthenticationFailure(message: string): boolean {
+  return /rpc error: code = Unauthenticated|invalid session|token is expired|token has expired|no session information|unauthenticated|please login|login required|failed to get token|session (?:has )?expired/i.test(
+    message,
+  );
 }
 
 /** Run an operation whose stdout is JSON and parse it. */
