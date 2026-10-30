@@ -90,7 +90,7 @@ export async function runArgocd(
       const server = target.envServer ?? target.server;
       failure.agentCredentials = Boolean(target.envToken);
       failure.loginCommand = server
-        ? `argocd login ${server} --sso --grpc-web`
+        ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
         : undefined;
     }
     throw mapArgocdFailure(cleaned, failure);

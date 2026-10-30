@@ -129,9 +129,25 @@ export function mapArgocdFailure(
     shorten(redactText(grpc?.[2] ?? cleaned).text) ||
     "argocd failed without an error message";
 
+  if (/no session information|please login|login required/i.test(cleaned)) {
+    return axiError(
+      `Not authenticated to Argo CD: ${detail}`,
+      CODES.AUTH_REQUIRED,
+      context.agentCredentials
+        ? [
+            "Check ARGOCD_SERVER and ARGOCD_AUTH_TOKEN; replace the token with a valid scoped account token",
+          ]
+        : context.loginCommand
+          ? [
+              `A human runs \`${context.loginCommand}\`; argocd-axi never logs in`,
+            ]
+          : LOGIN_HELP,
+    );
+  }
+
   if (
     grpcCode === "Unauthenticated" ||
-    /invalid session|token is expired|token has expired|no session information|unauthenticated|please login|login required|failed to get token|session (?:has )?expired/i.test(
+    /invalid session|token is expired|token has expired|unauthenticated|failed to get token|session (?:has )?expired/i.test(
       cleaned,
     )
   ) {

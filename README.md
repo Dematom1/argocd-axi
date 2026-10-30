@@ -80,8 +80,9 @@ argocd-axi adds no auth of its own. It uses whatever the `argocd` CLI already
 has: the current context's session, or `ARGOCD_SERVER` and
 `ARGOCD_AUTH_TOKEN` from the environment. It never starts a login, never
 prompts, and never reads the argocd config file (`~/.config/argocd/config`,
-which holds clear-text tokens). Missing, expired, or rejected sessions answer
-`AUTH_EXPIRED` with the exact operator login command. Run
+which holds clear-text tokens). A missing session answers `AUTH_REQUIRED`; an
+expired or rejected login answers `AUTH_EXPIRED` with the exact operator login
+command. Run
 `argocd-axi auth guide` for offline setup instructions. Human operators run
 `argocd login <server> --sso --grpc-web` interactively themselves. Agents and
 CI should set `ARGOCD_SERVER` and `ARGOCD_AUTH_TOKEN` from a scoped account

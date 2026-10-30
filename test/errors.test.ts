@@ -76,9 +76,17 @@ describe("argocd error translation", () => {
         fatal(
           "rpc error: code = Unauthenticated desc = no session information",
         ),
-        { loginCommand: "argocd login cd.example.com --sso --grpc-web" },
+        { loginCommand: "argocd login 'cd.example.com' --sso --grpc-web" },
+      ).code,
+    ).toBe("AUTH_REQUIRED");
+    expect(
+      mapArgocdFailure(
+        fatal(
+          "rpc error: code = Unauthenticated desc = no session information",
+        ),
+        { loginCommand: "argocd login 'cd.example.com' --sso --grpc-web" },
       ).suggestions.join(" "),
-    ).toContain("argocd login cd.example.com --sso --grpc-web");
+    ).toContain("argocd login 'cd.example.com' --sso --grpc-web");
     expect(
       mapArgocdFailure(
         fatal(

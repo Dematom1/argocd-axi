@@ -19,7 +19,9 @@ export async function authCommand(args: string[]): Promise<string> {
     contextOption(parsed).context,
   );
   const server = target.envServer ?? target.server;
-  const login = server ? `argocd login ${server} --sso --grpc-web` : undefined;
+  const login = server
+    ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
+    : undefined;
   return finish(
     [
       encodeObject({
