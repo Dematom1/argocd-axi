@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.1...argocd-axi-v0.1.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* validate scoped release tags ([#12](https://github.com/Dematom1/argocd-axi/issues/12)) ([7995245](https://github.com/Dematom1/argocd-axi/commit/7995245ba9421ae66f72d55152953d2f6e1de93a))
+
 ## [0.1.1](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.0...argocd-axi-v0.1.1) (2026-10-30)
 
 
