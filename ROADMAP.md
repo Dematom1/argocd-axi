@@ -1,20 +1,19 @@
 # Roadmap
 
-argocd-axi v1 is read-only by design: the read surface settles first, and the
-two commands that can hurt production (sync and rollback) come next, behind a
-gate. This file records what is planned and the rules each step must follow.
+argocd-axi is read-only except for confirmed app syncs on contexts explicitly
+listed as writable. This file records the remaining write tier and shared
+safety rules.
 
 ## Next: the write tier
 
-These verbs exist in v1 only as structured `REFUSED` answers that name the raw
-`argocd` command a human can run. The write tier turns them into commands:
+These write verbs still answer `REFUSED` and name the raw `argocd` command a
+human can run:
 
-| Command                                                                                     | Wraps                      | Notes                                                                                                                                                   |
-| ------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps sync <app> --context <c> [--prune] [--revision <rev>] [--resource <group:kind:name>]` | `argocd app sync`          | Preview from `--dry-run`, the per-resource diff, the sync-window verdict and an RBAC check (`account can-i sync`)                                       |
-| `apps rollback <app> <history-id> --context <c>`                                            | `argocd app rollback`      | No native dry run, so the preview is synthesized: target history entry against the current one. Refused while auto-sync is enabled, as Argo CD requires |
-| `apps terminate-op <app> --context <c>`                                                     | `argocd app terminate-op`  | No-op with exit 0 when no operation is running                                                                                                          |
-| `apps refresh <app> [--hard] --context <c>`                                                 | `argocd app get --refresh` | Triggers a reconcile, so it is a write, not a read                                                                                                      |
+| Command                                          | Wraps                      | Notes                                                                                            |
+| ------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `apps rollback <app> <history-id> --context <c>` | `argocd app rollback`      | Preview synthesized from target history and current app state; refuse while auto-sync is enabled |
+| `apps terminate-op <app> --context <c>`          | `argocd app terminate-op`  | No-op when no operation is running                                                               |
+| `apps refresh <app> [--hard] --context <c>`      | `argocd app get --refresh` | Triggers a reconcile                                                                             |
 
 Later, a third tier: `apps action run <app> <action> --kind <kind>` for
 resource actions such as restart, and Argo Rollouts promote and abort

@@ -1,12 +1,12 @@
 ---
 name: argocd-axi
-description: "Inspect Argo CD through the argocd-axi CLI - which applications are OutOfSync, Degraded or failing to sync and why, per-resource diffs against Git, deployment history, pod logs, project sync windows and RBAC checks, all read-only. Use whenever a task involves Argo CD or GitOps deployments: an app stuck or unhealthy, a sync that failed, what changed in a rollout, or whether a sync is allowed right now."
+description: "Inspect Argo CD through the argocd-axi CLI - which applications are OutOfSync, Degraded or failing to sync and why, per-resource diffs against Git, deployment history, pod logs, project sync windows and RBAC checks, plus confirmed app syncs on writable contexts. Use whenever a task involves Argo CD or GitOps deployments: an app stuck or unhealthy, a sync that failed, what changed in a rollout, or whether a sync is allowed right now."
 user-invocable: false
 ---
 
 # argocd-axi
 
-Read-only Argo CD for agents: applications needing attention, diffs, history, health, logs, projects and sync windows.
+Argo CD for agents: read operations plus opt-in writes on writable contexts.
 
 You do not need argocd-axi installed globally - invoke it with `npx -y argocd-axi <command>`.
 If argocd-axi output suggests a command starting with `argocd-axi`, run it as `npx -y argocd-axi ...` instead.
@@ -15,8 +15,7 @@ argocd-axi wraps the `argocd` CLI, which must be on PATH and already logged in (
 It uses that session as is and adds no auth of its own; it never logs in, never prompts, and never reads the argocd config file.
 If a command answers `AUTH_REQUIRED`, ask the user to run `argocd login <server> --sso` (or `argocd relogin`) themselves.
 
-It is **read-only**: v1 cannot sync, roll back, refresh, delete or change anything in Argo CD.
-Those verbs answer `REFUSED` with the raw `argocd` command a human can run; writes are on the roadmap.
+It is read-only except for opt-in writes on contexts listed in `writable-contexts`. `apps sync` previews the diff and does nothing unless `--confirm` is passed; pruning also requires `--prune`. Other writes answer `REFUSED`.
 For anything argocd-axi does not cover, the raw `argocd` CLI is the fallback.
 
 ## Workflow
@@ -31,7 +30,7 @@ For anything argocd-axi does not cover, the raw `argocd` CLI is the fallback.
 ## Commands
 
 ```
-commands[18]:
+commands[19]:
   (no command): live overview - context, server, user, apps needing attention with the reason, running operations
   ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)
   ctx use <context>: switch the argocd CLI's current context (local config only)
@@ -41,6 +40,7 @@ commands[18]:
   apps view <app>: source, destination, sync, health, operation, conditions, auto-sync, problem resources
   apps resources <app> [--problems --orphaned]: managed resources with sync and health
   apps diff <app> [--revision <rev>] [--full]: what differs from Git, per resource; raw diff with --full
+  apps sync <app> [--confirm] [--prune] [--timeout <s>]: preview, then optionally sync one app
   apps history <app>: deployments, newest first
   apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted
   apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows

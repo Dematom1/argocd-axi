@@ -1,6 +1,9 @@
 import { AxiError } from "axi-sdk-js";
 import { parseAllDocuments, stringify } from "yaml";
 import { argocdJson, runArgocd } from "../argocd.js";
+import { loadConfig } from "../config.js";
+import { evaluateWriteGate } from "../gate.js";
+import type { SyncWindow } from "../windows.js";
 import {
   CONTEXT_FLAG,
   getBool,
@@ -1297,6 +1300,159 @@ export async function appsWait(args: string[]): Promise<string> {
   );
 }
 
+// ---------------------------------------------------------------- apps sync
+
+export const APPS_SYNC_SPEC: CommandSpec = {
+  path: "apps sync",
+  summary: "Preview and optionally sync one Application",
+  positionals: [APP_ARG],
+  flags: [
+    {
+      name: "--confirm",
+      kind: "bool",
+      description: "Execute the sync after preview",
+    },
+    {
+      name: "--prune",
+      kind: "bool",
+      description: "Allow pruning resources in the sync",
+    },
+    {
+      name: "--timeout",
+      kind: "value",
+      valueName: "s",
+      description: "Maximum wait in seconds (default 120)",
+    },
+    CONTEXT_FLAG,
+  ],
+  examples: [
+    "argocd-axi apps sync guestbook --context staging",
+    "argocd-axi apps sync guestbook --context staging --confirm",
+  ],
+  notes: [
+    "Never prunes unless --prune is given; requires the context in writable-contexts to execute",
+  ],
+};
+
+export async function appsSync(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_SYNC_SPEC, args);
+  const name = validateName("app", parsed.positionals[0] as string);
+  const context = getString(parsed, "--context");
+  const confirm = getBool(parsed, "--confirm");
+  const prune = getBool(parsed, "--prune");
+  const timeout = getInt(parsed, "--timeout", {
+    default: 120,
+    min: 1,
+    max: 3600,
+  });
+  const gate = evaluateWriteGate(
+    {
+      command: "apps sync",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
+  );
+  const options = { context: gate.context };
+  const diff = await appsDiff([name, "--context", gate.context]);
+  const app = await getApp(name, options);
+  const project = validateName("project", app.spec?.project ?? "default");
+  const windows =
+    (await argocdJson<SyncWindow[] | null>(
+      "proj windows list",
+      [project, "-o", "json"],
+      options,
+    )) ?? [];
+  const preview = [diff, encodeObject({ syncWindows: windows })];
+  if (!confirm)
+    return finish(preview, undefined, [
+      "No changes made; add --confirm to sync",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  const permission = await runArgocd(
+    "account can-i",
+    ["sync", "applications", `${app.spec?.project ?? "default"}/${name}`],
+    { ...options, allowFailure: true },
+  );
+  if (permission.exitCode !== 0 || !/^yes\s*$/i.test(permission.stdout.trim()))
+    throw axiError(
+      `REFUSED: Argo CD RBAC denies sync for ${name}`,
+      CODES.REFUSED,
+    );
+  const syncArgs = [name, "--async", "--info", "initiated-by=argocd-axi"];
+  if (prune) syncArgs.push("--prune");
+  try {
+    await runArgocd("app sync", syncArgs, options);
+  } catch (error) {
+    if (
+      error instanceof AxiError &&
+      /sync.?window|operation.*(?:running|progress|active)|(?:running|progress).*operation/i.test(
+        error.message,
+      )
+    )
+      throw axiError(`REFUSED: ${error.message}`, CODES.REFUSED);
+    throw error;
+  }
+  let waitTimedOut = false;
+  let waitError: string | undefined;
+  try {
+    const wait = await runArgocd(
+      "app wait",
+      [name, "--operation", "--timeout", String(timeout)],
+      { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
+    );
+    if (wait.exitCode !== 0) {
+      const message =
+        wait.stderr.trim() || wait.stdout.trim() || "app wait failed";
+      if (/timed out|deadline exceeded/i.test(message)) waitTimedOut = true;
+      else waitError = message;
+    }
+  } catch (error) {
+    if (!(error instanceof AxiError && error.code === CODES.TIMEOUT))
+      throw error;
+    waitTimedOut = true;
+  }
+  const result = await getApp(name, options);
+  const phase = result.status?.operationState?.phase;
+  const syncResult =
+    phase === "Succeeded"
+      ? "complete"
+      : phase === "Failed" || phase === "Error"
+        ? "failed"
+        : phase === "Running" && waitTimedOut
+          ? "timeout"
+          : "error";
+  return finish(
+    [
+      ...preview,
+      encodeObject({
+        sync: syncResult,
+        ...(syncResult === "error"
+          ? {
+              error:
+                waitError ??
+                result.status?.operationState?.message ??
+                `app wait ended with operation phase ${phase ?? "unknown"}`,
+            }
+          : {}),
+        revision: syncRevision(result),
+        health: healthStatus(result),
+        failedResources: (result.status?.resources ?? [])
+          .filter(
+            (r) => r.status === "SyncFailed" || r.health?.status === "Degraded",
+          )
+          .map((r) => ({
+            kind: r.kind ?? "",
+            name: r.name ?? "",
+            message: r.health?.message ?? r.status ?? "failed",
+          })),
+      }),
+    ],
+    undefined,
+  );
+}
+
 // ---------------------------------------------------------------- apps actions
 
 export const APPS_ACTIONS_SPEC: CommandSpec = {
@@ -1386,6 +1542,7 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
   logs: { spec: APPS_LOGS_SPEC, run: appsLogs },
   wait: { spec: APPS_WAIT_SPEC, run: appsWait },
   actions: { spec: APPS_ACTIONS_SPEC, run: appsActions },
+  sync: { spec: APPS_SYNC_SPEC, run: appsSync },
 };
 
 export const APPS_SPECS = [

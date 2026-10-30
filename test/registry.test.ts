@@ -57,6 +57,7 @@ describe("allowlist registry", () => {
       "app list": "read app list",
       "app get": "read app get",
       "app diff": "read app diff",
+      "app sync": "write app sync",
       "app resources": "read app resources",
       "app manifests": "read app manifests",
       "app logs": "read app logs",
@@ -79,15 +80,16 @@ describe("allowlist registry", () => {
     });
   });
 
-  it("never names a write verb", async () => {
+  it("only exposes the approved app sync write", async () => {
     for (const op of Object.values(OPERATIONS)) {
-      for (const token of op.argv) expect(WRITE_VERBS).not.toContain(token);
+      if (op.tier !== "write")
+        for (const token of op.argv) expect(WRITE_VERBS).not.toContain(token);
     }
   });
 
   it("only local operations skip the network", async () => {
     for (const op of Object.values(OPERATIONS)) {
-      expect(op.network).toBe(op.tier === "read");
+      expect(op.network).toBe(op.tier === "read" || op.tier === "write");
     }
   });
 
@@ -123,7 +125,6 @@ describe("allowlist registry", () => {
       "apps action",
       "apps refresh",
       "apps rollback",
-      "apps sync",
       "apps terminate-op",
     ]);
   });

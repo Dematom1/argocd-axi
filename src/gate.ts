@@ -3,9 +3,8 @@ import { validateContextName } from "./context.js";
 import { CODES, axiError, validationError } from "./errors.js";
 
 /**
- * The write gate (design decisions S3, S8, S15 and A7), built ahead of the
- * write tier so that tier only adds commands. No v1 command calls it to run
- * a write; v1 shows its allowlist in the home view and `ctx`.
+ * Shared write gate: commands require an explicit context, preview by default,
+ * and the local writable-contexts allowlist before execution.
  *
  * Rules:
  * - A write always names its target with an explicit `--context`; the

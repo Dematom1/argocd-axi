@@ -8,7 +8,7 @@
   <a href="https://x.com/dematom1"><img alt="X" src="https://img.shields.io/badge/X-@dematom1-black?style=flat-square" /></a>
 </p>
 
-Read-only Argo CD for agents. `argocd-axi` wraps the `argocd` CLI and answers
+Argo CD for agents, read-only except opt-in writes on writable contexts. `argocd-axi` wraps the `argocd` CLI and answers
 the questions an agent asks during a deployment problem (which apps need
 attention and why, what differs from Git, what was deployed when, what the
 pods are logging, whether a sync is allowed right now) in compact
@@ -18,7 +18,7 @@ pods are logging, whether a sync is allowed right now) in compact
 ```
 $ argocd-axi
 bin: ~/.local/bin/argocd-axi
-description: Read-only Argo CD for agents: applications needing attention, diffs, history, health, logs, projects and sync windows
+description: Argo CD for agents: read operations plus opt-in writes on writable contexts
 context: prod
 server: argocd.example.com
 auth: argocd CLI session for this context
@@ -46,9 +46,10 @@ argocd-axi turns that into small, definitive answers:
   top and says why, in one line, with `count: N of M total`.
 - **Summary first.** Diffs and manifests come back as a per-resource list;
   the raw text is one `--full` away.
-- **Read-only.** v1 cannot sync, roll back, refresh, delete or change
-  anything. Those verbs answer `REFUSED` with the raw `argocd` command a human
-  can run. Writes are on the [roadmap](ROADMAP.md).
+- **Opt-in writes.** `apps sync <app>` previews the per-resource diff and
+  makes no change unless `--confirm` is passed. It never prunes unless
+  `--prune` is explicit, and execution is limited to configured writable
+  contexts. Other writes remain refused.
 - **Safe output.** Secret data, passwords, tokens and sensitive-looking Helm
   parameters are redacted and counted. No flag reveals them.
 - **Never hangs.** Nothing streams or follows; waits are bounded; no prompt can
@@ -137,6 +138,7 @@ argocd-axi apps [--problems --project --selector --repo --cluster --sync --healt
 argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
+argocd-axi apps sync <app> [--confirm] [--prune] [--timeout <s>] --context <c>
 argocd-axi apps history <app> [--limit <n>]
 argocd-axi apps manifests <app> [--source git|live] [--revision <rev>] [--kind <k>] [--full]
 argocd-axi apps logs <app> [--kind <k> --name <n>] [--tail 100] [--since 15m] [--filter <s>] [--full] [-p]

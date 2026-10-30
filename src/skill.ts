@@ -9,7 +9,7 @@ import { COMMAND_LINES, DESCRIPTION } from "./help.js";
 
 export const SKILL_DESCRIPTION =
   "Inspect Argo CD through the argocd-axi CLI - which applications are OutOfSync, Degraded or failing to sync and why, " +
-  "per-resource diffs against Git, deployment history, pod logs, project sync windows and RBAC checks, all read-only. " +
+  "per-resource diffs against Git, deployment history, pod logs, project sync windows and RBAC checks, plus confirmed app syncs on writable contexts. " +
   "Use whenever a task involves Argo CD or GitOps deployments: an app stuck or unhealthy, a sync that failed, " +
   "what changed in a rollout, or whether a sync is allowed right now.";
 
@@ -32,8 +32,7 @@ argocd-axi wraps the \`argocd\` CLI, which must be on PATH and already logged in
 It uses that session as is and adds no auth of its own; it never logs in, never prompts, and never reads the argocd config file.
 If a command answers \`AUTH_REQUIRED\`, ask the user to run \`argocd login <server> --sso\` (or \`argocd relogin\`) themselves.
 
-It is **read-only**: v1 cannot sync, roll back, refresh, delete or change anything in Argo CD.
-Those verbs answer \`REFUSED\` with the raw \`argocd\` command a human can run; writes are on the roadmap.
+It is read-only except for opt-in writes on contexts listed in \`writable-contexts\`. \`apps sync\` previews the diff and does nothing unless \`--confirm\` is passed; pruning also requires \`--prune\`. Other writes answer \`REFUSED\`.
 For anything argocd-axi does not cover, the raw \`argocd\` CLI is the fallback.
 
 ## Workflow

@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { decode } from "@toon-format/toon";
 import { renderTextBlock } from "../src/toon.js";
 import { join } from "node:path";
@@ -6,6 +6,99 @@ import { describe, expect, it } from "vitest";
 import { makeHome, runCli, scenario } from "./helpers.js";
 
 describe("apps", () => {
+  it("sync preview is explicit-context and never invokes a write", async () => {
+    const { stdout, calls } = await runCli([
+      "apps",
+      "sync",
+      "payments-api",
+      "--context",
+      "prod",
+    ]);
+    expect(stdout).toContain("No changes made; add --confirm to sync");
+    expect(calls).toContainEqual([
+      "app",
+      "get",
+      "payments-api",
+      "-o",
+      "json",
+      "--argocd-context",
+      "prod",
+    ]);
+    expect(calls.some((call) => call[1] === "sync")).toBe(false);
+  });
+
+  it("refuses a server-rejected sync window without losing its reason", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const { stdout, calls } = await runCli(
+      ["apps", "sync", "payments-api", "--context", "prod", "--confirm"],
+      {
+        home,
+        scenario: scenario([
+          {
+            argv: ["app", "get", "payments-api"],
+            stdoutFile: "app-payments-api.json",
+          },
+          { argv: ["proj", "windows", "list", "payments"], stdout: "[]" },
+          {
+            argv: ["account", "can-i", "sync", "applications"],
+            stdout: "yes\n",
+          },
+          {
+            argv: ["app", "sync", "payments-api"],
+            exit: 20,
+            stderr:
+              'time="2026-01-01T00:00:00Z" level=fatal msg="rpc error: code = FailedPrecondition desc = SyncWindow blocks this application"\n',
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain("code: REFUSED");
+    expect(stdout).toContain("SyncWindow blocks this application");
+    expect(calls.some((call) => call[1] === "wait")).toBe(false);
+  });
+
+  it("reports a successful server sync as complete", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const app = JSON.stringify({
+      metadata: { name: "demo" },
+      spec: { project: "default" },
+      status: {
+        sync: { revision: "abc123" },
+        health: { status: "Healthy" },
+        operationState: { phase: "Succeeded" },
+        resources: [],
+      },
+    });
+    const { stdout, calls } = await runCli(
+      ["apps", "sync", "demo", "--context", "prod", "--confirm"],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "demo"], stdout: app },
+          { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
+          {
+            argv: ["account", "can-i", "sync", "applications"],
+            stdout: "yes\n",
+          },
+          { argv: ["app", "sync", "demo"], stdout: "" },
+          { argv: ["app", "wait", "demo"], stdout: "" },
+        ]),
+      },
+    );
+    expect(stdout).toContain("sync: complete");
+    expect(calls.some((call) => call[1] === "sync")).toBe(true);
+  });
+
   it("lists problems first with the reason and a total", async () => {
     const { stdout, calls } = await runCli(["apps"]);
     expect(stdout).toContain("count: 5 of 5 total (3 need attention)");
