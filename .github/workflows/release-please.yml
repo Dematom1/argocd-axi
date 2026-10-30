@@ -159,3 +159,13 @@ jobs:
             echo "::error::Staging $SPEC failed. If an earlier run already staged it, approve it with 'npm stage approve <id>' or discard it on npmjs.com instead of re-running."
             exit 1
           fi
+          version="${SPEC##*@}"
+          stage_list="$(npm stage list "${SPEC%@*}" --json 2>/dev/null || true)"
+          stage_id="$(node -e 'try { const stages = JSON.parse(process.argv[1]); const stage = stages.find(entry => entry.version === process.argv[2]); process.stdout.write(String(stage?.id ?? stage?.stageId ?? "unavailable")); } catch { process.stdout.write("unavailable"); }' "$stage_list" "$version")"
+          {
+            echo "## Pending npm stage approval"
+            echo "- Stage ID: $stage_id"
+            echo "- Package: ${SPEC%@*}"
+            echo "- Version: $version"
+            echo "- Waiting for approval: run axi-approve"
+          } >> "$GITHUB_STEP_SUMMARY"
