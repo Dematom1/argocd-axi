@@ -1126,11 +1126,14 @@ export async function appsLogs(args: string[]): Promise<string> {
   const redacted = lines.map((line) => redactor.text(line));
   const kept: string[] = [];
   let chars = 0;
+  let charLimitCut = false;
   for (let i = redacted.length - 1; i >= 0; i--) {
     const line = redacted[i] as string;
     if (kept.length >= tail) break;
-    if (!full && chars + line.length + 1 > LOG_CHAR_CAP && kept.length > 0)
+    if (!full && chars + line.length + 1 > LOG_CHAR_CAP && kept.length > 0) {
+      charLimitCut = true;
       break;
+    }
     kept.unshift(line);
     chars += line.length + 1;
   }
@@ -1138,7 +1141,7 @@ export async function appsLogs(args: string[]): Promise<string> {
   const lineCut = !full && newest.length > LOG_CHAR_CAP;
   if (lineCut) kept[0] = newest.slice(-LOG_CHAR_CAP);
   const lineLimitCut = redacted.length > tail;
-  const charLimitCut = !full && (kept.length < redacted.length || lineCut);
+  charLimitCut ||= lineCut;
   const cutNote = lineCut
     ? ` and only the last ${LOG_CHAR_CAP} of the newest line's ${newest.length} chars`
     : "";
@@ -1153,7 +1156,9 @@ export async function appsLogs(args: string[]): Promise<string> {
     help.push(
       `Run \`argocd-axi apps logs ${name} --tail 5000 --full${carried}\` to read more merged lines${filter ? "; reapply --filter manually if needed" : ""}`,
     );
-  else if (charLimitCut)
+  else if (lineLimitCut)
+    help.push("The --tail limit is 5000 lines; no larger tail is supported");
+  if (charLimitCut)
     help.push(
       `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed, ["--full", "--filter"])}\` to see all requested lines${filter ? "; reapply --filter manually if needed" : ""}`,
     );

@@ -440,6 +440,34 @@ describe("apps", () => {
     expect(full.stdout).not.toContain("to see all requested lines");
   });
 
+  it("reports the hard tail ceiling and any simultaneous character cap", async () => {
+    const lines = Array.from({ length: 5001 }, (_, index) => `line ${index}`);
+    const { stdout } = await runCli(
+      ["apps", "logs", "ceiling", "--tail", "5000"],
+      {
+        scenario: scenario([
+          { argv: ["app", "logs", "ceiling"], stdout: lines.join("\n") },
+        ]),
+      },
+    );
+    expect(stdout).toContain("The --tail limit is 5000 lines; no larger tail is supported");
+    expect(stdout).not.toContain("to see all requested lines");
+
+    const longLines = Array.from({ length: 5001 }, (_, index) =>
+      `line ${index} ${"x".repeat(100)}`,
+    );
+    const capped = await runCli(
+      ["apps", "logs", "ceiling", "--tail", "5000"],
+      {
+        scenario: scenario([
+          { argv: ["app", "logs", "ceiling"], stdout: longLines.join("\n") },
+        ]),
+      },
+    );
+    expect(capped.stdout).toContain("no larger tail is supported");
+    expect(capped.stdout).toContain("to see all requested lines");
+  });
+
   it("keeps only the tail of a newest line longer than the cap", async () => {
     const line = `head ${"y".repeat(30_000)} tail-marker`;
     const { stdout } = await runCli(["apps", "logs", "big"], {
