@@ -120,9 +120,7 @@ describe("apps", () => {
       "--context",
       "prod",
     ]);
-    expect(manifests.stdout).toContain(
-      "Run `argocd-axi apps manifests payments-api --full --revision abc123 --kind Service --context prod` to see the YAML",
-    );
+    expect(manifests.stdout).not.toContain("to see the YAML");
   });
 
   it("qualifies names with the namespace when apps span namespaces", async () => {
@@ -375,6 +373,18 @@ describe("apps", () => {
     );
     expect(stdout).toContain("line 399 ");
     expect(stdout).not.toContain("line 0 ");
+    expect(stdout).toContain(
+      "Run `argocd-axi apps logs big --full --tail 400` to see all requested lines",
+    );
+    const full = await runCli(
+      ["apps", "logs", "big", "--tail", "400", "--full"],
+      {
+        scenario: scenario([{ argv: ["app", "logs", "big"], stdout: lines }]),
+      },
+    );
+    expect(full.stdout).toContain("line 0 ");
+    expect(full.stdout).toContain("line 399 ");
+    expect(full.stdout).not.toContain("to see all requested lines");
   });
 
   it("keeps only the tail of a newest line longer than the cap", async () => {

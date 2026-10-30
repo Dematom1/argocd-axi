@@ -303,7 +303,11 @@ export async function appsList(args: string[]): Promise<string> {
       health: healthStatus(app),
     };
     if (showWhy)
-      row.why = truncate(attentionReasons(app, now, redactor).join("; "), 160);
+      row.why = preview(
+        attentionReasons(app, now, redactor).join("; "),
+        160,
+        false,
+      ).text;
     for (const field of fields) row[field] = fieldValue(app, field);
     return row;
   });
@@ -1006,18 +1010,17 @@ export async function appsManifests(args: string[]): Promise<string> {
       manifests: rows,
     }),
   ];
-  if (full) {
-    const yaml = objects.map((obj) => stringify(obj).trimEnd()).join("\n---\n");
-    blocks.push(renderTextBlock("yaml", yaml.split("\n")));
-  }
+  const yaml = objects.map((obj) => stringify(obj).trimEnd()).join("\n---\n");
+  const yamlPreview = preview(yaml, 800, full);
+  blocks.push(renderTextBlock("yaml", yamlPreview.text.split("\n")));
   return finish(
     blocks,
     redactor,
-    full
-      ? []
-      : [
+    yamlPreview.truncated
+      ? [
           `Run \`argocd-axi apps manifests ${name} --full${carriedFlags(parsed)}\` to see the YAML`,
-        ],
+        ]
+      : [],
   );
 }
 
@@ -1059,6 +1062,12 @@ export const APPS_LOGS_SPEC: CommandSpec = {
       description: "Only lines containing this text",
     },
     {
+      name: "--full",
+      kind: "bool",
+      description:
+        "Return all requested lines, up to the 5000-line --tail limit",
+    },
+    {
       name: "--previous",
       short: "-p",
       kind: "bool",
@@ -1072,7 +1081,7 @@ export const APPS_LOGS_SPEC: CommandSpec = {
     "argocd-axi apps logs guestbook --filter error -p",
   ],
   notes: [
-    `Output keeps the newest lines and is capped at ${LOG_CHAR_CAP} characters; secret-looking values are redacted on a best-effort basis`,
+    `Output keeps the newest lines and is capped at ${LOG_CHAR_CAP} characters; --full returns up to 5000 requested lines; secret-looking values are redacted on a best-effort basis`,
   ],
 };
 
@@ -1099,6 +1108,7 @@ export async function appsLogs(args: string[]): Promise<string> {
     ...contextOption(parsed),
     failure: { notFoundHelp: NOT_FOUND_HELP },
   });
+  const full = getBool(parsed, "--full");
   const lines = result.stdout.split("\n");
   if (lines.at(-1) === "") lines.pop();
   if (lines.length === 0) {
@@ -1117,12 +1127,13 @@ export async function appsLogs(args: string[]): Promise<string> {
   let chars = 0;
   for (let i = redacted.length - 1; i >= 0; i--) {
     const line = redacted[i] as string;
-    if (chars + line.length + 1 > LOG_CHAR_CAP && kept.length > 0) break;
+    if (!full && chars + line.length + 1 > LOG_CHAR_CAP && kept.length > 0)
+      break;
     kept.unshift(line);
     chars += line.length + 1;
   }
   const newest = kept[0] as string;
-  const lineCut = newest.length > LOG_CHAR_CAP;
+  const lineCut = !full && newest.length > LOG_CHAR_CAP;
   if (lineCut) kept[0] = newest.slice(-LOG_CHAR_CAP);
   const cutNote = lineCut
     ? ` and only the last ${LOG_CHAR_CAP} of the newest line's ${newest.length} chars`
@@ -1131,10 +1142,15 @@ export async function appsLogs(args: string[]): Promise<string> {
     kept.length < redacted.length || lineCut
       ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${LOG_CHAR_CAP} chars)${cutNote}`
       : `${kept.length} lines (--tail ${tail})`;
+  const truncated = kept.length < redacted.length || lineCut;
   return finish(
     [encodeObject({ logs: header }), renderTextBlock("lines", kept)],
     redactor,
-    [],
+    truncated
+      ? [
+          `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed)}\` to see all requested lines`,
+        ]
+      : [],
   );
 }
 
