@@ -97,6 +97,20 @@ describe("argocd error translation", () => {
     ).toContain("ARGOCD_AUTH_TOKEN");
   });
 
+  it("includes the login command for expired agent tokens", () => {
+    const error = mapArgocdFailure(
+      fatal("rpc error: code = Unauthenticated desc = token is expired"),
+      {
+        agentCredentials: true,
+        loginCommand: "argocd login 'cd.example.com' --sso --grpc-web",
+      },
+    );
+    expect(error.code).toBe("AUTH_EXPIRED");
+    expect(error.suggestions.join(" ")).toContain(
+      "argocd login 'cd.example.com' --sso --grpc-web",
+    );
+  });
+
   it("redacts secrets that leak into error text", () => {
     const error = mapArgocdFailure(fatal("failed: password=hunter2"));
     expect(error.message).not.toContain("hunter2");
