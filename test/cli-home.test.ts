@@ -22,7 +22,7 @@ describe("home view", () => {
     const { stdout, exitCode, calls } = await runCli(["auth", "guide"]);
     expect(exitCode).toBe(0);
     expect(stdout).toContain(
-      "argocd login argocd.example.com --sso --grpc-web",
+      "argocd login 'argocd.example.com' --sso --grpc-web",
     );
     expect(stdout).toContain("ARGOCD_SERVER");
     expect(stdout).toContain("ARGOCD_AUTH_TOKEN");
@@ -42,7 +42,7 @@ describe("home view", () => {
     const rejected = await runCli(["apps"], { scenario: auth });
     expect(rejected.stdout).toContain("code: AUTH_EXPIRED");
     expect(rejected.stdout).toContain(
-      "argocd login argocd.example.com --sso --grpc-web",
+      "argocd login 'argocd.example.com' --sso --grpc-web",
     );
 
     const unreachable = scenario([
