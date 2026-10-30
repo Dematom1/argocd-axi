@@ -31,9 +31,7 @@ attention[3]{app,project,sync,health,why}:
   checkout,shop,Synced,Progressing,Progressing for 25m
 operations[1]{app,phase,started}:
   checkout,Running,25m ago
-help[2]:
-  Run `argocd-axi apps view <app>` to diagnose an application
-  Run `argocd-axi apps` to list every application
+help[2]: Run `argocd-axi apps view <app>` to diagnose an application,Run `argocd-axi apps` to list every application
 ```
 
 ## Why

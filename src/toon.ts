@@ -17,19 +17,14 @@ export function encodeObject(value: Record<string, unknown>): string {
   return encode(clean);
 }
 
-/**
- * Render next-step suggestions as an indented block. `encode()` inlines
- * primitive arrays on one comma-joined line, which is hard to read for
- * sentences, so help is formatted by hand like other AXI tools do.
- */
+/** Render next-step suggestions as a TOON list. */
 export function renderHelp(lines: string[]): string {
-  return renderHelpBlock("help", lines);
+  return encodeObject({ help: lines });
 }
 
-/** Render help sections as readable indented lines, not data arrays. */
+/** Render help sections as TOON list items. */
 export function renderHelpBlock(label: string, lines: string[]): string {
-  if (lines.length === 0) return "";
-  return `${label}[${lines.length}]:\n${lines.map((line) => `  ${line}`).join("\n")}`;
+  return encodeObject({ [label]: lines });
 }
 
 /** Encode multi-line text (logs, diffs, manifests) as a TOON array. */

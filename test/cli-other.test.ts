@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { decode } from "@toon-format/toon";
 import { VERSION } from "../src/version.js";
 import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
@@ -200,22 +201,31 @@ describe("help, version and setup", () => {
     }
   });
 
-  it("keeps help output in its original indented format", async () => {
-    expect(renderHelp(["first, with comma", "second"])).toBe(
-      "help[2]:\n  first, with comma\n  second",
-    );
+  it("keeps help output as decodable TOON strings", async () => {
+    expect(decode(renderHelp(["first, with comma", "second"]))).toEqual({
+      help: ["first, with comma", "second"],
+    });
+    expect(decode(`value: ok\n${renderHelp(["first", "second"])}`)).toEqual({
+      value: "ok",
+      help: ["first", "second"],
+    });
     const top = await runCli(["--help"]);
-    expect(top.stdout).toContain(
-      "commands[18]:\n  (no command): live overview - context, server, user, apps needing attention with the reason, running operations\n  ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)",
-    );
+    expect(
+      (decode(top.stdout) as { commands: string[] }).commands,
+    ).toHaveLength(18);
     const view = await runCli(["apps", "view", "--help"]);
-    expect(view.stdout).toBe(
-      "usage: argocd-axi apps view <app> [flags]\n" +
-        "description: One application: source, destination, sync, health, operation, conditions, auto-sync, unhealthy resources\n" +
-        "args[1]:\n  <app>: Application name, or namespace/name\n" +
-        "flags[2]:\n  --full: Do not truncate messages or Helm values\n  --context <name>: Argo CD context to use (as listed by `argocd-axi ctx`); default: the current context\n" +
-        "examples[2]:\n  argocd-axi apps view guestbook\n  argocd-axi apps view team-a/billing --context staging\n",
-    );
+    expect(decode(view.stdout)).toMatchObject({
+      usage: "argocd-axi apps view <app> [flags]",
+      args: ["<app>: Application name, or namespace/name"],
+      flags: [
+        "--full: Do not truncate messages or Helm values",
+        "--context <name>: Argo CD context to use (as listed by `argocd-axi ctx`); default: the current context",
+      ],
+      examples: [
+        "argocd-axi apps view guestbook",
+        "argocd-axi apps view team-a/billing --context staging",
+      ],
+    });
   });
 
   it("prints each group subcommand on its own help line", async () => {
@@ -225,12 +235,10 @@ describe("help, version and setup", () => {
       ["appsets", 2],
     ] as const) {
       const { stdout, calls } = await runCli([group, "--help"]);
-      const start = stdout.indexOf(`subcommands[${count}]:`);
-      const section = stdout.slice(start).split("\nhelp[")[0] ?? "";
-      const lines = section.split("\n").slice(1);
-      expect(lines, group).toHaveLength(count);
+      const decoded = decode(stdout) as { subcommands: string[] };
+      expect(decoded.subcommands, group).toHaveLength(count);
       expect(
-        lines.every((line) => line.startsWith(`  ${group} `)),
+        decoded.subcommands.every((line) => line.startsWith(`${group} `)),
         group,
       ).toBe(true);
       expect(calls).toEqual([]);
