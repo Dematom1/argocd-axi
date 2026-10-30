@@ -26,11 +26,9 @@ export function renderHelp(lines: string[]): string {
   return renderTextBlock("help", lines);
 }
 
-/** Render multi-line text (logs, diffs, manifests) as an indented block. */
+/** Encode multi-line text (logs, diffs, manifests) as a TOON array. */
 export function renderTextBlock(label: string, lines: string[]): string {
-  if (lines.length === 0) return "";
-  const body = lines.map((line) => `  ${line}`).join("\n");
-  return `${label}[${lines.length}]:\n${body}`;
+  return lines.length === 0 ? "" : encodeObject({ [label]: lines });
 }
 
 /** Join non-empty TOON blocks into one output string. */
