@@ -86,12 +86,16 @@ export async function runArgocd(
     const failure = options.failure ?? {};
     const cleaned = result.stderr || result.stdout;
     if (!failure.loginCommand && isAuthenticationFailure(cleaned)) {
-      const { target } = await resolveTarget(options.context);
-      const server = target.envServer ?? target.server;
-      failure.agentCredentials = Boolean(target.envToken);
-      failure.loginCommand = server
-        ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
-        : undefined;
+      failure.agentCredentials = Boolean(process.env.ARGOCD_AUTH_TOKEN?.trim());
+      try {
+        const { target } = await resolveTarget(options.context);
+        const server = target.envServer ?? target.server;
+        failure.loginCommand = server
+          ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
+          : undefined;
+      } catch {
+        failure.loginCommand = undefined;
+      }
     }
     throw mapArgocdFailure(cleaned, failure);
   }
