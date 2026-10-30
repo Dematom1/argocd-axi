@@ -19,16 +19,12 @@ export function encodeObject(value: Record<string, unknown>): string {
 
 /** Render next-step suggestions as a TOON list. */
 export function renderHelp(lines: string[]): string {
-  return lines.length === 0
-    ? ""
-    : `help[${lines.length}]:\n${lines.map((line) => `  - ${line}`).join("\n")}`;
+  return encodeObject({ help: lines });
 }
 
 /** Render help sections as TOON list items. */
 export function renderHelpBlock(label: string, lines: string[]): string {
-  if (lines.length === 0) return "";
-  const item = label === "help" ? "- " : "";
-  return `${label}[${lines.length}]:\n${lines.map((line) => `  ${item}${line}`).join("\n")}`;
+  return encodeObject({ [label]: lines });
 }
 
 /** Encode multi-line text (logs, diffs, manifests) as a TOON array. */
