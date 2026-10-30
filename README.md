@@ -251,7 +251,8 @@ skill.
 
 Releases are cut by [release-please](https://github.com/googleapis/release-please)
 from conventional commits (`feat:`, `fix:`, `docs:`, ...) on `main`. It keeps
-a release PR open that bumps the version and updates `CHANGELOG.md`; merging
+a release PR open that bumps the package version, updates `src/version.ts`,
+and updates `CHANGELOG.md`; merging
 that PR tags the release and publishes it to npm from
 `.github/workflows/release-please.yml` through npm trusted publishing, with
 provenance and no stored npm token. Each release is staged: after the workflow
