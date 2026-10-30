@@ -450,22 +450,24 @@ describe("apps", () => {
         ]),
       },
     );
-    expect(stdout).toContain("The --tail limit is 5000 lines; no larger tail is supported");
+    expect(stdout).toContain(
+      "The --tail limit is 5000 lines; no larger tail is supported",
+    );
     expect(stdout).not.toContain("to see all requested lines");
 
-    const longLines = Array.from({ length: 5001 }, (_, index) =>
-      `line ${index} ${"x".repeat(100)}`,
+    const longLines = Array.from(
+      { length: 5001 },
+      (_, index) => `line ${index} ${"x".repeat(100)}`,
     );
-    const capped = await runCli(
-      ["apps", "logs", "ceiling", "--tail", "5000"],
-      {
-        scenario: scenario([
-          { argv: ["app", "logs", "ceiling"], stdout: longLines.join("\n") },
-        ]),
-      },
-    );
+    const capped = await runCli(["apps", "logs", "ceiling", "--tail", "5000"], {
+      scenario: scenario([
+        { argv: ["app", "logs", "ceiling"], stdout: longLines.join("\n") },
+      ]),
+    });
     expect(capped.stdout).toContain("no larger tail is supported");
-    expect(capped.stdout).toContain("--full output is capped at 1000000 characters");
+    expect(capped.stdout).toContain(
+      "--full output is capped at 1000000 characters",
+    );
     expect(capped.stdout).not.toContain("to see all requested lines");
   });
 
@@ -497,7 +499,9 @@ describe("apps", () => {
         ]),
       },
     );
-    expect(oversized.stdout).toContain("0 requested lines omitted by the 1000000-character cap");
+    expect(oversized.stdout).toContain(
+      "0 requested lines omitted by the 1000000-character cap",
+    );
     expect(oversized.stdout).toContain("6 chars omitted from the newest line");
     expect(oversized.stdout.length).toBeLessThan(1_010_000);
   });
@@ -513,7 +517,9 @@ describe("apps", () => {
       `logs: showing the newest 1 of 2 lines (output capped at 20000 chars) and only the last 20000 of the newest line's ${line.length} chars`,
     );
     expect(stdout).toContain("tail-marker");
-    expect(stdout).toContain(`${line.length - 20_000} chars omitted from the newest line`);
+    expect(stdout).toContain(
+      `${line.length - 20_000} chars omitted from the newest line`,
+    );
     expect(stdout).not.toContain("head ");
     expect(stdout).not.toContain("older line");
     expect(stdout.length).toBeLessThan(21_000);
