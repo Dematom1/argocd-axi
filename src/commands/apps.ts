@@ -1179,7 +1179,9 @@ export async function appsLogs(args: string[]): Promise<string> {
     help.push(
       full
         ? `The --full output reached its ${FULL_LOG_CHAR_CAP}-character cap; narrow with --tail, --since, --kind, or --name${filter ? "; reapply --filter manually if needed" : ""}`
-        : `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed, ["--full", "--filter"])}\` to see all requested lines (up to ${FULL_LOG_CHAR_CAP} characters); narrow with --tail, --since, --kind, or --name if needed${filter ? "; reapply --filter manually if needed" : ""}`,
+        : tail >= 5000
+          ? `The --full output is capped at ${FULL_LOG_CHAR_CAP} characters; narrow with --since, --kind, or --name${filter ? "; reapply --filter manually if needed" : ""}`
+          : `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed, ["--full", "--filter"])}\` to see all requested lines (up to ${FULL_LOG_CHAR_CAP} characters); narrow with --tail, --since, --kind, or --name if needed${filter ? "; reapply --filter manually if needed" : ""}`, 
     );
   return finish(
     [encodeObject({ logs: logHeader }), renderTextBlock("lines", kept)],
