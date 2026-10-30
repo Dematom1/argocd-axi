@@ -3,7 +3,7 @@ import { parseAllDocuments, stringify } from "yaml";
 import { argocdJson, runArgocd } from "../argocd.js";
 import { loadConfig } from "../config.js";
 import { evaluateWriteGate } from "../gate.js";
-import { syncVerdict, type SyncWindow } from "../windows.js";
+import type { SyncWindow } from "../windows.js";
 import {
   CONTEXT_FLAG,
   getBool,
@@ -1304,52 +1304,20 @@ export async function appsSync(args: string[]): Promise<string> {
   );
   const options = { context: gate.context };
   const diff = await appsDiff([name, "--context", gate.context]);
-  if (!confirm)
-    return finish([diff], undefined, [
-      "No changes made; add --confirm to sync",
-      ...(gate.mode === "preview" ? gate.help : []),
-    ]);
-
   const app = await getApp(name, options);
-  if (isOperationRunning(app))
-    throw axiError(
-      `application ${name} already has an operation running`,
-      CODES.REFUSED,
-      [
-        `Run \`argocd-axi apps view ${name} --context ${gate.context}\` to inspect it`,
-      ],
-    );
+  const project = validateName("project", app.spec?.project ?? "default");
   const windows =
     (await argocdJson<SyncWindow[] | null>(
       "proj windows list",
-      [validateName("project", app.spec?.project ?? "default"), "-o", "json"],
+      [project, "-o", "json"],
       options,
     )) ?? [];
-  const destination = app.spec?.destination;
-  const applicableWindows = windows.filter(
-    (window) =>
-      (!window.applications?.length ||
-        window.applications.some((pattern) =>
-          new RegExp(
-            `^${pattern
-              .split("*")
-              .map((part) => part.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&"))
-              .join(".*")}$`,
-          ).test(name),
-        )) &&
-      (!window.namespaces?.length ||
-        window.namespaces.includes(destination?.namespace ?? "default")) &&
-      (!window.clusters?.length ||
-        window.clusters.some((cluster) =>
-          [destination?.name, destination?.server].includes(cluster),
-        )),
-  );
-  const verdict = syncVerdict(applicableWindows, Date.now());
-  if (verdict.manual !== "allowed")
-    throw axiError(
-      `sync window does not allow syncing ${name}: ${verdict.reason}`,
-      CODES.REFUSED,
-    );
+  const preview = [diff, encodeObject({ syncWindows: windows })];
+  if (!confirm)
+    return finish(preview, undefined, [
+      "No changes made; add --confirm to sync",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
   const permission = await runArgocd(
     "account can-i",
     ["sync", "applications", `${app.spec?.project ?? "default"}/${name}`],
@@ -1362,7 +1330,18 @@ export async function appsSync(args: string[]): Promise<string> {
     );
   const syncArgs = [name, "--info", "initiated-by=argocd-axi"];
   if (prune) syncArgs.push("--prune");
-  await runArgocd("app sync", syncArgs, options);
+  try {
+    await runArgocd("app sync", syncArgs, options);
+  } catch (error) {
+    if (
+      error instanceof AxiError &&
+      /sync.?window|operation.*(?:running|progress|active)|(?:running|progress).*operation/i.test(
+        error.message,
+      )
+    )
+      throw axiError(`REFUSED: ${error.message}`, CODES.REFUSED);
+    throw error;
+  }
   let waitTimedOut = false;
   let waitError: string | undefined;
   try {
@@ -1392,9 +1371,17 @@ export async function appsSync(args: string[]): Promise<string> {
           : "error";
   return finish(
     [
+      ...preview,
       encodeObject({
         sync: syncResult,
-        ...(syncResult === "error" && waitError ? { error: waitError } : {}),
+        ...(syncResult === "error"
+          ? {
+              error:
+                waitError ??
+                result.status?.operationState?.message ??
+                `app wait ended with operation phase ${phase ?? "unknown"}`,
+            }
+          : {}),
         revision: syncRevision(result),
         health: healthStatus(result),
         failedResources: (result.status?.resources ?? [])
