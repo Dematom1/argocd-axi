@@ -526,6 +526,10 @@ describe("apps", () => {
       status: {
         sync: { status: "Synced" },
         health: { status: "Degraded", message },
+        conditions: Array.from({ length: 50 }, (_, index) => ({
+          type: `Condition${index}`,
+          message,
+        })),
       },
     };
     const { stdout } = await runCli(["apps"], {
@@ -534,7 +538,7 @@ describe("apps", () => {
       ]),
     });
     expect(stdout).toContain(
-      `truncated, ${"Degraded: ".length + message.length} chars total`,
+      `truncated, ${"Degraded: ".length + message.length + Array.from({ length: 50 }, (_, index) => `; Condition${index}: `.length + message.length).reduce((total, length) => total + length, 0)} chars total`,
     );
   });
 

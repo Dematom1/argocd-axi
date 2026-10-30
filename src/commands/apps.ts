@@ -21,6 +21,7 @@ import {
 import {
   appName,
   appSources,
+  attentionReasonPreview,
   attentionReasons,
   autoSyncSummary,
   destinationSummary,
@@ -302,12 +303,10 @@ export async function appsList(args: string[]): Promise<string> {
       sync: syncStatus(app),
       health: healthStatus(app),
     };
-    if (showWhy)
-      row.why = preview(
-        attentionReasons(app, now, redactor).join("; "),
-        160,
-        false,
-      ).text;
+    if (showWhy) {
+      const why = attentionReasonPreview(app, 160, now, redactor);
+      row.why = preview(why.text, 160, false, why.totalChars).text;
+    }
     for (const field of fields) row[field] = fieldValue(app, field);
     return row;
   });

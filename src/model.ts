@@ -162,47 +162,69 @@ function formatMinutes(minutes: number): string {
  * Why an app needs attention (empty when it does not), per decision A6.
  * Messages are redacted before they are cut, counted on `redactor`.
  */
-export function attentionReasons(
+function* attentionReasonTexts(
   app: Application,
-  now: number = Date.now(),
-  redactor: Redactor = new Redactor(),
-): string[] {
-  const clip = (text: string) =>
-    truncate(redactor.text(text), REASON_CHARS);
-  const reasons: string[] = [];
+  now: number,
+  redactor: Redactor,
+): Generator<string> {
+  const redact = (text: string) => redactor.text(text);
   const sync = syncStatus(app);
-  if (sync === "OutOfSync") reasons.push("OutOfSync");
-  else if (sync !== "Synced") reasons.push(`sync ${sync}`);
+  if (sync === "OutOfSync") yield "OutOfSync";
+  else if (sync !== "Synced") yield `sync ${sync}`;
 
   const health = healthStatus(app);
   const healthMessage = app.status?.health?.message;
   if (health === "Degraded" || health === "Missing" || health === "Unknown") {
     const label = health === "Unknown" ? "health Unknown" : health;
-    reasons.push(healthMessage ? `${label}: ${clip(healthMessage)}` : label);
+    yield healthMessage ? `${label}: ${redact(healthMessage)}` : label;
   } else if (health === "Progressing") {
     const minutes = minutesSince(app.status?.health?.lastTransitionTime, now);
     if (minutes !== undefined && minutes > PROGRESSING_ATTENTION_MINUTES) {
-      reasons.push(`Progressing for ${formatMinutes(minutes)}`);
+      yield `Progressing for ${formatMinutes(minutes)}`;
     }
   }
 
   const op = app.status?.operationState;
   if (op?.phase === "Failed" || op?.phase === "Error") {
-    reasons.push(
-      op.message
-        ? `last sync ${op.phase}: ${clip(op.message)}`
-        : `last sync ${op.phase}`,
-    );
+    yield op.message
+      ? `last sync ${op.phase}: ${redact(op.message)}`
+      : `last sync ${op.phase}`;
   }
 
   for (const condition of app.status?.conditions ?? []) {
-    reasons.push(
-      condition.message
-        ? `${condition.type ?? "Condition"}: ${clip(condition.message)}`
-        : (condition.type ?? "Condition"),
-    );
+    yield condition.message
+      ? `${condition.type ?? "Condition"}: ${redact(condition.message)}`
+      : (condition.type ?? "Condition");
   }
-  return reasons;
+}
+
+export function attentionReasons(
+  app: Application,
+  now: number = Date.now(),
+  redactor: Redactor = new Redactor(),
+): string[] {
+  return Array.from(attentionReasonTexts(app, now, redactor), (reason) =>
+    truncate(reason, REASON_CHARS),
+  );
+}
+
+export function attentionReasonPreview(
+  app: Application,
+  max: number,
+  now: number = Date.now(),
+  redactor: Redactor = new Redactor(),
+): { text: string; totalChars: number } {
+  let text = "";
+  let totalChars = 0;
+  for (const reason of attentionReasonTexts(app, now, redactor)) {
+    if (totalChars > 0) {
+      if (text.length < max) text += "; ".slice(0, max - text.length);
+      totalChars += 2;
+    }
+    if (text.length < max) text += reason.slice(0, max - text.length);
+    totalChars += reason.length;
+  }
+  return { text, totalChars };
 }
 
 export function needsAttention(

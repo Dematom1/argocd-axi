@@ -128,10 +128,11 @@ export function preview(
   text: string,
   max: number,
   full: boolean,
+  totalChars = text.length,
 ): { text: string; truncated: boolean } {
-  if (full || text.length <= max) return { text, truncated: false };
+  if (full || totalChars <= max) return { text, truncated: false };
   return {
-    text: `${text.slice(0, max)}... (truncated, ${text.length} chars total)`,
+    text: `${text.slice(0, max)}... (truncated, ${totalChars} chars total)`,
     truncated: true,
   };
 }
