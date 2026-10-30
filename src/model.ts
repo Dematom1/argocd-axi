@@ -166,8 +166,12 @@ function* attentionReasonTexts(
   app: Application,
   now: number,
   redactor: Redactor,
+  clipMessages = false,
 ): Generator<string> {
-  const redact = (text: string) => redactor.text(text);
+  const redact = (text: string) => {
+    const redacted = redactor.text(text);
+    return clipMessages ? truncate(redacted, REASON_CHARS) : redacted;
+  };
   const sync = syncStatus(app);
   if (sync === "OutOfSync") yield "OutOfSync";
   else if (sync !== "Synced") yield `sync ${sync}`;
@@ -203,9 +207,7 @@ export function attentionReasons(
   now: number = Date.now(),
   redactor: Redactor = new Redactor(),
 ): string[] {
-  return Array.from(attentionReasonTexts(app, now, redactor), (reason) =>
-    truncate(reason, REASON_CHARS),
-  );
+  return Array.from(attentionReasonTexts(app, now, redactor, true));
 }
 
 export function attentionReasonPreview(

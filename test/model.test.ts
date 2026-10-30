@@ -101,6 +101,26 @@ describe("needs attention (decision A6)", () => {
     ).toEqual(["Missing"]);
   });
 
+  it("clips attention messages before adding their labels", () => {
+    const message = "x".repeat(100);
+    const clipped = `${"x".repeat(77)}...`;
+    expect(
+      attentionReasons(
+        app({
+          sync: { status: "Synced" },
+          health: { status: "Degraded", message },
+          operationState: { phase: "Failed", message },
+          conditions: [{ type: "SyncError", message }],
+        }),
+        now,
+      ),
+    ).toEqual([
+      `Degraded: ${clipped}`,
+      `last sync Failed: ${clipped}`,
+      `SyncError: ${clipped}`,
+    ]);
+  });
+
   it("does not count Suspended as unhealthy", () => {
     expect(
       attentionReasons(
