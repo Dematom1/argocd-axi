@@ -29,10 +29,31 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      - name: Require release App secrets
+        env:
+          RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$RELEASE_APP_ID" ] || [ -z "$RELEASE_APP_PRIVATE_KEY" ]; then
+            echo "::error::Missing RELEASE_APP_ID and/or RELEASE_APP_PRIVATE_KEY repository secrets. Create a GitHub App with only Contents and Pull requests read/write permissions, install it on this repository, and save its App ID and private key as RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY repository secrets."
+            exit 1
+          fi
+
+      # v2.2.2
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: release-app-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.release-app-token.outputs.token }}
 
   # Build and verify in a job with no npm publishing permission: `npm ci` runs
   # dependency install scripts, which must never see the npm OIDC token.
