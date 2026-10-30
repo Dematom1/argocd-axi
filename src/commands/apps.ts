@@ -304,7 +304,7 @@ export async function appsList(args: string[]): Promise<string> {
     };
     if (showWhy)
       row.why = preview(
-        attentionReasons(app, now, redactor, null).join("; "),
+        attentionReasons(app, now, redactor).join("; "),
         160,
         false,
       ).text;
