@@ -1331,7 +1331,10 @@ export async function appsSync(args: string[]): Promise<string> {
       (!window.applications?.length ||
         window.applications.some((pattern) =>
           new RegExp(
-            `^${pattern.replace(/[.+?^${}()|[\\]\\]/g, "\\$&").replace(/\\*/g, ".*")}$`,
+            `^${pattern
+              .split("*")
+              .map((part) => part.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&"))
+              .join(".*")}$`,
           ).test(name),
         )) &&
       (!window.namespaces?.length ||
@@ -1360,17 +1363,25 @@ export async function appsSync(args: string[]): Promise<string> {
   const syncArgs = [name, "--info", "initiated-by=argocd-axi"];
   if (prune) syncArgs.push("--prune");
   await runArgocd("app sync", syncArgs, options);
-  const wait = await runArgocd(
-    "app wait",
-    [name, "--operation", "--timeout", String(timeout)],
-    { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
-  );
+  let waitTimedOut = false;
+  let waitExitCode = 0;
+  try {
+    const wait = await runArgocd(
+      "app wait",
+      [name, "--operation", "--timeout", String(timeout)],
+      { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
+    );
+    waitExitCode = wait.exitCode;
+  } catch (error) {
+    if (!(error instanceof AxiError && error.code === CODES.TIMEOUT)) throw error;
+    waitTimedOut = true;
+  }
   const result = await getApp(name, options);
   return finish(
     [
       encodeObject({
         sync:
-          wait.exitCode === 0
+          waitExitCode === 0 && !waitTimedOut
             ? "complete"
             : result.status?.operationState?.phase === "Failed" ||
                 result.status?.operationState?.phase === "Error"
