@@ -141,7 +141,7 @@ argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
 argocd-axi apps history <app> [--limit <n>]
 argocd-axi apps manifests <app> [--source git|live] [--revision <rev>] [--kind <k>] [--full]
-argocd-axi apps logs <app> [--kind <k> --name <n>] [--tail 100] [--since 15m] [--filter <s>] [-p]
+argocd-axi apps logs <app> [--kind <k> --name <n>] [--tail 100] [--since 15m] [--filter <s>] [--full] [-p]
 argocd-axi apps wait <app> [--sync --health --operation] [--timeout 120]
 argocd-axi apps actions <app> [--kind <k>]
 argocd-axi projects | projects view <p> | projects windows <p>
