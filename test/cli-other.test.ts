@@ -218,6 +218,25 @@ describe("help, version and setup", () => {
     );
   });
 
+  it("prints each group subcommand on its own help line", async () => {
+    for (const [group, count] of [
+      ["apps", 8],
+      ["projects", 2],
+      ["appsets", 2],
+    ] as const) {
+      const { stdout, calls } = await runCli([group, "--help"]);
+      const start = stdout.indexOf(`subcommands[${count}]:`);
+      const section = stdout.slice(start).split("\nhelp[")[0] ?? "";
+      const lines = section.split("\n").slice(1);
+      expect(lines, group).toHaveLength(count);
+      expect(
+        lines.every((line) => line.startsWith(`  ${group} `)),
+        group,
+      ).toBe(true);
+      expect(calls).toEqual([]);
+    }
+  });
+
   it("prints top-level and per-command help without calling argocd", async () => {
     const top = await runCli(["--help"]);
     expect(top.stdout).toContain("commands[18]:");
