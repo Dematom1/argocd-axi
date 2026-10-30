@@ -166,8 +166,12 @@ export function attentionReasons(
   app: Application,
   now: number = Date.now(),
   redactor: Redactor = new Redactor(),
+  maxChars: number | null = REASON_CHARS,
 ): string[] {
-  const clip = (text: string) => truncate(redactor.text(text), REASON_CHARS);
+  const clip = (text: string) => {
+    const redacted = redactor.text(text);
+    return maxChars === null ? redacted : truncate(redacted, maxChars);
+  };
   const reasons: string[] = [];
   const sync = syncStatus(app);
   if (sync === "OutOfSync") reasons.push("OutOfSync");

@@ -304,7 +304,7 @@ export async function appsList(args: string[]): Promise<string> {
     };
     if (showWhy)
       row.why = preview(
-        attentionReasons(app, now, redactor).join("; "),
+        attentionReasons(app, now, redactor, null).join("; "),
         160,
         false,
       ).text;
@@ -1010,7 +1010,9 @@ export async function appsManifests(args: string[]): Promise<string> {
       manifests: rows,
     }),
   ];
-  const yaml = objects.map((obj) => stringify(obj).trimEnd()).join("\n---\n");
+  const yaml = redactor.text(
+    objects.map((obj) => stringify(obj).trimEnd()).join("\n---\n"),
+  );
   const yamlPreview = preview(yaml, 800, full);
   blocks.push(renderTextBlock("yaml", yamlPreview.text.split("\n")));
   return finish(
@@ -1127,6 +1129,7 @@ export async function appsLogs(args: string[]): Promise<string> {
   let chars = 0;
   for (let i = redacted.length - 1; i >= 0; i--) {
     const line = redacted[i] as string;
+    if (kept.length >= tail) break;
     if (!full && chars + line.length + 1 > LOG_CHAR_CAP && kept.length > 0)
       break;
     kept.unshift(line);
@@ -1135,22 +1138,30 @@ export async function appsLogs(args: string[]): Promise<string> {
   const newest = kept[0] as string;
   const lineCut = !full && newest.length > LOG_CHAR_CAP;
   if (lineCut) kept[0] = newest.slice(-LOG_CHAR_CAP);
+  const lineLimitCut = redacted.length > tail;
+  const charLimitCut = !full && (kept.length < redacted.length || lineCut);
   const cutNote = lineCut
     ? ` and only the last ${LOG_CHAR_CAP} of the newest line's ${newest.length} chars`
     : "";
-  const header =
-    kept.length < redacted.length || lineCut
+  const header = lineLimitCut
+    ? `showing the newest ${kept.length} of ${redacted.length} merged lines (--tail ${tail} limit)`
+    : charLimitCut
       ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${LOG_CHAR_CAP} chars)${cutNote}`
       : `${kept.length} lines (--tail ${tail})`;
-  const truncated = kept.length < redacted.length || lineCut;
+  const help: string[] = [];
+  const carried = carriedFlags(parsed, ["--tail", "--full", "--filter"]);
+  if (lineLimitCut && tail < 5000)
+    help.push(
+      `Run \`argocd-axi apps logs ${name} --tail 5000 --full${carried}\` to read more merged lines${filter ? "; reapply --filter manually if needed" : ""}`,
+    );
+  else if (charLimitCut)
+    help.push(
+      `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed, ["--full", "--filter"])}\` to see all requested lines${filter ? "; reapply --filter manually if needed" : ""}`,
+    );
   return finish(
     [encodeObject({ logs: header }), renderTextBlock("lines", kept)],
     redactor,
-    truncated
-      ? [
-          `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed)}\` to see all requested lines`,
-        ]
-      : [],
+    help,
   );
 }
 
