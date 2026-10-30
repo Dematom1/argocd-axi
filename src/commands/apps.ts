@@ -63,6 +63,7 @@ const APP_ARG = {
 const NOT_FOUND_HELP = ["Run `argocd-axi apps` to list applications"];
 const MESSAGE_CHARS = 300;
 const LOG_CHAR_CAP = 20_000;
+const FULL_LOG_CHAR_CAP = 1_000_000;
 
 async function getApp(
   name: string,
@@ -1066,7 +1067,7 @@ export const APPS_LOGS_SPEC: CommandSpec = {
       name: "--full",
       kind: "bool",
       description:
-        "Return all requested lines, up to the 5000-line --tail limit",
+        "Return requested lines up to 5000, capped at 1,000,000 characters after redaction",
     },
     {
       name: "--previous",
@@ -1082,7 +1083,7 @@ export const APPS_LOGS_SPEC: CommandSpec = {
     "argocd-axi apps logs guestbook --filter error -p",
   ],
   notes: [
-    `Output keeps the newest lines and is capped at ${LOG_CHAR_CAP} characters; --full returns up to 5000 requested lines; secret-looking values are redacted on a best-effort basis`,
+    `Output keeps the newest lines and is capped at ${LOG_CHAR_CAP} characters; --full returns up to 5000 requested lines, capped at ${FULL_LOG_CHAR_CAP} characters after redaction; secret-looking values are redacted on a best-effort basis`,
   ],
 };
 
@@ -1124,32 +1125,42 @@ export async function appsLogs(args: string[]): Promise<string> {
   }
   const redactor = new Redactor();
   const redacted = lines.map((line) => redactor.text(line));
+  const charCap = full ? FULL_LOG_CHAR_CAP : LOG_CHAR_CAP;
   const kept: string[] = [];
   let chars = 0;
   let charLimitCut = false;
+  let lineCut = false;
+  let cutLineChars = 0;
   for (let i = redacted.length - 1; i >= 0; i--) {
     const line = redacted[i] as string;
     if (kept.length >= tail) break;
-    if (!full && chars + line.length + 1 > LOG_CHAR_CAP && kept.length > 0) {
+    if (chars + line.length + 1 > charCap) {
       charLimitCut = true;
+      if (kept.length === 0) {
+        kept.unshift(line.slice(-charCap));
+        lineCut = true;
+        cutLineChars = line.length;
+      }
       break;
     }
     kept.unshift(line);
     chars += line.length + 1;
   }
-  const newest = kept[0] as string;
-  const lineCut = !full && newest.length > LOG_CHAR_CAP;
-  if (lineCut) kept[0] = newest.slice(-LOG_CHAR_CAP);
   const lineLimitCut = redacted.length > tail;
-  charLimitCut ||= lineCut;
+  const omittedByCharCap = charLimitCut
+    ? Math.max(0, Math.min(tail, redacted.length) - kept.length)
+    : 0;
   const cutNote = lineCut
-    ? ` and only the last ${LOG_CHAR_CAP} of the newest line's ${newest.length} chars`
+    ? ` and only the last ${charCap} of the newest line's ${cutLineChars} chars`
     : "";
   const header = lineLimitCut
     ? `showing the newest ${kept.length} of ${redacted.length} merged lines (--tail ${tail} limit)`
     : charLimitCut
-      ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${LOG_CHAR_CAP} chars)${cutNote}`
+      ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${charCap} chars)${cutNote}`
       : `${kept.length} lines (--tail ${tail})`;
+  const logHeader = charLimitCut
+    ? `${header}; ${plural(omittedByCharCap, "requested line")} omitted by the ${charCap}-character cap`
+    : header;
   const help: string[] = [];
   const carried = carriedFlags(parsed, ["--tail", "--full", "--filter"]);
   if (lineLimitCut && tail < 5000)
@@ -1160,10 +1171,12 @@ export async function appsLogs(args: string[]): Promise<string> {
     help.push("The --tail limit is 5000 lines; no larger tail is supported");
   if (charLimitCut)
     help.push(
-      `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed, ["--full", "--filter"])}\` to see all requested lines${filter ? "; reapply --filter manually if needed" : ""}`,
+      full
+        ? `The --full output reached its ${FULL_LOG_CHAR_CAP}-character cap; narrow with --tail, --since, --kind, or --name${filter ? "; reapply --filter manually if needed" : ""}`
+        : `Run \`argocd-axi apps logs ${name} --full${carriedFlags(parsed, ["--full", "--filter"])}\` to see all requested lines (up to ${FULL_LOG_CHAR_CAP} characters); narrow with --tail, --since, --kind, or --name if needed${filter ? "; reapply --filter manually if needed" : ""}`,
     );
   return finish(
-    [encodeObject({ logs: header }), renderTextBlock("lines", kept)],
+    [encodeObject({ logs: logHeader }), renderTextBlock("lines", kept)],
     redactor,
     help,
   );

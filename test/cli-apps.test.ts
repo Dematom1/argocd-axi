@@ -468,6 +468,26 @@ describe("apps", () => {
     expect(capped.stdout).toContain("to see all requested lines");
   });
 
+  it("bounds --full output and reports the exact omitted line count", async () => {
+    const lines = Array.from(
+      { length: 11 },
+      (_, index) => `line ${index} ${"x".repeat(100_000)}`,
+    ).join("\n");
+    const { stdout } = await runCli(
+      ["apps", "logs", "large", "--tail", "20", "--full"],
+      {
+        scenario: scenario([{ argv: ["app", "logs", "large"], stdout: lines }]),
+      },
+    );
+    expect(stdout).toContain(
+      "2 requested lines omitted by the 1000000-character cap",
+    );
+    expect(stdout).toContain("narrow with --tail, --since, --kind, or --name");
+    expect(stdout.length).toBeLessThan(1_010_000);
+    expect(stdout).toContain("line 10 ");
+    expect(stdout).not.toContain("line 0 ");
+  });
+
   it("keeps only the tail of a newest line longer than the cap", async () => {
     const line = `head ${"y".repeat(30_000)} tail-marker`;
     const { stdout } = await runCli(["apps", "logs", "big"], {
