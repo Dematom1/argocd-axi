@@ -80,7 +80,7 @@ export async function listContexts(): Promise<ContextListing> {
   } catch (error) {
     if (error instanceof AxiError && error.code === CODES.ARGOCD_NOT_INSTALLED)
       return { contexts: [], unavailable: error.message, notInstalled: error };
-    return { contexts: [], unavailable: "argocd could not list contexts" };
+    throw error;
   }
   if (result.exitCode !== 0) {
     return {
