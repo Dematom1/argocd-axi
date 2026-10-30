@@ -247,6 +247,33 @@ the recorded fixtures in `test/fixtures/`, and each test gets a throwaway
 `HOME`. After changing help text, run `npm run build:skill` to regenerate the
 skill.
 
+## Releases
+
+Releases are cut by [release-please](https://github.com/googleapis/release-please)
+from conventional commits (`feat:`, `fix:`, `docs:`, ...) on `main`. It keeps
+a release PR open that bumps the version and updates `CHANGELOG.md`; merging
+that PR tags the release and publishes it to npm from
+`.github/workflows/release-please.yml` through npm trusted publishing, with
+provenance and no stored npm token. Each release is staged: after the workflow
+runs, approve the staged version with 2FA using `npm stage approve <id>` or
+npmjs.com. The version is not live on npm until approved. `CHANGELOG.md` and
+`.release-please-manifest.json` are generated, so never edit them by hand.
+
+Release PRs show the required "PR must be raised via no-mistakes" check as
+missing, because that check never runs for them; the maintainer merges them
+with an admin bypass.
+
+If a release was tagged but its publish failed, re-run the publish on that tag
+(the run must be dispatched on the tag so the provenance names its commit):
+
+```sh
+gh workflow run release-please.yml --ref v0.1.1 -f tag=v0.1.1
+```
+
+A version that is staged but not yet approved does not count as published, so
+re-running would try to stage it again and fail. Approve or discard the staged
+version instead.
+
 ## License
 
 [MIT](LICENSE)
