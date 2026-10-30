@@ -42,6 +42,10 @@ describe("argocd error translation", () => {
       "AUTH_EXPIRED",
     ],
     ["rpc error: code = Unknown desc = token is expired", "AUTH_EXPIRED"],
+    [
+      "rpc error: code = Unauthenticated desc = session expired, please login",
+      "AUTH_EXPIRED",
+    ],
     ["Argo CD server address unspecified", "NO_CONTEXT"],
     ["context 'nope' undefined", "CONTEXT_NOT_FOUND"],
     [

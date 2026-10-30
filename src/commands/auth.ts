@@ -16,12 +16,7 @@ export async function authCommand(args: string[]): Promise<string> {
   if (args[0] !== "guide") throw validationError("expected auth guide");
   const parsed = parseArgs(GUIDE_SPEC, args.slice(1));
   const explicitContext = contextOption(parsed).context;
-  let listing: Awaited<ReturnType<typeof listContexts>>;
-  try {
-    listing = await listContexts();
-  } catch {
-    listing = { contexts: [], unavailable: "argocd could not list contexts" };
-  }
+  const listing = await listContexts();
   const { target } = await resolveTarget(explicitContext, listing);
   const server = target.envServer ?? target.server;
   const login = server
@@ -31,6 +26,9 @@ export async function authCommand(args: string[]): Promise<string> {
     [
       encodeObject({
         ...describeTarget(target, listing),
+        contexts: listing.unavailable
+          ? `unavailable - ${listing.unavailable}`
+          : undefined,
         operator:
           "Run the interactive command yourself; argocd-axi never logs in",
         login,

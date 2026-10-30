@@ -129,7 +129,12 @@ export function mapArgocdFailure(
     shorten(redactText(grpc?.[2] ?? cleaned).text) ||
     "argocd failed without an error message";
 
-  if (/no session information|please login|login required/i.test(cleaned)) {
+  if (
+    /no session information|please login|login required/i.test(cleaned) &&
+    !/invalid session|token is expired|token has expired|session (?:has )?expired/i.test(
+      cleaned,
+    )
+  ) {
     return axiError(
       `Not authenticated to Argo CD: ${detail}`,
       CODES.AUTH_REQUIRED,

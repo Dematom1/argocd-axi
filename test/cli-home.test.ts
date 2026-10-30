@@ -29,6 +29,24 @@ describe("home view", () => {
     expect(calls.filter(isNetworkCall)).toEqual([]);
   });
 
+  it("includes the context lookup failure in the offline guide", async () => {
+    const failedLookup = scenario([
+      {
+        argv: ["context"],
+        exact: true,
+        exit: 20,
+        stderr: 'level=fatal msg="No contexts defined"\\n',
+      },
+    ]);
+    const { stdout, exitCode } = await runCli(
+      ["auth", "guide", "--context", "prod"],
+      { scenario: failedLookup, env: { ARGOCD_SERVER: "cd.example.com" } },
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("contexts: unavailable - No contexts defined");
+    expect(stdout).toContain("argocd login 'cd.example.com' --sso --grpc-web");
+  });
+
   it("reports rejected login separately from an unreachable server", async () => {
     const auth = scenario([
       { argv: ["context"], exact: true, stdoutFile: "context.txt" },
