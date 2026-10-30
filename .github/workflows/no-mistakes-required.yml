@@ -16,7 +16,8 @@ jobs:
     # Known automation accounts are exempt so automated PRs do not need pipeline attestation:
     # - github-actions[bot] and release-please[bot] open release PRs
     # - dependabot[bot] opens dependency update PRs
-    # Release-please's App identity may vary, so also exempt Bot authors on its branch prefix.
+    # Release-please's App identity may vary, so also exempt Bot authors on its branch prefix
+    # when the PR comes from this repository (not a fork).
     # Other authors must raise PRs through `git push no-mistakes`.
     #
     # These stay job-level rather than moving to the action's `exempt-authors`
@@ -26,7 +27,7 @@ jobs:
       github.event.pull_request.user.login != 'github-actions[bot]' &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       github.event.pull_request.user.login != 'release-please[bot]' &&
-      !(github.event.pull_request.user.type == 'Bot' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+      !(github.event.pull_request.user.type == 'Bot' && startsWith(github.event.pull_request.head.ref, 'release-please--') && github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - name: Verify no-mistakes signature and pipeline attestation in PR body
         uses: kunchenguid/no-mistakes/.github/actions/require-no-mistakes@f6441c96c352a18b9cadcaef6b6c7017e9ac3970 # v1.80.1
