@@ -1381,11 +1381,11 @@ export async function appsSync(args: string[]): Promise<string> {
     [
       encodeObject({
         sync:
-          waitExitCode === 0 && !waitTimedOut
-            ? "complete"
-            : result.status?.operationState?.phase === "Failed" ||
-                result.status?.operationState?.phase === "Error"
-              ? "failed"
+          result.status?.operationState?.phase === "Failed" ||
+          result.status?.operationState?.phase === "Error"
+            ? "failed"
+            : waitExitCode === 0 && !waitTimedOut
+              ? "complete"
               : "timeout",
         revision: syncRevision(result),
         health: healthStatus(result),
