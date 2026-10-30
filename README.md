@@ -56,13 +56,16 @@ argocd-axi turns that into small, definitive answers:
 - **Never hangs.** Nothing streams or follows; waits are bounded; no prompt can
   block because argocd never gets a stdin.
 
-## Install
+## Quick start
+
+Install the published package:
 
 ```sh
 npm install -g argocd-axi
+argocd-axi setup hooks
 ```
 
-Or run it without installing: `npx -y argocd-axi`.
+Or run without installing: `npx -y argocd-axi`. The session hook requires a global install.
 
 Requirements:
 
@@ -235,8 +238,11 @@ specific app.
 
 ## Development
 
+Build from source and run checks:
+
 ```sh
 npm install
+npm run build
 npm run check   # format, lint, typecheck, tests, skill drift check
 ```
 
