@@ -155,12 +155,13 @@ jobs:
             echo "$SPEC is already published; nothing to do."
             exit 0
           fi
-          if ! stage_output="$(npm stage publish "./$TARBALL" --access public --provenance --ignore-scripts --json)"; then
+          if ! npm stage publish "./$TARBALL" --access public --provenance --ignore-scripts; then
             echo "::error::Staging $SPEC failed. If an earlier run already staged it, approve it with 'npm stage approve <id>' or discard it on npmjs.com instead of re-running."
             exit 1
           fi
-          stage_id="$(node -e 'try { const result = JSON.parse(process.argv[1]); process.stdout.write(String(result.id ?? result.stageId ?? "unavailable")); } catch { process.stdout.write("unavailable"); }' "$stage_output")"
           version="${SPEC##*@}"
+          stage_list="$(npm stage list "${SPEC%@*}" --json 2>/dev/null || true)"
+          stage_id="$(node -e 'try { const stages = JSON.parse(process.argv[1]); const stage = stages.find(entry => entry.version === process.argv[2]); process.stdout.write(String(stage?.id ?? stage?.stageId ?? "unavailable")); } catch { process.stdout.write("unavailable"); }' "$stage_list" "$version")"
           {
             echo "## Pending npm stage approval"
             echo "- Stage ID: $stage_id"
