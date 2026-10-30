@@ -1,5 +1,5 @@
 import { validationError } from "./errors.js";
-import { renderBlocks, renderTextBlock } from "./toon.js";
+import { renderBlocks, renderHelpBlock } from "./toon.js";
 
 export const BIN = "argocd-axi";
 
@@ -93,16 +93,16 @@ export function renderCommandHelp(spec: CommandSpec): string {
   return renderBlocks([
     `usage: ${usageLine(spec)}`,
     `description: ${spec.summary}`,
-    renderTextBlock(
+    renderHelpBlock(
       "args",
       spec.positionals.map((p) => `<${p.name}>: ${p.description}`),
     ),
-    renderTextBlock(
+    renderHelpBlock(
       "flags",
       spec.flags.map((f) => `${flagLabel(f)}: ${f.description}`),
     ),
-    renderTextBlock("examples", spec.examples),
-    renderTextBlock("notes", spec.notes ?? []),
+    renderHelpBlock("examples", spec.examples),
+    renderHelpBlock("notes", spec.notes ?? []),
   ]);
 }
 
