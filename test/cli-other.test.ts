@@ -210,7 +210,9 @@ describe("help, version and setup", () => {
       help: ["first", "second"],
     });
     const top = await runCli(["--help"]);
-    expect((decode(top.stdout) as { commands: string[] }).commands).toHaveLength(18);
+    expect(
+      (decode(top.stdout) as { commands: string[] }).commands,
+    ).toHaveLength(18);
     const view = await runCli(["apps", "view", "--help"]);
     expect(decode(view.stdout)).toMatchObject({
       usage: "argocd-axi apps view <app> [flags]",
