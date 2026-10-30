@@ -486,6 +486,19 @@ describe("apps", () => {
     expect(stdout.length).toBeLessThan(1_010_000);
     expect(stdout).toContain("line 10 ");
     expect(stdout).not.toContain("line 0 ");
+
+    const oversizedLine = `line ${"y".repeat(1_000_001)}`;
+    const oversized = await runCli(
+      ["apps", "logs", "large", "--tail", "1", "--full"],
+      {
+        scenario: scenario([
+          { argv: ["app", "logs", "large"], stdout: oversizedLine },
+        ]),
+      },
+    );
+    expect(oversized.stdout).toContain("0 requested lines omitted by the 1000000-character cap");
+    expect(oversized.stdout).toContain("6 chars omitted from the newest line");
+    expect(oversized.stdout.length).toBeLessThan(1_010_000);
   });
 
   it("keeps only the tail of a newest line longer than the cap", async () => {
@@ -499,6 +512,7 @@ describe("apps", () => {
       `logs: showing the newest 1 of 2 lines (output capped at 20000 chars) and only the last 20000 of the newest line's ${line.length} chars`,
     );
     expect(stdout).toContain("tail-marker");
+    expect(stdout).toContain(`${line.length - 20_000} chars omitted from the newest line`);
     expect(stdout).not.toContain("head ");
     expect(stdout).not.toContain("older line");
     expect(stdout.length).toBeLessThan(21_000);

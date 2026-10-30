@@ -1159,7 +1159,13 @@ export async function appsLogs(args: string[]): Promise<string> {
       ? `showing the newest ${kept.length} of ${redacted.length} lines (output capped at ${charCap} chars)${cutNote}`
       : `${kept.length} lines (--tail ${tail})`;
   const logHeader = charLimitCut
-    ? `${header}; ${plural(omittedByCharCap, "requested line")} omitted by the ${charCap}-character cap`
+    ? [
+        header,
+        `${plural(omittedByCharCap, "requested line")} omitted by the ${charCap}-character cap`,
+        ...(lineCut
+          ? [`${cutLineChars - charCap} chars omitted from the newest line`]
+          : []),
+      ].join("; ")
     : header;
   const help: string[] = [];
   const carried = carriedFlags(parsed, ["--tail", "--full", "--filter"]);
