@@ -1351,12 +1351,14 @@ export async function appsSync(args: string[]): Promise<string> {
       { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
     );
     if (wait.exitCode !== 0) {
-      const message = wait.stderr.trim() || wait.stdout.trim() || "app wait failed";
+      const message =
+        wait.stderr.trim() || wait.stdout.trim() || "app wait failed";
       if (/timed out|deadline exceeded/i.test(message)) waitTimedOut = true;
       else waitError = message;
     }
   } catch (error) {
-    if (!(error instanceof AxiError && error.code === CODES.TIMEOUT)) throw error;
+    if (!(error instanceof AxiError && error.code === CODES.TIMEOUT))
+      throw error;
     waitTimedOut = true;
   }
   const result = await getApp(name, options);

@@ -18,7 +18,7 @@ pods are logging, whether a sync is allowed right now) in compact
 ```
 $ argocd-axi
 bin: ~/.local/bin/argocd-axi
-description: Read-only Argo CD for agents: applications needing attention, diffs, history, health, logs, projects and sync windows
+description: Argo CD for agents: read operations plus opt-in writes on writable contexts
 context: prod
 server: argocd.example.com
 auth: argocd CLI session for this context
