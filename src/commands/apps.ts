@@ -1328,7 +1328,7 @@ export async function appsSync(args: string[]): Promise<string> {
       `REFUSED: Argo CD RBAC denies sync for ${name}`,
       CODES.REFUSED,
     );
-  const syncArgs = [name, "--info", "initiated-by=argocd-axi"];
+  const syncArgs = [name, "--async", "--info", "initiated-by=argocd-axi"];
   if (prune) syncArgs.push("--prune");
   try {
     await runArgocd("app sync", syncArgs, options);
