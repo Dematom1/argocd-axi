@@ -2111,7 +2111,7 @@ async function appsAutoSync(args: string[]): Promise<string> {
     options,
     name,
   );
-  const current = await waitForAppState(
+  const observed = await waitForAppState(
     name,
     timeout,
     options,
@@ -2123,7 +2123,7 @@ async function appsAutoSync(args: string[]): Promise<string> {
   return finish(
     [
       ...blocks,
-      encodeObject({ result: "submitted", state: autoSyncSummary(current) }),
+      encodeObject({ result: "submitted", state: autoSyncSummary(observed) }),
     ],
     undefined,
   );
