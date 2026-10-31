@@ -65,20 +65,33 @@ describe("refusals (A2, A-c22)", () => {
 });
 
 describe("writable context management", () => {
-  it("shows the confirmation prompt and accepts the typed context", async () => {
-    const input = new PassThrough();
-    const output = new PassThrough();
-    let shown = "";
-    output.setEncoding("utf8");
-    output.on("data", (chunk: string) => (shown += chunk));
+  it.each([
+    ["staging", "staging", true],
+    ["no", "no", false],
+  ])(
+    "shows a clear prompt and %s %s the context write grant",
+    async (typed, expected) => {
+      const input = new PassThrough();
+      const output = new PassThrough();
+      let shown = "";
+      output.setEncoding("utf8");
+      output.on("data", (chunk: string) => (shown += chunk));
 
-    const answer = readConfirmation(input, output, "Type staging to allow writes: ");
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(shown).toContain("Type staging to allow writes: ");
-    input.write("staging\n");
+      const answer = readConfirmation(
+        input,
+        output,
+        "Allow argocd-axi to run write commands (sync, rollback, refresh, terminate-op) against context staging / https://cd.example?\nType staging to allow writes; anything else leaves it read-only and unchanged.\n> ",
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(shown).toContain("Allow argocd-axi to run write commands");
+      expect(shown).toContain("context staging / https://cd.example?");
+      expect(shown).toContain("anything else leaves it read-only and unchanged.");
+      input.write(`${typed}\n`);
 
-    await expect(answer).resolves.toBe("staging");
-  });
+      await expect(answer).resolves.toBe(expected);
+      expect((await answer) === "staging").toBe(typed === "staging");
+    },
+  );
 
   it("reports no-op add and remove outcomes accurately", async () => {
     const home = makeHome();

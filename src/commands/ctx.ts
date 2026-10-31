@@ -288,7 +288,7 @@ async function writableAdd(args: string[]): Promise<string> {
   const answer = await readConfirmation(
     process.stdin,
     process.stdout,
-    `Type ${name} to allow writes: `,
+    `Allow argocd-axi to run write commands (sync, rollback, refresh, terminate-op) against context ${name} / ${match.server}?\nType ${name} to allow writes; anything else leaves it read-only and unchanged.\n> `,
   );
   if (answer !== name)
     throw axiError(
