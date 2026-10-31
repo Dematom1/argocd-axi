@@ -1544,12 +1544,16 @@ function writeSpec(
     positionals,
     flags: [
       { name: "--confirm", kind: "bool", description: "Execute after preview" },
-      {
-        name: "--timeout",
-        kind: "value",
-        valueName: "s",
-        description: "Maximum wait in seconds (default 120)",
-      },
+      ...(path === "apps refresh"
+        ? []
+        : [
+            {
+              name: "--timeout",
+              kind: "value" as const,
+              valueName: "s",
+              description: "Maximum wait in seconds (default 120)",
+            },
+          ]),
       ...(path === "apps refresh"
         ? [
             {
@@ -1735,8 +1739,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
   const name = validateName("app", parsed.positionals[0] as string);
   const context = getString(parsed, "--context"),
     confirm = getBool(parsed, "--confirm"),
-    hard = getBool(parsed, "--hard"),
-    timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
+    hard = getBool(parsed, "--hard");
   const gate = evaluateWriteGate(
     {
       command: "apps refresh",
@@ -1767,24 +1770,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
     options,
     name,
   );
-  const current = await waitForWrite(name, timeout, options);
-  const outcome = writeOutcome(
-    current.app.status?.operationState?.phase,
-    current.timedOut,
-    "complete",
-  );
-  return finish(
-    [
-      ...blocks,
-      encodeObject({
-        refresh: outcome,
-        phase: current.app.status?.operationState?.phase,
-        operation: current.app.status?.operationState,
-      }),
-    ],
-    undefined,
-    outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
-  );
+  return finish([...blocks, encodeObject({ refresh: "submitted" })], undefined);
 }
 
 const APPS_TERMINATE_SPEC = writeSpec(
