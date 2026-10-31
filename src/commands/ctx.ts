@@ -314,7 +314,7 @@ export const CTX_SPECS = [CTX_SPEC, CTX_USE_SPEC];
 
 export async function ctxCommand(args: string[]): Promise<string> {
   const first = args[0];
-  if (first !== undefined && !first.startsWith("-") && first !== "use") {
+  if (first !== undefined && !first.startsWith("-") && first !== "use" && first !== "writable") {
     throw validationError(`unexpected argument ${first} for \`ctx\``, [
       `To switch contexts, run \`argocd-axi ctx use ${first}\``,
       `To read another context without switching, run \`argocd-axi ctx --context ${first}\``,
