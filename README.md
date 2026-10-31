@@ -73,6 +73,10 @@ Requirements:
   on `PATH`, ideally matching your server's version. Tested with argocd
   v3.3.6. There is no hard minimum; `ctx` and the home view warn when the CLI
   and server differ by a major version.
+- Windows is not tested or supported yet. The config/cache paths, credential
+  handling, Claude Code hook installation and session-end, and printed-command
+  shell quoting are implemented, but their compatibility with Windows has not
+  been validated.
 
 ## Setup
 
