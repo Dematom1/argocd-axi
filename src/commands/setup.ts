@@ -6,16 +6,21 @@ import { parseArgs, renderCommandHelp, type CommandSpec } from "../args.js";
 import { CODES, axiError, validationError } from "../errors.js";
 import { encodeObject } from "../toon.js";
 import { finish } from "./common.js";
+import {
+  installSessionEndHook,
+  sessionEndHookStatus,
+  uninstallSessionEndHook,
+} from "../session-hook.js";
 
 export const SETUP_HOOKS_SPEC: CommandSpec = {
   path: "setup hooks",
-  summary:
-    "Install or repair SessionStart hooks for Claude Code, Codex and OpenCode",
+  summary: "Install, inspect or remove agent session hooks",
   positionals: [],
   flags: [],
   examples: ["argocd-axi setup hooks"],
   notes: [
     "The hook runs `argocd-axi-ctx`, which is local only: current context, server and CLI version, with no network call, no SSO refresh and no credential read",
+    "SessionEnd records command names, counts and the most-used --context value only; setup status and setup uninstall inspect or remove that Claude Code hook",
     "Intended for global installs; repeated runs are no-ops",
   ],
 };
@@ -33,14 +38,35 @@ function ctxEntrypoint(): string {
 }
 
 export async function setupCommand(args: string[]): Promise<string> {
-  if (args[0] !== "hooks") {
+  const action = args[0];
+  if (action !== "hooks" && action !== "status" && action !== "uninstall") {
     if (args.includes("--help")) return renderCommandHelp(SETUP_HOOKS_SPEC);
     throw validationError("unknown setup action", [
-      "Run `argocd-axi setup hooks`",
+      "Run `argocd-axi setup hooks`, `argocd-axi setup status` or `argocd-axi setup uninstall`",
     ]);
   }
   if (args.includes("--help")) return renderCommandHelp(SETUP_HOOKS_SPEC);
   parseArgs(SETUP_HOOKS_SPEC, args.slice(1));
+  if (action === "status")
+    return finish(
+      [
+        encodeObject({
+          sessionEnd: sessionEndHookStatus() ? "installed" : "not installed",
+        }),
+      ],
+      undefined,
+    );
+  if (action === "uninstall")
+    return finish(
+      [
+        encodeObject({
+          sessionEnd: uninstallSessionEndHook()
+            ? "removed"
+            : "not installed (no-op)",
+        }),
+      ],
+      undefined,
+    );
 
   // An npx (or pnpm dlx, bunx) run lives in a cache that later sessions may
   // not have on PATH or may have evicted, so a hook pointing at it would
@@ -64,6 +90,11 @@ export async function setupCommand(args: string[]): Promise<string> {
     distEntrypoints: ["dist/bin/argocd-axi-ctx.js"],
     onError: (message) => errors.push(message),
   });
+  try {
+    installSessionEndHook();
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
   if (errors.length > 0) {
     throw axiError(
       `hook installation reported problems: ${errors.join("; ")}`,

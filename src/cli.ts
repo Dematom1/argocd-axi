@@ -15,6 +15,7 @@ import { homeCommand } from "./commands/home.js";
 import { clustersCommand, reposCommand } from "./commands/inventory.js";
 import { projectsCommand } from "./commands/projects.js";
 import { setupCommand } from "./commands/setup.js";
+import { contextCommand } from "./commands/context.js";
 import { DESCRIPTION, TOP_HELP } from "./help.js";
 import { NATIVE_NOUNS, REFUSALS } from "./registry.js";
 import { renderBlocks, renderHelp } from "./toon.js";
@@ -76,6 +77,7 @@ export const COMMANDS: Record<string, AxiCliCommand<undefined>> = Object.assign(
     repos: reposCommand,
     clusters: clustersCommand,
     setup: setupCommand,
+    context: contextCommand,
     ...Object.fromEntries(
       TOP_LEVEL_REFUSALS.map((key) => [key, refusalCommand(key)]),
     ),
