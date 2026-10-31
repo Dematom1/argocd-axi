@@ -6,7 +6,6 @@ import {
   statSync,
   mkdirSync,
   unlinkSync,
-  rmSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
@@ -103,38 +102,10 @@ export function parseConfig(path: string, text: string): ToolConfig {
   return { writableContexts: [...new Set(writableContexts)] };
 }
 
-function updateWritableContext(name: string, add: boolean): void {
+// ponytail: concurrent CLI writers can lose updates; serialize if concurrent config mutations become supported.
+function updateWritableContext(name: string, add: boolean): boolean {
   const path = configPath();
   mkdirSync(join(path, ".."), { recursive: true });
-  const lockPath = `${path}.lock`;
-  const waitCell = new Int32Array(new SharedArrayBuffer(4));
-  const deadline = Date.now() + 5000;
-  while (true) {
-    try {
-      mkdirSync(lockPath);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      if (Date.now() >= deadline)
-        throw axiError(
-          `timed out waiting for writable-context config lock ${lockPath}`,
-          CODES.CONFIG_INVALID,
-        );
-      Atomics.wait(waitCell, 0, 0, 10);
-    }
-  }
-  try {
-    updateWritableContextLocked(path, name, add);
-  } finally {
-    rmSync(lockPath, { recursive: true, force: true });
-  }
-}
-
-function updateWritableContextLocked(
-  path: string,
-  name: string,
-  add: boolean,
-): void {
   const loaded = loadConfig();
   const contexts = loaded.config.writableContexts;
   const updated = add
@@ -144,12 +115,13 @@ function updateWritableContextLocked(
     updated.length === contexts.length &&
     updated.every((item, index) => item === contexts[index])
   )
-    return;
+    return false;
   mkdirSync(join(loaded.path, ".."), { recursive: true });
   const source = loaded.exists ? readFileSync(loaded.path, "utf8") : "";
   const doc = parseDocument(source || "{}");
+  if (doc.toJS() === null) doc.contents = null;
   const root = doc.contents;
-  if (root === null || root === undefined || !("set" in root))
+  if (root !== null && (root === undefined || !("set" in root)))
     throw invalid(loaded.path, "the top level must be a mapping");
   doc.set("writable-contexts", updated);
   const temp = `${loaded.path}.${randomUUID()}.tmp`;
@@ -159,6 +131,7 @@ function updateWritableContextLocked(
     });
     if (loaded.exists) chmodSync(temp, statSync(loaded.path).mode & 0o777);
     renameSync(temp, loaded.path);
+    return true;
   } catch (error) {
     try {
       unlinkSync(temp);
@@ -169,11 +142,11 @@ function updateWritableContextLocked(
   }
 }
 
-export function addWritableContext(name: string): void {
-  updateWritableContext(name, true);
+export function addWritableContext(name: string): boolean {
+  return updateWritableContext(name, true);
 }
-export function removeWritableContext(name: string): void {
-  updateWritableContext(name, false);
+export function removeWritableContext(name: string): boolean {
+  return updateWritableContext(name, false);
 }
 
 export function loadConfig(): LoadedConfig {

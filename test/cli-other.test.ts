@@ -62,6 +62,33 @@ describe("refusals (A2, A-c22)", () => {
   });
 });
 
+describe("writable context management", () => {
+  it("reports no-op add and remove outcomes accurately", async () => {
+    const home = makeHome();
+    const configDir = join(home, ".config", "argocd-axi");
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, "config"),
+      "writable-contexts:\n  - staging\n",
+    );
+
+    const add = await runCli(["ctx", "writable", "add", "staging"], { home });
+    expect(add.exitCode).toBe(0);
+    expect(add.stdout).toContain("staging is already writable (no change)");
+    expect(add.calls.some((argv) => argv.includes("get-user-info"))).toBe(
+      false,
+    );
+
+    const remove = await runCli(["ctx", "writable", "remove", "missing"], {
+      home,
+    });
+    expect(remove.exitCode).toBe(0);
+    expect(remove.stdout).toContain(
+      "missing is not in writable-contexts (no change)",
+    );
+  });
+});
+
 describe("account, projects, appsets, inventory", () => {
   it("whoami and can-i", async () => {
     const who = await runCli(["whoami"]);

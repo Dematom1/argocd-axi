@@ -250,6 +250,15 @@ async function writableAdd(args: string[]): Promise<string> {
       `Argo CD context ${name} is not configured`,
       CODES.CONTEXT_NOT_FOUND,
     );
+  if (loadConfig().config.writableContexts.includes(name))
+    return finish(
+      [
+        encodeObject({
+          writableContext: `${name} is already writable (no change)`,
+        }),
+      ],
+      undefined,
+    );
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw axiError(
       "writable context changes require an interactive terminal",
@@ -275,9 +284,15 @@ async function writableAdd(args: string[]): Promise<string> {
       "confirmation did not match; no changes made",
       CODES.REFUSED,
     );
-  addWritableContext(name);
+  const changed = addWritableContext(name);
   return finish(
-    [encodeObject({ writableContext: `added ${name}` })],
+    [
+      encodeObject({
+        writableContext: changed
+          ? `added ${name}`
+          : `${name} is already writable (no change)`,
+      }),
+    ],
     undefined,
   );
 }
@@ -285,9 +300,15 @@ async function writableAdd(args: string[]): Promise<string> {
 async function writableRemove(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_REMOVE_SPEC, args);
   const name = validateContextName(parsed.positionals[0] as string);
-  removeWritableContext(name);
+  const changed = removeWritableContext(name);
   return finish(
-    [encodeObject({ writableContext: `removed ${name}` })],
+    [
+      encodeObject({
+        writableContext: changed
+          ? `removed ${name}`
+          : `${name} is not in writable-contexts (no change)`,
+      }),
+    ],
     undefined,
   );
 }
