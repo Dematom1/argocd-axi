@@ -1609,17 +1609,22 @@ async function waitForWrite(
   name: string,
   timeout: number,
   options: { context?: string },
-): Promise<Application | undefined> {
+): Promise<{ app: Application; timedOut: boolean }> {
   try {
-    await runArgocd(
+    const result = await runArgocd(
       "app wait",
       [name, "--operation", "--timeout", String(timeout)],
-      { ...options, timeoutMs: (timeout + 10) * 1000 },
+      { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
     );
-    return undefined;
+    if (result.exitCode !== 0) {
+      const failure = mapArgocdFailure(result.stderr || result.stdout);
+      if (!/timed? out|timeout/i.test(failure.message)) throw failure;
+      return { app: await getApp(name, options), timedOut: true };
+    }
+    return { app: await getApp(name, options), timedOut: false };
   } catch (error) {
     if (!(error instanceof AxiError) || error.code !== CODES.TIMEOUT) throw error;
-    return getApp(name, options);
+    return { app: await getApp(name, options), timedOut: true };
   }
 }
 
@@ -1694,18 +1699,15 @@ export async function appsRollback(args: string[]): Promise<string> {
   return finish(
     [
       ...previewBlocks,
-      encodeObject(
-        current
-          ? {
-              rollback: "waiting",
-              historyId: id,
-              operation: current.status?.operationState,
-            }
-          : { rollback: "submitted", historyId: id },
-      ),
+      encodeObject({
+        rollback: current.timedOut ? "waiting" : "submitted",
+        historyId: id,
+        phase: current.app.status?.operationState?.phase,
+        operation: current.app.status?.operationState,
+      }),
     ],
     undefined,
-    current ? ["Wait again with `apps wait`"] : [],
+    current.timedOut ? ["Wait again with `apps wait`"] : [],
   );
 }
 
@@ -1758,14 +1760,14 @@ export async function appsRefresh(args: string[]): Promise<string> {
   return finish(
     [
       ...blocks,
-      encodeObject(
-        current
-          ? { refresh: "waiting", operation: current.status?.operationState }
-          : { refresh: "complete" },
-      ),
+      encodeObject({
+        refresh: current.timedOut ? "waiting" : "complete",
+        phase: current.app.status?.operationState?.phase,
+        operation: current.app.status?.operationState,
+      }),
     ],
     undefined,
-    current ? ["Wait again with `apps wait`"] : [],
+    current.timedOut ? ["Wait again with `apps wait`"] : [],
   );
 }
 
@@ -1819,17 +1821,14 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
   return finish(
     [
       ...blocks,
-      encodeObject(
-        current
-          ? {
-              terminateOperation: "waiting",
-              operation: current.status?.operationState,
-            }
-          : { terminateOperation: "submitted" },
-      ),
+      encodeObject({
+        terminateOperation: current.timedOut ? "waiting" : "submitted",
+        phase: current.app.status?.operationState?.phase,
+        operation: current.app.status?.operationState,
+      }),
     ],
     undefined,
-    current ? ["Wait again with `apps wait`"] : [],
+    current.timedOut ? ["Wait again with `apps wait`"] : [],
   );
 }
 
