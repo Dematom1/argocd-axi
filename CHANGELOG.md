@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.4](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.3...argocd-axi-v0.1.4) (2026-10-31)
+
+
+### Features
+
+* add bounded recovery previews to Argo CD app output ([#18](https://github.com/Dematom1/argocd-axi/issues/18)) ([0a903fb](https://github.com/Dematom1/argocd-axi/commit/0a903fbfcb89ffa6523ccc2bc59ab0b83fc731a1))
+* **apps:** add confirmed single-application sync ([#20](https://github.com/Dematom1/argocd-axi/issues/20)) ([41aa887](https://github.com/Dematom1/argocd-axi/commit/41aa887b1b3c4ce9cb8b380353820dc6211ba974))
+* **auth:** add Argo CD authentication setup guide ([#19](https://github.com/Dematom1/argocd-axi/issues/19)) ([5978b12](https://github.com/Dematom1/argocd-axi/commit/5978b12e6a9327b83054fd60693e9ad7a56ac23b))
+
+
+### Bug Fixes
+
+* emit decodable TOON help lists ([#21](https://github.com/Dematom1/argocd-axi/issues/21)) ([eb93495](https://github.com/Dematom1/argocd-axi/commit/eb934957ec71baaf7329242786a42bddb5d16bbf))
+* restrict release bot exemptions to same-repository PRs ([#23](https://github.com/Dematom1/argocd-axi/issues/23)) ([5f837ce](https://github.com/Dematom1/argocd-axi/commit/5f837ce404cb71464c2fa9015212bfb63197a2d1))
+
 ## [0.1.3](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.2...argocd-axi-v0.1.3) (2026-10-30)
 
 
