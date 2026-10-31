@@ -25,11 +25,11 @@ Run `npx -y argocd-axi auth guide` for offline instructions. A human operator lo
 ## Workflow
 
 1. Start wide: `npx -y argocd-axi` shows the context, server, user, every app needing attention with the reason, and running operations.
-3. Drill in: `apps view <app>` gives source, destination, sync and health, the last operation and its message, conditions, auto-sync, and problem resources.
-4. Find out why it is out of sync: `apps diff <app>` lists the resources that differ (`--full` adds the line diff); `apps history <app>` shows what was deployed when and by whom.
-5. Read the workload: `apps resources <app> --problems`, then `apps logs <app> --kind Deployment --name <name> --since 15m`.
-6. Before asking a human to sync: `projects windows <project>` says whether a sync is allowed right now, and `can-i sync applications '<project>/<app>'` checks permissions.
-7. Pass `--context <name>` after the command to target another Argo CD context; `ctx` lists them.
+2. Drill in: `apps view <app>` gives source, destination, sync and health, the last operation and its message, conditions, auto-sync, and problem resources.
+3. Find out why it is out of sync: `apps diff <app>` lists the resources that differ (`--full` adds the line diff); `apps history <app>` shows what was deployed when and by whom.
+4. Read the workload: `apps resources <app> --problems`, then `apps logs <app> --kind Deployment --name <name> --since 15m`.
+5. Before asking a human to sync: `projects windows <project>` says whether a sync is allowed right now, and `can-i sync applications '<project>/<app>'` checks permissions.
+6. Pass `--context <name>` after the command to target another Argo CD context; `ctx` lists them.
 
 ## Commands
 
