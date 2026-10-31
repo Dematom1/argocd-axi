@@ -37,6 +37,8 @@ const CONTEXTS = new Set([
   "clusters",
   "ctx",
   "auth",
+  "whoami",
+  "can-i",
 ]);
 
 export interface SessionSummary {

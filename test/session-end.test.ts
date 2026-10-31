@@ -35,6 +35,14 @@ describe("session-end memory", () => {
           type: "tool_use",
           input: { command: "argocd-axi ctx --context staging" },
         }),
+        JSON.stringify({
+          type: "tool_use",
+          input: { command: "argocd-axi whoami --context prod" },
+        }),
+        JSON.stringify({
+          type: "tool_use",
+          input: { command: "argocd-axi can-i get applications '*' --context prod" },
+        }),
       ].join("\n"),
     );
     const payload = JSON.stringify({
@@ -47,6 +55,8 @@ describe("session-end memory", () => {
     const recorded = readFileSync(sessions, "utf8");
     expect(recorded).toContain('"apps": 2');
     expect(recorded).toContain('"ctx": 1');
+    expect(recorded).toContain('"whoami": 1');
+    expect(recorded).toContain('"can-i": 1');
     expect(recorded).toContain('"context": "prod"');
     expect(recorded).not.toContain("SECRET_TOKEN");
     expect(recorded).not.toContain("--token");
