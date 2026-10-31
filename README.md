@@ -121,7 +121,7 @@ and every other command that prints or changes a credential.
 
 Pick one; you do not need both.
 
-- **Session hook (recommended).** `argocd-axi setup hooks` installs a
+- **Session hook (recommended).** `argocd-axi setup hooks` installs
   SessionStart hooks for Claude Code, Codex and OpenCode, plus a Claude Code
   SessionEnd hook. The start hook runs `argocd-axi-ctx`, which is local only:
   current context, server, CLI version and the cached server version. It makes

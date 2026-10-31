@@ -288,7 +288,8 @@ function reclaimStaleLock(lockPath: string): boolean {
   try {
     const owners = readdirSync(lockPath);
     if (owners.length === 0) {
-      if (Date.now() - statSync(lockPath).mtimeMs <= STALE_LOCK_MS) return false;
+      if (Date.now() - statSync(lockPath).mtimeMs <= STALE_LOCK_MS)
+        return false;
       rmdirSync(lockPath);
       return true;
     }
