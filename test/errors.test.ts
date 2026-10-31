@@ -39,9 +39,13 @@ describe("argocd error translation", () => {
   it.each([
     [
       "rpc error: code = Unauthenticated desc = invalid session: token has invalid claims",
-      "AUTH_REQUIRED",
+      "AUTH_EXPIRED",
     ],
-    ["rpc error: code = Unknown desc = token is expired", "AUTH_REQUIRED"],
+    ["rpc error: code = Unknown desc = token is expired", "AUTH_EXPIRED"],
+    [
+      "rpc error: code = Unauthenticated desc = session expired, please login",
+      "AUTH_EXPIRED",
+    ],
     ["Argo CD server address unspecified", "NO_CONTEXT"],
     ["context 'nope' undefined", "CONTEXT_NOT_FOUND"],
     [
@@ -70,12 +74,44 @@ describe("argocd error translation", () => {
     expect(mapArgocdFailure(fatal(message)).code).toBe(code);
   });
 
-  it("tells a human, not the agent, to log in", () => {
+  it("prints the exact human login command and agent credential guidance", () => {
+    expect(
+      mapArgocdFailure(
+        fatal(
+          "rpc error: code = Unauthenticated desc = no session information",
+        ),
+        { loginCommand: "argocd login 'cd.example.com' --sso --grpc-web" },
+      ).code,
+    ).toBe("AUTH_REQUIRED");
+    expect(
+      mapArgocdFailure(
+        fatal(
+          "rpc error: code = Unauthenticated desc = no session information",
+        ),
+        { loginCommand: "argocd login 'cd.example.com' --sso --grpc-web" },
+      ).suggestions.join(" "),
+    ).toContain("argocd login 'cd.example.com' --sso --grpc-web");
+    expect(
+      mapArgocdFailure(
+        fatal(
+          "rpc error: code = Unauthenticated desc = no session information",
+        ),
+        { agentCredentials: true },
+      ).suggestions.join(" "),
+    ).toContain("ARGOCD_AUTH_TOKEN");
+  });
+
+  it("includes the login command for expired agent tokens", () => {
     const error = mapArgocdFailure(
-      fatal("rpc error: code = Unauthenticated desc = no session information"),
+      fatal("rpc error: code = Unauthenticated desc = token is expired"),
+      {
+        agentCredentials: true,
+        loginCommand: "argocd login 'cd.example.com' --sso --grpc-web",
+      },
     );
-    expect(error.suggestions.join(" ")).toMatch(
-      /A human runs `argocd login <server> --sso`/,
+    expect(error.code).toBe("AUTH_EXPIRED");
+    expect(error.suggestions.join(" ")).toContain(
+      "argocd login 'cd.example.com' --sso --grpc-web",
     );
   });
 

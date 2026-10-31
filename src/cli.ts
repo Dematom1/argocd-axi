@@ -10,6 +10,7 @@ import { appsCommand } from "./commands/apps.js";
 import { appsetsCommand } from "./commands/appsets.js";
 import { canICommand, whoamiCommand } from "./commands/account.js";
 import { ctxCommand } from "./commands/ctx.js";
+import { authCommand } from "./commands/auth.js";
 import { homeCommand } from "./commands/home.js";
 import { clustersCommand, reposCommand } from "./commands/inventory.js";
 import { projectsCommand } from "./commands/projects.js";
@@ -66,6 +67,7 @@ export const COMMANDS: Record<string, AxiCliCommand<undefined>> = Object.assign(
   Object.create(null) as Record<string, AxiCliCommand<undefined>>,
   {
     ctx: ctxCommand,
+    auth: authCommand,
     whoami: whoamiCommand,
     "can-i": canICommand,
     apps: appsCommand,

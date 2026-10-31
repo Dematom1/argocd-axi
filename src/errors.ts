@@ -9,6 +9,7 @@ import { redactText } from "./redact.js";
 export const CODES = {
   VALIDATION_ERROR: "VALIDATION_ERROR",
   AUTH_REQUIRED: "AUTH_REQUIRED",
+  AUTH_EXPIRED: "AUTH_EXPIRED",
   FORBIDDEN: "FORBIDDEN",
   NOT_FOUND: "NOT_FOUND",
   RATE_LIMITED: "RATE_LIMITED",
@@ -38,13 +39,16 @@ export function validationError(message: string, help: string[] = []) {
 }
 
 export const LOGIN_HELP = [
-  "A human runs `argocd login <server> --sso` (or `argocd relogin`); argocd-axi never starts a login",
+  "A human runs `argocd login <server> --sso --grpc-web`; argocd-axi never starts a login",
   "For agents, prefer a short-lived project-role token in ARGOCD_AUTH_TOKEN (see the README)",
 ];
 
 export interface FailureContext {
   /** Help shown when the server answers NotFound, e.g. how to list apps. */
   notFoundHelp?: string[];
+  /** Exact, context-aware operator login command. */
+  loginCommand?: string;
+  agentCredentials?: boolean;
 }
 
 const MAX_MESSAGE_CHARS = 300;
@@ -126,15 +130,49 @@ export function mapArgocdFailure(
     "argocd failed without an error message";
 
   if (
-    grpcCode === "Unauthenticated" ||
-    /invalid session|token is expired|token has expired|no session information|unauthenticated|please login|login required|failed to get token|session (?:has )?expired/i.test(
+    /no session information|please login|login required/i.test(cleaned) &&
+    !/invalid session|token is expired|token has expired|session (?:has )?expired/i.test(
       cleaned,
     )
   ) {
     return axiError(
       `Not authenticated to Argo CD: ${detail}`,
       CODES.AUTH_REQUIRED,
-      LOGIN_HELP,
+      context.agentCredentials
+        ? [
+            "Check ARGOCD_SERVER and ARGOCD_AUTH_TOKEN; replace the token with a valid scoped account token",
+          ]
+        : context.loginCommand
+          ? [
+              `A human runs \`${context.loginCommand}\`; argocd-axi never logs in`,
+            ]
+          : LOGIN_HELP,
+    );
+  }
+
+  if (
+    grpcCode === "Unauthenticated" ||
+    /invalid session|token is expired|token has expired|unauthenticated|failed to get token|session (?:has )?expired/i.test(
+      cleaned,
+    )
+  ) {
+    return axiError(
+      `Not authenticated to Argo CD: ${detail}`,
+      CODES.AUTH_EXPIRED,
+      context.agentCredentials
+        ? [
+            "Check ARGOCD_SERVER and ARGOCD_AUTH_TOKEN; replace the token with a valid scoped account token",
+            ...(context.loginCommand
+              ? [
+                  `A human runs \`${context.loginCommand}\`; argocd-axi never logs in`,
+                ]
+              : []),
+          ]
+        : context.loginCommand
+          ? [
+              `A human runs \`${context.loginCommand}\`; argocd-axi never logs in`,
+            ]
+          : LOGIN_HELP,
     );
   }
 

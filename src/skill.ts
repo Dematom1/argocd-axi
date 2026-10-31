@@ -30,10 +30,14 @@ If argocd-axi output suggests a command starting with \`argocd-axi\`, run it as 
 
 argocd-axi wraps the \`argocd\` CLI, which must be on PATH and already logged in (or have \`ARGOCD_AUTH_TOKEN\` set).
 It uses that session as is and adds no auth of its own; it never logs in, never prompts, and never reads the argocd config file.
-If a command answers \`AUTH_REQUIRED\`, ask the user to run \`argocd login <server> --sso\` (or \`argocd relogin\`) themselves.
+Run \`npx -y argocd-axi auth guide\` for setup instructions; the README is the authority for credential setup. The tool never logs in. If a command answers \`AUTH_EXPIRED\`, show the exact operator login command when the server is known; otherwise show the fallback login syntax and ask for the server address. An unreachable server is a separate error.
 
 It is read-only except for opt-in writes on contexts listed in \`writable-contexts\`. \`apps sync\` previews the diff and does nothing unless \`--confirm\` is passed; pruning also requires \`--prune\`. Other writes answer \`REFUSED\`.
 For anything argocd-axi does not cover, the raw \`argocd\` CLI is the fallback.
+
+## Setup
+
+Run \`npx -y argocd-axi auth guide\` for offline instructions. A human operator logs in interactively with \`argocd login <server> --sso --grpc-web\`; agents and CI use \`ARGOCD_SERVER\` and \`ARGOCD_AUTH_TOKEN\` from a scoped account token. The user owns login; argocd-axi never logs in. Verify access with \`npx -y argocd-axi whoami\`.
 
 ## Workflow
 

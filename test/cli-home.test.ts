@@ -18,6 +18,80 @@ describe("test isolation", () => {
 });
 
 describe("home view", () => {
+  it("prints the offline auth guide for the resolved server", async () => {
+    const { stdout, exitCode, calls } = await runCli(["auth", "guide"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(
+      "argocd login 'argocd.example.com' --sso --grpc-web",
+    );
+    expect(stdout).toContain("ARGOCD_SERVER");
+    expect(stdout).toContain("ARGOCD_AUTH_TOKEN");
+    expect(calls.filter(isNetworkCall)).toEqual([]);
+  });
+
+  it("keeps the guide usable when context lookup times out without a server", async () => {
+    const timedOutLookup = scenario([
+      { argv: ["context"], exact: true, delayMs: 15_000 },
+    ]);
+    const { stdout, exitCode } = await runCli(["auth", "guide"], {
+      scenario: timedOutLookup,
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(
+      "contexts: unavailable - argocd did not answer within 10s",
+    );
+    expect(stdout).toContain("argocd login <server> --sso --grpc-web");
+    expect(stdout).toContain("Obtain the Argo CD server address");
+  });
+
+  it("includes the context lookup failure in the offline guide", async () => {
+    const failedLookup = scenario([
+      {
+        argv: ["context"],
+        exact: true,
+        exit: 20,
+        stderr: 'level=fatal msg="No contexts defined"\\n',
+      },
+    ]);
+    const { stdout, exitCode } = await runCli(
+      ["auth", "guide", "--context", "prod"],
+      { scenario: failedLookup, env: { ARGOCD_SERVER: "cd.example.com" } },
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("contexts: unavailable - No contexts defined");
+    expect(stdout).toContain("argocd login 'cd.example.com' --sso --grpc-web");
+  });
+
+  it("reports rejected login separately from an unreachable server", async () => {
+    const auth = scenario([
+      { argv: ["context"], exact: true, stdoutFile: "context.txt" },
+      {
+        argv: ["app", "list"],
+        exit: 20,
+        stderr:
+          'level=fatal msg="rpc error: code = Unauthenticated desc = token is expired"\\n',
+      },
+    ]);
+    const rejected = await runCli(["apps"], { scenario: auth });
+    expect(rejected.stdout).toContain("code: AUTH_EXPIRED");
+    expect(rejected.stdout).toContain(
+      "argocd login 'argocd.example.com' --sso --grpc-web",
+    );
+
+    const unreachable = scenario([
+      { argv: ["context"], exact: true, stdoutFile: "context.txt" },
+      {
+        argv: ["app", "list"],
+        exit: 20,
+        stderr:
+          'level=fatal msg="dial tcp 10.0.0.1:443: connect: connection refused"\\n',
+      },
+    ]);
+    expect(
+      (await runCli(["apps"], { scenario: unreachable })).stdout,
+    ).toContain("code: SERVER_UNREACHABLE");
+  });
+
   it("shows the target, user, apps needing attention and running operations", async () => {
     const { stdout, exitCode, calls } = await runCli([]);
     expect(exitCode).toBe(0);
@@ -131,7 +205,9 @@ describe("home view", () => {
     const { stdout, exitCode, calls } = await runCli([], { scenario: empty });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("context: none configured");
-    expect(stdout).toContain("A human runs `argocd login <server> --sso`");
+    expect(stdout).toContain(
+      "A human runs `argocd login <server> --sso --grpc-web`",
+    );
     expect(calls.filter(isNetworkCall)).toEqual([]);
   });
 });
