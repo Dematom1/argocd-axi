@@ -1609,12 +1609,18 @@ async function waitForWrite(
   name: string,
   timeout: number,
   options: { context?: string },
-): Promise<void> {
-  await runArgocd(
-    "app wait",
-    [name, "--operation", "--timeout", String(timeout)],
-    { ...options, timeoutMs: (timeout + 10) * 1000 },
-  );
+): Promise<Application | undefined> {
+  try {
+    await runArgocd(
+      "app wait",
+      [name, "--operation", "--timeout", String(timeout)],
+      { ...options, timeoutMs: (timeout + 10) * 1000 },
+    );
+    return undefined;
+  } catch (error) {
+    if (!(error instanceof AxiError) || error.code !== CODES.TIMEOUT) throw error;
+    return getApp(name, options);
+  }
 }
 
 const APPS_ROLLBACK_SPEC = writeSpec(
@@ -1680,10 +1686,26 @@ export async function appsRollback(args: string[]): Promise<string> {
     options,
     name,
   );
-  await waitForWrite(name, getInt(parsed, "--timeout", WRITE_TIMEOUT), options);
+  const current = await waitForWrite(
+    name,
+    getInt(parsed, "--timeout", WRITE_TIMEOUT),
+    options,
+  );
   return finish(
-    [...previewBlocks, encodeObject({ rollback: "submitted", historyId: id })],
+    [
+      ...previewBlocks,
+      encodeObject(
+        current
+          ? {
+              rollback: "waiting",
+              historyId: id,
+              operation: current.status?.operationState,
+            }
+          : { rollback: "submitted", historyId: id },
+      ),
+    ],
     undefined,
+    current ? ["Wait again with `apps wait`"] : [],
   );
 }
 
@@ -1728,8 +1750,23 @@ export async function appsRefresh(args: string[]): Promise<string> {
     options,
     name,
   );
-  await waitForWrite(name, getInt(parsed, "--timeout", WRITE_TIMEOUT), options);
-  return finish([...blocks, encodeObject({ refresh: "complete" })], undefined);
+  const current = await waitForWrite(
+    name,
+    getInt(parsed, "--timeout", WRITE_TIMEOUT),
+    options,
+  );
+  return finish(
+    [
+      ...blocks,
+      encodeObject(
+        current
+          ? { refresh: "waiting", operation: current.status?.operationState }
+          : { refresh: "complete" },
+      ),
+    ],
+    undefined,
+    current ? ["Wait again with `apps wait`"] : [],
+  );
 }
 
 const APPS_TERMINATE_SPEC = writeSpec(
@@ -1774,10 +1811,25 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     ]);
   await checkWritePermission("update", app, name, options);
   await runApplicationWrite("app terminate-op", [name], options, name);
-  await waitForWrite(name, getInt(parsed, "--timeout", WRITE_TIMEOUT), options);
+  const current = await waitForWrite(
+    name,
+    getInt(parsed, "--timeout", WRITE_TIMEOUT),
+    options,
+  );
   return finish(
-    [...blocks, encodeObject({ terminateOperation: "submitted" })],
+    [
+      ...blocks,
+      encodeObject(
+        current
+          ? {
+              terminateOperation: "waiting",
+              operation: current.status?.operationState,
+            }
+          : { terminateOperation: "submitted" },
+      ),
+    ],
     undefined,
+    current ? ["Wait again with `apps wait`"] : [],
   );
 }
 
