@@ -24,7 +24,7 @@ describe("apps", () => {
     ).toBe(false);
   });
 
-  it("terminate-op refuses when nothing is running", async () => {
+  it("terminate-op succeeds when nothing is running", async () => {
     const { stdout, exitCode } = await runCli([
       "apps",
       "terminate-op",
@@ -32,9 +32,8 @@ describe("apps", () => {
       "--context",
       "prod",
     ]);
-    expect(exitCode).toBe(1);
-    expect(stdout).toContain("code: REFUSED");
-    expect(stdout).toContain("no operation is running");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("status: no operation running");
   });
 
   it("sync preview is explicit-context and never invokes a write", async () => {
