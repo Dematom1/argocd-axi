@@ -204,12 +204,15 @@ const WRITABLE_ADD_SPEC: CommandSpec = {
   positionals: [
     {
       name: "context",
-      required: true,
+      required: false,
       description: "Configured Argo CD context",
     },
   ],
   flags: [],
-  examples: ["argocd-axi ctx writable add staging"],
+  examples: [
+    "argocd-axi ctx writable add",
+    "argocd-axi ctx writable add staging",
+  ],
 };
 const WRITABLE_REMOVE_SPEC: CommandSpec = {
   path: "ctx writable remove",
@@ -245,9 +248,54 @@ export async function readConfirmation(
   }
 }
 
+export async function confirmWritableContext(
+  name: string,
+  server: string,
+  input: NodeJS.ReadableStream,
+  output: NodeJS.WritableStream,
+): Promise<boolean> {
+  const answer = await readConfirmation(
+    input,
+    output,
+    `Allow argocd-axi to sync, rollback, refresh, and terminate operations on context ${name} (${server})? [y/N] `,
+  );
+  return /^y(?:es)?$/i.test(answer.trim());
+}
+
+export async function chooseContext(
+  contexts: Array<{ name: string; server: string; username: string }>,
+  writable: string[],
+  input: NodeJS.ReadableStream,
+  output: NodeJS.WritableStream,
+): Promise<string> {
+  output.write(
+    contexts
+      .map(
+        (context, index) =>
+          `${index + 1}. ${context.name} - ${context.server} - ${context.username}${writable.includes(context.name) ? " (already writable)" : ""}`,
+      )
+      .join("\n") + "\n",
+  );
+  const selected = await readConfirmation(
+    input,
+    output,
+    "Select a context by number: ",
+  );
+  const index = Number(selected);
+  const context =
+    Number.isInteger(index) && index >= 1 ? contexts[index - 1] : undefined;
+  if (!context)
+    throw axiError("invalid context selection; no changes made", CODES.REFUSED);
+  return context.name;
+}
+
 async function writableAdd(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
-  const name = validateContextName(parsed.positionals[0] as string);
+  if (!process.stdin.isTTY || !process.stdout.isTTY)
+    throw axiError(
+      "writable context changes require an interactive terminal; run this command in a terminal",
+      CODES.REFUSED,
+    );
   const listing = await listContexts();
   if (listing.notInstalled) throw listing.notInstalled;
   if (listing.unavailable) {
@@ -257,51 +305,85 @@ async function writableAdd(args: string[]): Promise<string> {
       LOGIN_HELP,
     );
   }
-  const match = listing.contexts.find((context) => context.name === name);
+  const writable = loadConfig().config.writableContexts;
+  let name = parsed.positionals[0]
+    ? validateContextName(parsed.positionals[0])
+    : undefined;
+  if (name === undefined) {
+    if (listing.contexts.length === 0)
+      throw axiError(
+        "no configured Argo CD contexts to select",
+        CODES.NO_CONTEXT,
+      );
+    const details = await Promise.all(
+      listing.contexts.map(async (context) => ({
+        ...context,
+        username:
+          (
+            await argocdJson<{ username?: string }>(
+              "account get-user-info",
+              ["-o", "json"],
+              { context: context.name },
+            )
+          ).username ?? "unknown",
+      })),
+    );
+    name = await chooseContext(
+      details,
+      writable,
+      process.stdin,
+      process.stdout,
+    );
+  }
+  const selectedName = name;
+  const match = listing.contexts.find(
+    (context) => context.name === selectedName,
+  );
   if (!match)
     throw axiError(
       `Argo CD context ${name} is not configured`,
       CODES.CONTEXT_NOT_FOUND,
     );
-  if (loadConfig().config.writableContexts.includes(name))
+  if (writable.includes(selectedName))
     return finish(
       [
         encodeObject({
-          writableContext: `${name} is already writable (no change)`,
+          writableContext: `${selectedName} is already writable (no change)`,
         }),
       ],
       undefined,
     );
-  if (!process.stdin.isTTY || !process.stdout.isTTY)
-    throw axiError(
-      "writable context changes require an interactive terminal",
-      CODES.REFUSED,
-    );
   const info = await argocdJson<{ username?: string }>(
     "account get-user-info",
     ["-o", "json"],
-    { context: name },
+    { context: selectedName },
   );
   process.stdout.write(
-    `Context: ${name}\nServer: ${match.server}\nUser: ${info.username ?? "unknown"}\n`,
+    `Context: ${selectedName}\nServer: ${match.server}\nUser: ${info.username ?? "unknown"}\n`,
   );
-  const answer = await readConfirmation(
-    process.stdin,
-    process.stdout,
-    `Allow argocd-axi to run write commands (sync, rollback, refresh, terminate-op) against context ${name} / ${match.server}?\nType ${name} to allow writes; anything else leaves it read-only and unchanged.\n> `,
-  );
-  if (answer !== name)
-    throw axiError(
-      "confirmation did not match; no changes made",
-      CODES.REFUSED,
+  if (
+    !(await confirmWritableContext(
+      selectedName,
+      match.server,
+      process.stdin,
+      process.stdout,
+    ))
+  )
+    return finish(
+      [
+        encodeObject({
+          writableContext: `${selectedName} remains read-only (no change)`,
+        }),
+      ],
+      undefined,
     );
-  const changed = addWritableContext(name);
+  const changed = addWritableContext(selectedName);
   return finish(
     [
       encodeObject({
         writableContext: changed
-          ? `added ${name}`
-          : `${name} is already writable (no change)`,
+          ? `added ${selectedName}`
+          : `${selectedName} is already writable (no change)`,
       }),
     ],
     undefined,

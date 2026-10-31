@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { decode } from "@toon-format/toon";
 import { VERSION } from "../src/version.js";
 import { PassThrough } from "node:stream";
-import { readConfirmation } from "../src/commands/ctx.js";
+import { chooseContext, confirmWritableContext } from "../src/commands/ctx.js";
 import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
@@ -65,35 +65,70 @@ describe("refusals (A2, A-c22)", () => {
 });
 
 describe("writable context management", () => {
+  it("lists contexts with server, user, and writable state, then picks by number", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let shown = "";
+    output.setEncoding("utf8");
+    output.on("data", (chunk: string) => (shown += chunk));
+
+    const selected = chooseContext(
+      [
+        { name: "prod", server: "https://prod", username: "alice" },
+        { name: "staging", server: "https://staging", username: "bob" },
+      ],
+      ["prod"],
+      input,
+      output,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(shown).toContain(
+      "1. prod - https://prod - alice (already writable)",
+    );
+    expect(shown).toContain("2. staging - https://staging - bob");
+    input.write("2\n");
+    await expect(selected).resolves.toBe("staging");
+  });
+
   it.each([
-    ["staging", "staging", true],
-    ["no", "no", false],
+    ["y", true],
+    ["yes", true],
+    ["n", false],
+    ["", false],
   ])(
-    "shows a clear prompt and %s %s the context write grant",
-    async (typed, expected) => {
+    "requires an explicit yes for the write grant (%s)",
+    async (answer, allowed) => {
       const input = new PassThrough();
       const output = new PassThrough();
       let shown = "";
       output.setEncoding("utf8");
       output.on("data", (chunk: string) => (shown += chunk));
-
-      const answer = readConfirmation(
+      const confirmation = confirmWritableContext(
+        "staging",
+        "https://staging",
         input,
         output,
-        "Allow argocd-axi to run write commands (sync, rollback, refresh, terminate-op) against context staging / https://cd.example?\nType staging to allow writes; anything else leaves it read-only and unchanged.\n> ",
       );
       await new Promise((resolve) => setImmediate(resolve));
-      expect(shown).toContain("Allow argocd-axi to run write commands");
-      expect(shown).toContain("context staging / https://cd.example?");
-      expect(shown).toContain("anything else leaves it read-only and unchanged.");
-      input.write(`${typed}\n`);
-
-      await expect(answer).resolves.toBe(expected);
-      expect((await answer) === "staging").toBe(typed === "staging");
+      expect(shown).toContain(
+        "sync, rollback, refresh, and terminate operations",
+      );
+      expect(shown).toContain("context staging (https://staging)? [y/N]");
+      input.write(`${answer}\n`);
+      await expect(confirmation).resolves.toBe(allowed);
     },
   );
 
-  it("reports no-op add and remove outcomes accurately", async () => {
+  it("refuses add without an interactive terminal", async () => {
+    const named = await runCli(["ctx", "writable", "add", "staging"]);
+    const picker = await runCli(["ctx", "writable", "add"]);
+    expect(named.stdout).toContain("require an interactive terminal");
+    expect(picker.stdout).toContain("require an interactive terminal");
+    expect(named.calls).toEqual([]);
+    expect(picker.calls).toEqual([]);
+  });
+
+  it("refuses non-interactive adds and reports no-op removes", async () => {
     const home = makeHome();
     const configDir = join(home, ".config", "argocd-axi");
     mkdirSync(configDir, { recursive: true });
@@ -103,11 +138,9 @@ describe("writable context management", () => {
     );
 
     const add = await runCli(["ctx", "writable", "add", "staging"], { home });
-    expect(add.exitCode).toBe(0);
-    expect(add.stdout).toContain("staging is already writable (no change)");
-    expect(add.calls.some((argv) => argv.includes("get-user-info"))).toBe(
-      false,
-    );
+    expect(add.exitCode).toBe(1);
+    expect(add.stdout).toContain("require an interactive terminal");
+    expect(add.calls).toEqual([]);
 
     const remove = await runCli(["ctx", "writable", "remove", "missing"], {
       home,
