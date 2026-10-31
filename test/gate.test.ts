@@ -48,9 +48,7 @@ describe("config loader (decision A4)", () => {
     expect(parseConfig("/x/config", "")).toEqual({ writableContexts: [] });
     expect(bad("writable-contexts: staging")).toThrow(/must be a list/);
     expect(bad("writable-contexts: ['*']")).toThrow(/not patterns/);
-    expect(parseConfig("/x/config", "other-setting: [a]")).toEqual({
-      writableContexts: [],
-    });
+    expect(bad("other-setting: [a]")).toThrow(/unknown setting other-setting/);
     expect(bad("- a")).toThrow(/mapping/);
     expect(bad("writable-contexts: [1]")).toThrow(/non-empty context name/);
     expect(bad("a: [")).toThrow(/not valid YAML/);
