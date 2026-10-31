@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.5](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.4...argocd-axi-v0.1.5) (2026-10-31)
+
+
+### Features
+
+* **apps:** add confirmed rollback, refresh, and operation termination ([#24](https://github.com/Dematom1/argocd-axi/issues/24)) ([2a7da15](https://github.com/Dematom1/argocd-axi/commit/2a7da15c27082a8e7bb2dbb00d5da289879ed131))
+* **ctx:** add interactive writable-context management ([#26](https://github.com/Dematom1/argocd-axi/issues/26)) ([2ca00b1](https://github.com/Dematom1/argocd-axi/commit/2ca00b118e095cd75df184ea5dbc3160a6ab03e1))
+
+
+### Bug Fixes
+
+* **cli:** encode all stdout as TOON ([#27](https://github.com/Dematom1/argocd-axi/issues/27)) ([0204c7a](https://github.com/Dematom1/argocd-axi/commit/0204c7afe89c41eb851a8df19ff7dcf351055ec5))
+
 ## [0.1.4](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.3...argocd-axi-v0.1.4) (2026-10-31)
 
 
