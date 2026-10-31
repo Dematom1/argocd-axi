@@ -1643,11 +1643,15 @@ const APPS_ROLLBACK_SPEC = writeSpec(
 export async function appsRollback(args: string[]): Promise<string> {
   const parsed = parseArgs(APPS_ROLLBACK_SPEC, args);
   const name = validateName("app", parsed.positionals[0] as string);
-  const id = Number(parsed.positionals[1]);
+  const historyId = parsed.positionals[1] as string;
+  if (!/^\d+$/.test(historyId))
+    throw validationError("history-id must be a non-negative decimal integer");
+  const id = Number(historyId);
   if (!Number.isSafeInteger(id) || id < 0)
     throw validationError("history-id must be a non-negative integer");
   const context = getString(parsed, "--context"),
-    confirm = getBool(parsed, "--confirm");
+    confirm = getBool(parsed, "--confirm"),
+    timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
   const gate = evaluateWriteGate(
     {
       command: "apps rollback",
@@ -1691,11 +1695,7 @@ export async function appsRollback(args: string[]): Promise<string> {
     options,
     name,
   );
-  const current = await waitForWrite(
-    name,
-    getInt(parsed, "--timeout", WRITE_TIMEOUT),
-    options,
-  );
+  const current = await waitForWrite(name, timeout, options);
   return finish(
     [
       ...previewBlocks,
@@ -1721,7 +1721,8 @@ export async function appsRefresh(args: string[]): Promise<string> {
   const name = validateName("app", parsed.positionals[0] as string);
   const context = getString(parsed, "--context"),
     confirm = getBool(parsed, "--confirm"),
-    hard = getBool(parsed, "--hard");
+    hard = getBool(parsed, "--hard"),
+    timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
   const gate = evaluateWriteGate(
     {
       command: "apps refresh",
@@ -1752,11 +1753,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
     options,
     name,
   );
-  const current = await waitForWrite(
-    name,
-    getInt(parsed, "--timeout", WRITE_TIMEOUT),
-    options,
-  );
+  const current = await waitForWrite(name, timeout, options);
   return finish(
     [
       ...blocks,
@@ -1780,7 +1777,8 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
   const parsed = parseArgs(APPS_TERMINATE_SPEC, args);
   const name = validateName("app", parsed.positionals[0] as string);
   const context = getString(parsed, "--context"),
-    confirm = getBool(parsed, "--confirm");
+    confirm = getBool(parsed, "--confirm"),
+    timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
   const gate = evaluateWriteGate(
     {
       command: "apps terminate-op",
@@ -1813,11 +1811,7 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     ]);
   await checkWritePermission("update", app, name, options);
   await runApplicationWrite("app terminate-op", [name], options, name);
-  const current = await waitForWrite(
-    name,
-    getInt(parsed, "--timeout", WRITE_TIMEOUT),
-    options,
-  );
+  const current = await waitForWrite(name, timeout, options);
   return finish(
     [
       ...blocks,
