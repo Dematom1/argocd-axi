@@ -253,7 +253,7 @@ async function writableAdd(args: string[]): Promise<string> {
     { context: name },
   );
   process.stdout.write(
-    `Context: ${name}\\nServer: ${match.server}\\nUser: ${info.username ?? "unknown"}\\nType ${name} to allow writes: `,
+    `Context: ${name}\nServer: ${match.server}\nUser: ${info.username ?? "unknown"}\nType ${name} to allow writes: `,
   );
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   let answer: string;

@@ -104,7 +104,7 @@ function updateWritableContext(name: string, add: boolean): void {
     return;
   mkdirSync(join(loaded.path, ".."), { recursive: true });
   const source = loaded.exists ? readFileSync(loaded.path, "utf8") : "";
-  const doc = parseDocument(source || "{}\\n");
+  const doc = parseDocument(source || "{}");
   const root = doc.contents;
   if (root === null || root === undefined || !("set" in root))
     throw invalid(loaded.path, "the top level must be a mapping");
