@@ -1605,6 +1605,15 @@ async function runApplicationWrite(
   }
 }
 
+function writeOutcome(
+  phase: string | undefined,
+  timedOut: boolean,
+  completed: string,
+): string {
+  if (phase === "Failed" || phase === "Error") return "failed";
+  return timedOut ? "waiting" : completed;
+}
+
 async function waitForWrite(
   name: string,
   timeout: number,
@@ -1696,18 +1705,23 @@ export async function appsRollback(args: string[]): Promise<string> {
     name,
   );
   const current = await waitForWrite(name, timeout, options);
+  const outcome = writeOutcome(
+    current.app.status?.operationState?.phase,
+    current.timedOut,
+    "submitted",
+  );
   return finish(
     [
       ...previewBlocks,
       encodeObject({
-        rollback: current.timedOut ? "waiting" : "submitted",
+        rollback: outcome,
         historyId: id,
         phase: current.app.status?.operationState?.phase,
         operation: current.app.status?.operationState,
       }),
     ],
     undefined,
-    current.timedOut ? ["Wait again with `apps wait`"] : [],
+    outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
   );
 }
 
@@ -1754,17 +1768,22 @@ export async function appsRefresh(args: string[]): Promise<string> {
     name,
   );
   const current = await waitForWrite(name, timeout, options);
+  const outcome = writeOutcome(
+    current.app.status?.operationState?.phase,
+    current.timedOut,
+    "complete",
+  );
   return finish(
     [
       ...blocks,
       encodeObject({
-        refresh: current.timedOut ? "waiting" : "complete",
+        refresh: outcome,
         phase: current.app.status?.operationState?.phase,
         operation: current.app.status?.operationState,
       }),
     ],
     undefined,
-    current.timedOut ? ["Wait again with `apps wait`"] : [],
+    outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
   );
 }
 
@@ -1812,17 +1831,22 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
   await checkWritePermission("update", app, name, options);
   await runApplicationWrite("app terminate-op", [name], options, name);
   const current = await waitForWrite(name, timeout, options);
+  const outcome = writeOutcome(
+    current.app.status?.operationState?.phase,
+    current.timedOut,
+    "submitted",
+  );
   return finish(
     [
       ...blocks,
       encodeObject({
-        terminateOperation: current.timedOut ? "waiting" : "submitted",
+        terminateOperation: outcome,
         phase: current.app.status?.operationState?.phase,
         operation: current.app.status?.operationState,
       }),
     ],
     undefined,
-    current.timedOut ? ["Wait again with `apps wait`"] : [],
+    outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
   );
 }
 
