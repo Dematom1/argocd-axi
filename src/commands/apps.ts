@@ -1755,9 +1755,9 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     app = await getApp(name, options),
     phase = app.status?.operationState?.phase;
   if (!isOperationRunning(app))
-    throw axiError(
-      `REFUSED: no operation is running for ${name}`,
-      CODES.REFUSED,
+    return finish(
+      [encodeObject({ terminateOperation: name, status: "no operation running" })],
+      undefined,
     );
   const blocks = [
     encodeObject({

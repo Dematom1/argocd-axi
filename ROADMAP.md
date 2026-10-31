@@ -12,7 +12,7 @@ These confirmed single-Application writes share preview, explicit-context,
 | Command                                          | Wraps                      | Safety                                                                                           |
 | ------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------ |
 | `apps rollback <app> <history-id> --context <c>` | `argocd app rollback`      | Preview target revision; refuse while auto-sync is enabled                                       |
-| `apps terminate-op <app> --context <c>`          | `argocd app terminate-op`  | Preview running operation; refuse when none is running                                           |
+| `apps terminate-op <app> --context <c>`          | `argocd app terminate-op`  | Preview running operation; no-op when none is running                                            |
 | `apps refresh <app> [--hard] --context <c>`      | `argocd app get --refresh` | Preview refresh mode; hard refresh bypasses caches                                               |
 
 Later, a third tier: `apps action run <app> <action> --kind <kind>` for
