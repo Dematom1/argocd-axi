@@ -1,4 +1,4 @@
-import { configPath, type ToolConfig } from "./config.js";
+import { type ToolConfig } from "./config.js";
 import { validateContextName } from "./context.js";
 import { CODES, axiError, validationError } from "./errors.js";
 
@@ -67,7 +67,7 @@ export function evaluateWriteGate(
   }
   const context = validateContextName(request.context);
   const writable = isWritableContext(config, context);
-  const allowHint = `A human adds ${context} to writable-contexts in ${configPath()} to allow writes there`;
+  const allowHint = `A human can allow writes by running \`argocd-axi ctx writable add ${context}\` in a terminal`;
 
   if (!request.execute) {
     return {
