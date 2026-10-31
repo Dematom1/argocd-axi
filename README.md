@@ -48,8 +48,8 @@ argocd-axi turns that into small, definitive answers:
   the raw text is one `--full` away.
 - **Opt-in writes.** `apps sync <app>` previews the per-resource diff and
   makes no change unless `--confirm` is passed. It never prunes unless
-  `--prune` is explicit, and execution is limited to configured writable
-  contexts. Other writes remain refused.
+  `--prune` is explicit. Resource actions and automated-sync changes also
+  preview by default and execute only on configured writable contexts.
 - **Safe output.** Secret data, passwords, tokens and sensitive-looking Helm
   parameters are redacted and counted. No flag reveals them.
 - **Never hangs.** Nothing streams or follows; waits are bounded; no prompt can
@@ -146,11 +146,13 @@ argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
 argocd-axi apps sync <app> [--confirm] [--prune] [--timeout <s>] --context <c>
+argocd-axi apps auto-sync <app> <on|off> [--confirm] --context <c>
 argocd-axi apps history <app> [--limit <n>]
 argocd-axi apps manifests <app> [--source git|live] [--revision <rev>] [--kind <k>] [--full]
 argocd-axi apps logs <app> [--kind <k> --name <n>] [--tail 100] [--since 15m] [--filter <s>] [--full] [-p]
 argocd-axi apps wait <app> [--sync --health --operation] [--timeout 120]
 argocd-axi apps actions <app> [--kind <k>]
+argocd-axi apps actions run <app> <action> --kind <k> --name <resource> [--confirm] --context <c>
 argocd-axi projects | projects view <p> | projects windows <p>
 argocd-axi appsets | appsets view <name> | appsets generate <file>
 argocd-axi repos | clusters
@@ -219,7 +221,7 @@ specific app.
   local-file and delete flags whatever a command passes, gives argocd no
   stdin, and enforces a timeout and an output cap. Tests fail if a new
   operation becomes reachable without updating the registry.
-- **Opt-in Application writes.** Sync, rollback, refresh and terminate-op require an explicit context, preview and `--confirm`; execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
+- **Opt-in Application writes.** Sync, rollback, refresh, terminate-op, resource actions and automated-sync changes require an explicit context, preview and `--confirm`; execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
 - **Redaction.** Kubernetes Secret `data`, `stringData` and their
   last-applied annotation, values under sensitive-looking keys, and env-var or
   Helm-parameter pairs with sensitive-looking names are replaced with

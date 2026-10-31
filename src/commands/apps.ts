@@ -1,8 +1,9 @@
 import { AxiError } from "axi-sdk-js";
+import { setTimeout as delay } from "node:timers/promises";
 import { parseAllDocuments, stringify } from "yaml";
 import { argocdJson, runArgocd } from "../argocd.js";
 import { loadConfig } from "../config.js";
-import { evaluateWriteGate } from "../gate.js";
+import { attributionArgs, evaluateWriteGate } from "../gate.js";
 import type { SyncWindow } from "../windows.js";
 import {
   CONTEXT_FLAG,
@@ -1478,9 +1479,7 @@ export const APPS_ACTIONS_SPEC: CommandSpec = {
     "argocd-axi apps actions guestbook",
     "argocd-axi apps actions guestbook --kind Rollout",
   ],
-  notes: [
-    "Running an action is planned for a later write tier; this command only lists them",
-  ],
+  notes: ["List actions before running one with `apps actions run`"],
 };
 
 function pick(record: Record<string, unknown>, key: string): unknown {
@@ -1489,7 +1488,7 @@ function pick(record: Record<string, unknown>, key: string): unknown {
 }
 
 export async function appsActions(args: string[]): Promise<string> {
-  if (args[0] === "run") refuseActionRun();
+  if (args[0] === "run") return appsActionRun(args.slice(1));
   const parsed = parseArgs(APPS_ACTIONS_SPEC, args);
   const name = validateName("app", parsed.positionals[0] as string);
   const argv = [name, "-o", "json"];
@@ -1526,13 +1525,184 @@ export async function appsActions(args: string[]): Promise<string> {
   );
 }
 
-function refuseActionRun(): never {
-  throw axiError(
-    "running resource actions is planned for the write tier, behind preview-by-default and the writable-contexts allowlist; not in v1 (see ROADMAP.md)",
-    CODES.REFUSED,
+const APPS_ACTION_RUN_SPEC: CommandSpec = {
+  path: "apps actions run",
+  summary: "Preview and optionally run one action on one resource",
+  positionals: [
+    APP_ARG,
+    { name: "action", required: true, description: "Listed resource action" },
+  ],
+  flags: [
+    {
+      name: "--kind",
+      kind: "value",
+      valueName: "kind",
+      description: "Resource kind",
+    },
+    {
+      name: "--name",
+      kind: "value",
+      valueName: "resource",
+      description: "Resource name",
+    },
+    {
+      name: "--group",
+      kind: "value",
+      valueName: "group",
+      description: "Resource API group when needed to disambiguate",
+    },
+    {
+      name: "--namespace",
+      kind: "value",
+      valueName: "namespace",
+      description: "Resource namespace when needed to disambiguate",
+    },
+    { name: "--confirm", kind: "bool", description: "Execute after preview" },
+    {
+      name: "--timeout",
+      kind: "value",
+      valueName: "s",
+      description: "Maximum wait in seconds (default 120)",
+    },
+    CONTEXT_FLAG,
+  ],
+  examples: [
+    "argocd-axi apps actions run guestbook restart --kind Deployment --name guestbook --context staging",
+  ],
+};
+
+async function appsActionRun(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_ACTION_RUN_SPEC, args);
+  const appNameArg = validateName("app", parsed.positionals[0] as string);
+  const action = validateName("action", parsed.positionals[1] as string);
+  const kind = getString(parsed, "--kind");
+  const resourceName = getString(parsed, "--name");
+  const group = getString(parsed, "--group");
+  const namespace = getString(parsed, "--namespace");
+  const timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
+  if (!kind || !resourceName)
+    throw validationError("apps actions run needs --kind and --name");
+  const context = getString(parsed, "--context"),
+    confirm = getBool(parsed, "--confirm");
+  const gate = evaluateWriteGate(
+    {
+      command: "apps actions run",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
+  );
+  const options = { context: gate.context };
+  const app = await getApp(appNameArg, options);
+  const resources = (app.status?.resources ?? []).filter(
+    (r) =>
+      r.kind === kind &&
+      r.name === resourceName &&
+      (group === undefined || r.group === group) &&
+      (namespace === undefined || r.namespace === namespace),
+  );
+  const resource = resources[0];
+  if (!resource)
+    throw axiError(
+      `REFUSED: ${kind}/${resourceName} is not managed by ${appNameArg}`,
+      CODES.REFUSED,
+    );
+  if (resources.length > 1)
+    throw axiError(
+      `REFUSED: ${kind}/${resourceName} is ambiguous; candidates: ${resources
+        .map(
+          (r) =>
+            `${r.group ?? "core"}/${r.kind} ${r.namespace ?? "_cluster"}/${r.name}`,
+        )
+        .join(", ")}. Specify --group and/or --namespace`,
+      CODES.REFUSED,
+    );
+  const actions = await argocdJson<Array<Record<string, unknown>>>(
+    "app actions list",
+    [appNameArg, "--kind", kind, "-o", "json"],
+    options,
+  );
+  const matchingActions = actions.filter(
+    (entry) =>
+      String(pick(entry, "name") ?? "") === resourceName &&
+      String(pick(entry, "group") ?? "") === (resource.group ?? "") &&
+      String(pick(entry, "kind") ?? "") === kind &&
+      String(pick(entry, "action") ?? "") === action,
+  );
+  const namespacedActions = matchingActions.filter(
+    (entry) => pick(entry, "namespace") !== undefined,
+  );
+  const unnamespacedAction =
+    matchingActions.length === 1 ? matchingActions[0] : undefined;
+  const actionAvailable = namespacedActions.length
+    ? namespacedActions.some(
+        (entry) =>
+          pick(entry, "namespace") === resource.namespace &&
+          pick(entry, "disabled") !== true,
+      )
+    : unnamespacedAction !== undefined &&
+      pick(unnamespacedAction, "disabled") !== true;
+  if (!actionAvailable)
+    throw axiError(
+      `REFUSED: action ${action} is unavailable for ${kind}/${resourceName}`,
+      CODES.REFUSED,
+    );
+  const blocks = [
+    encodeObject({ action, app: appNameArg, kind, resource: resourceName }),
+  ];
+  if (!confirm)
+    return finish(blocks, undefined, [
+      "No changes made; add --confirm to run the action",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  await checkWritePermission(
+    `action/${resource.group ?? ""}/${kind}/${action}`,
+    app,
+    appNameArg,
+    options,
+  );
+  await runApplicationWrite(
+    "app actions run",
     [
-      "A human can run one with the raw CLI: `argocd app actions run <app> <action> --kind <kind>`",
+      appNameArg,
+      action,
+      "--kind",
+      kind,
+      "--resource-name",
+      resourceName,
+      ...(resource.group ? ["--group", resource.group] : []),
+      ...(resource.namespace ? ["--namespace", resource.namespace] : []),
+      ...attributionArgs(),
     ],
+    options,
+    appNameArg,
+  );
+  const current = await waitForAppState(
+    appNameArg,
+    timeout,
+    options,
+    (fresh) =>
+      fresh.status?.resources?.some(
+        (r) =>
+          r.group === resource.group &&
+          r.kind === resource.kind &&
+          r.namespace === resource.namespace &&
+          r.name === resource.name &&
+          r.health?.status === "Healthy",
+      ) ?? false,
+  );
+  const state =
+    current.status?.resources?.find(
+      (r) =>
+        r.group === resource.group &&
+        r.kind === resource.kind &&
+        r.namespace === resource.namespace &&
+        r.name === resource.name,
+    )?.health?.status ?? "unknown";
+  return finish(
+    [...blocks, encodeObject({ result: "submitted", state })],
+    undefined,
   );
 }
 
@@ -1597,7 +1767,12 @@ async function checkWritePermission(
 }
 
 async function runApplicationWrite(
-  op: "app rollback" | "app terminate-op" | "app refresh",
+  op:
+    | "app rollback"
+    | "app terminate-op"
+    | "app refresh"
+    | "app actions run"
+    | "app set",
   args: string[],
   options: { context?: string },
   name: string,
@@ -1623,6 +1798,21 @@ function writeOutcome(
   if (phase === "Succeeded") return completed;
   if (timedOut) return "waiting";
   return phase ?? "unknown";
+}
+
+async function waitForAppState(
+  name: string,
+  timeout: number,
+  options: { context?: string },
+  settled: (app: Application) => boolean,
+): Promise<Application> {
+  const deadline = Date.now() + timeout * 1000;
+  let app = await getApp(name, options);
+  while (!settled(app) && Date.now() < deadline) {
+    await delay(Math.min(1000, Math.max(0, deadline - Date.now())));
+    app = await getApp(name, options);
+  }
+  return app;
 }
 
 async function waitForWrite(
@@ -1865,6 +2055,81 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
   refresh: { spec: APPS_REFRESH_SPEC, run: appsRefresh },
   "terminate-op": { spec: APPS_TERMINATE_SPEC, run: appsTerminateOp },
 };
+
+const APPS_AUTO_SYNC_SPEC: CommandSpec = {
+  path: "apps auto-sync",
+  summary: "Preview and optionally enable or disable automated sync",
+  positionals: [
+    APP_ARG,
+    { name: "mode", required: true, description: "on or off" },
+  ],
+  flags: [
+    { name: "--confirm", kind: "bool", description: "Execute after preview" },
+    {
+      name: "--timeout",
+      kind: "value",
+      valueName: "s",
+      description: "Maximum wait in seconds (default 120)",
+    },
+    CONTEXT_FLAG,
+  ],
+  examples: ["argocd-axi apps auto-sync guestbook on --context staging"],
+};
+
+async function appsAutoSync(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_AUTO_SYNC_SPEC, args);
+  const name = validateName("app", parsed.positionals[0] as string);
+  const mode = parsed.positionals[1];
+  if (mode !== "on" && mode !== "off")
+    throw validationError("mode must be on or off");
+  const context = getString(parsed, "--context"),
+    confirm = getBool(parsed, "--confirm"),
+    timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
+  const gate = evaluateWriteGate(
+    {
+      command: "apps auto-sync",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
+  );
+  const options = { context: gate.context },
+    app = await getApp(name, options);
+  const current = autoSyncSummary(app),
+    blocks = [encodeObject({ autoSync: name, current, target: mode })];
+  if (!confirm)
+    return finish(blocks, undefined, [
+      "No changes made; add --confirm to change automated sync",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  await checkWritePermission("update", app, name, options);
+  await runApplicationWrite(
+    "app set",
+    [
+      name,
+      "--sync-policy",
+      mode === "on" ? "automated" : "none",
+      ...attributionArgs(),
+    ],
+    options,
+    name,
+  );
+  const observed = await waitForAppState(name, timeout, options, (fresh) =>
+    mode === "on"
+      ? autoSyncSummary(fresh).startsWith("automated")
+      : autoSyncSummary(fresh) === "manual",
+  );
+  return finish(
+    [
+      ...blocks,
+      encodeObject({ result: "submitted", state: autoSyncSummary(observed) }),
+    ],
+    undefined,
+  );
+}
+
+SUBCOMMANDS["auto-sync"] = { spec: APPS_AUTO_SYNC_SPEC, run: appsAutoSync };
 
 export const APPS_SPECS = [
   APPS_LIST_SPEC,

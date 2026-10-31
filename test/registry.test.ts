@@ -61,6 +61,8 @@ describe("allowlist registry", () => {
       "app rollback": "write app rollback",
       "app terminate-op": "write app terminate-op",
       "app refresh": "write app get",
+      "app actions run": "write app actions run",
+      "app set": "write app set",
       "app resources": "read app resources",
       "app manifests": "read app manifests",
       "app logs": "read app logs",
@@ -127,7 +129,7 @@ describe("allowlist registry", () => {
       expect(refusal.reason.length).toBeGreaterThan(10);
       expect(refusal.help.length).toBeGreaterThan(0);
     }
-    expect(Object.keys(PLANNED_WRITES).sort()).toEqual(["apps action"]);
+    expect(Object.keys(PLANNED_WRITES).sort()).toEqual([]);
   });
 });
 

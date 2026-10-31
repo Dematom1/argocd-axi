@@ -27,6 +27,157 @@ describe("apps", () => {
     ).toBe(false);
   });
 
+  it("checks action-specific RBAC before running a resource action", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const { stdout, calls } = await runCli(
+      [
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Rollout",
+        "--name",
+        "web",
+        "--group",
+        "argoproj.io",
+        "--namespace",
+        "shop",
+        "--context",
+        "prod",
+        "--confirm",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "web"], stdoutFile: "app-web.json" },
+          {
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Rollout",
+              "-o",
+              "json",
+            ],
+            stdoutFile: "actions-web.json",
+          },
+          {
+            argv: [
+              "account",
+              "can-i",
+              "action/argoproj.io/Rollout/restart",
+              "applications",
+              "shop/web",
+            ],
+            stdout: "no\n",
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain("code: REFUSED");
+    expect(calls).toContainEqual([
+      "account",
+      "can-i",
+      "action/argoproj.io/Rollout/restart",
+      "applications",
+      "shop/web",
+      "--argocd-context",
+      "prod",
+    ]);
+    expect(
+      calls.some((call) => call[1] === "actions" && call[2] === "run"),
+    ).toBe(false);
+  });
+
+  it("does not authorize an action from a same-named resource in another namespace", async () => {
+    const app = JSON.stringify({
+      spec: { project: "shop" },
+      status: {
+        resources: [
+          {
+            group: "apps",
+            kind: "Deployment",
+            name: "worker",
+            namespace: "one",
+          },
+          {
+            group: "apps",
+            kind: "Deployment",
+            name: "worker",
+            namespace: "two",
+          },
+        ],
+      },
+    });
+    const { stdout, calls } = await runCli(
+      [
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Deployment",
+        "--name",
+        "worker",
+        "--group",
+        "apps",
+        "--namespace",
+        "one",
+        "--context",
+        "staging",
+      ],
+      {
+        scenario: scenario([
+          { argv: ["app", "get", "web"], stdout: app },
+          {
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Deployment",
+              "-o",
+              "json",
+            ],
+            stdout: JSON.stringify([
+              {
+                Group: "apps",
+                Kind: "Deployment",
+                Name: "worker",
+                Action: "restart",
+                Namespace: "one",
+                Disabled: true,
+              },
+              {
+                Group: "apps",
+                Kind: "Deployment",
+                Name: "worker",
+                Action: "restart",
+                Namespace: "two",
+                Disabled: false,
+              },
+            ]),
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain("code: REFUSED");
+    expect(
+      calls.some((call) => call[1] === "actions" && call[2] === "run"),
+    ).toBe(false);
+  });
+
   it("terminate-op succeeds when nothing is running", async () => {
     const { stdout, exitCode } = await runCli([
       "apps",
@@ -921,10 +1072,212 @@ describe("apps", () => {
 
   it("lists resource actions and refuses running them", async () => {
     expect((await runCli(["apps", "actions", "web"])).stdout).toContain(
-      "actions[3]{kind,name,action,disabled}:\n  Rollout,web,promote-full,no\n  Rollout,web,abort,no\n  Rollout,web,resume,yes",
+      "actions[4]{kind,name,action,disabled}:\n  Rollout,web,promote-full,no\n  Rollout,web,abort,no\n  Rollout,web,resume,yes\n  Rollout,web,restart,no",
     );
-    const run = await runCli(["apps", "actions", "run", "web", "promote-full"]);
+    const run = await runCli([
+      "apps",
+      "actions",
+      "run",
+      "web",
+      "not-listed",
+      "--kind",
+      "Rollout",
+      "--name",
+      "web",
+      "--context",
+      "staging",
+    ]);
     expect(run.stdout).toContain("code: REFUSED");
-    expect(run.calls).toEqual([]);
+    expect(
+      run.calls.some((call) => call[1] === "actions" && call[2] === "run"),
+    ).toBe(false);
+  });
+
+  it("previews and gates a single listed resource action", async () => {
+    const preview = await runCli([
+      "apps",
+      "actions",
+      "run",
+      "web",
+      "restart",
+      "--kind",
+      "Rollout",
+      "--name",
+      "web",
+      "--context",
+      "staging",
+    ]);
+    expect(preview.stdout).toContain("No changes made; add --confirm");
+    expect(preview.calls.map((call) => call.slice(0, 3))).toEqual([
+      ["app", "get", "web"],
+      ["app", "actions", "list"],
+    ]);
+
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]\n",
+    );
+    const executed = await runCli(
+      [
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Rollout",
+        "--name",
+        "web",
+        "--confirm",
+        "--timeout",
+        "1",
+        "--context",
+        "staging",
+      ],
+      { home },
+    );
+    expect(executed.stdout).toContain("state:");
+    expect(executed.stdout).toContain("Suspended");
+    const actionCall = executed.calls.find(
+      (call) => call[1] === "actions" && call[2] === "run",
+    );
+    expect(actionCall).toContain("--info");
+    expect(actionCall).toContain("--resource-name");
+    expect(actionCall?.slice(0, 4)).toEqual(["app", "actions", "run", "web"]);
+  });
+
+  it("observes resource health after an action even when initially healthy", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const app = JSON.stringify({
+      spec: { project: "shop" },
+      status: {
+        resources: [
+          {
+            group: "apps",
+            kind: "Deployment",
+            name: "worker",
+            namespace: "shop",
+            health: { status: "Healthy" },
+          },
+        ],
+      },
+    });
+    const { stdout, calls } = await runCli(
+      [
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Deployment",
+        "--name",
+        "worker",
+        "--context",
+        "prod",
+        "--confirm",
+        "--timeout",
+        "1",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "web"], stdout: app },
+          {
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Deployment",
+              "-o",
+              "json",
+            ],
+            stdout: JSON.stringify([
+              {
+                Group: "apps",
+                Kind: "Deployment",
+                Name: "worker",
+                Action: "restart",
+                Disabled: false,
+              },
+            ]),
+          },
+          {
+            argv: [
+              "account",
+              "can-i",
+              "action/apps/Deployment/restart",
+              "applications",
+              "shop/web",
+            ],
+            stdout: "yes\n",
+          },
+          {
+            argv: ["app", "actions", "run", "web"],
+            contains: ["--resource-name", "worker"],
+            stdout: "",
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain("state:");
+    expect(
+      calls.filter((call) => call[0] === "app" && call[1] === "get"),
+    ).toHaveLength(2);
+  });
+
+  it("previews auto-sync changes and requires explicit confirmation", async () => {
+    const result = await runCli([
+      "apps",
+      "auto-sync",
+      "web",
+      "on",
+      "--context",
+      "staging",
+    ]);
+    expect(result.stdout).toContain("target: on");
+    expect(result.stdout).toContain("No changes made");
+    expect(
+      result.calls.some((call) => call[0] === "app" && call[1] === "set"),
+    ).toBe(false);
+
+    mkdirSync(join(result.home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(result.home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]\n",
+    );
+    const executed = await runCli(
+      [
+        "apps",
+        "auto-sync",
+        "web",
+        "on",
+        "--confirm",
+        "--timeout",
+        "1",
+        "--context",
+        "staging",
+      ],
+      { home: result.home },
+    );
+    expect(executed.stdout).toContain("state:");
+    expect(
+      executed.calls.some((call) => call[0] === "app" && call[1] === "get"),
+    ).toBe(true);
+    const setCall = executed.calls.find(
+      (call) => call[0] === "app" && call[1] === "set",
+    );
+    expect(setCall).toContain("--sync-policy");
+    expect(setCall).toContain("automated");
+    expect(setCall).toContain("--info");
   });
 });
