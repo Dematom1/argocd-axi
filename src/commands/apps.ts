@@ -1615,7 +1615,9 @@ function writeOutcome(
   completed: string,
 ): string {
   if (phase === "Failed" || phase === "Error") return "failed";
-  return timedOut ? "waiting" : completed;
+  if (phase === "Succeeded") return completed;
+  if (timedOut) return "waiting";
+  return phase ?? "unknown";
 }
 
 async function waitForWrite(
