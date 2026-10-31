@@ -1638,7 +1638,8 @@ async function waitForWrite(
     }
     return { app: await getApp(name, options), timedOut: false };
   } catch (error) {
-    if (!(error instanceof AxiError) || error.code !== CODES.TIMEOUT) throw error;
+    if (!(error instanceof AxiError) || error.code !== CODES.TIMEOUT)
+      throw error;
     return { app: await getApp(name, options), timedOut: true };
   }
 }
@@ -1800,7 +1801,12 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     phase = app.status?.operationState?.phase;
   if (!isOperationRunning(app))
     return finish(
-      [encodeObject({ terminateOperation: name, status: "no operation running" })],
+      [
+        encodeObject({
+          terminateOperation: name,
+          status: "no operation running",
+        }),
+      ],
       undefined,
     );
   const blocks = [

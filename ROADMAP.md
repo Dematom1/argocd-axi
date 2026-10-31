@@ -4,31 +4,18 @@ argocd-axi supports confirmed app sync, rollback, refresh and terminate-op on
 contexts explicitly listed as writable. This file records remaining write
 tier work and shared safety rules.
 
-## Next: the write tier
+## Remaining write tier
 
-These confirmed single-Application writes share preview, explicit-context,
-`writable-contexts`, RBAC and bounded-wait checks:
-
-| Command                                          | Wraps                      | Safety                                                                                           |
-| ------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `apps rollback <app> <history-id> --context <c>` | `argocd app rollback`      | Preview target revision; refuse while auto-sync is enabled                                       |
-| `apps terminate-op <app> --context <c>`          | `argocd app terminate-op`  | Preview running operation; no-op when none is running                                            |
-| `apps refresh <app> [--hard] --context <c>`      | `argocd app get --refresh` | Preview refresh mode; hard refresh bypasses caches                                               |
-
-Later, a third tier: `apps action run <app> <action> --kind <kind>` for
-resource actions such as restart, and Argo Rollouts promote and abort
-through the same path.
+Resource actions such as restart, and Argo Rollouts promote and abort, remain
+future work. The supported Application writes are listed in [README.md](README.md).
 
 ### Rules every write follows
 
-The gate is already built and unit-tested in `src/gate.ts`, with its
-allowlist loaded from `src/config.ts`. The write tier only adds the commands
-and calls the gate.
+The gate is built in `src/gate.ts`, with its allowlist loaded from
+`src/config.ts`. New writes must use the gate and the registered operation path.
 
-1. **Preview by default.** Without the command's execute flag, nothing is
-   sent. The preview shows the target context and server, the object, the
-   change set and the preflight checks, plus the exact command that executes
-   it. Previews work against any context.
+1. **Preview by default.** Without `--confirm`, no write is sent. Each write
+   previews the target action before execution.
 2. **A local allowlist of writable contexts, default none.** Executing needs
    the context listed in argocd-axi's own config file,
    `~/.config/argocd-axi/config` (or `$XDG_CONFIG_HOME/argocd-axi/config`):
@@ -44,10 +31,8 @@ and calls the gate.
 3. **An explicit target.** Every write names `--context <name>`; the current
    context is never used implicitly, and the result echoes the context and
    server.
-4. **Argo CD's own vocabulary.** The execute flag and every other flag are
-   named after Argo CD's terms for each command, not a shared cross-tool
-   vocabulary. The exact execute-flag spelling is settled when each command is
-   built.
+4. **Explicit confirmation.** Every supported Application write requires
+   `--confirm` to execute.
 5. **Idempotent.** Asking for a state that already exists (syncing an app
    that is already synced to the target revision, terminating when nothing
    runs) is a no-op with exit 0. Exit 1 only when the intent cannot be met:
