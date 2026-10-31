@@ -200,7 +200,7 @@ describe("session-end memory", () => {
     expect(readFileSync(lock, "utf8")).toBe(owner);
   });
 
-  it("reclaims a stale lock whose owner process is gone", async () => {
+  it("does not reclaim a stale lock", async () => {
     const home = makeHome();
     const dir = join(home, ".config", "argocd-axi");
     mkdirSync(dir, { recursive: true });
@@ -223,11 +223,8 @@ describe("session-end memory", () => {
       }),
     });
     expect(result.exitCode).toBe(0);
-    expect(existsSync(lock)).toBe(false);
-    const sessions = JSON.parse(
-      readFileSync(join(dir, "sessions.json"), "utf8"),
-    ) as { directories: Record<string, unknown> };
-    expect(sessions.directories["/workspace/recovered-lock"]).toBeDefined();
+    expect(result.stdout).toContain("session log is busy");
+    expect(readFileSync(lock, "utf8")).toBe("2147483647 dead-owner\n");
   });
 
   it("does not remove a successor lock when releasing its own", () => {

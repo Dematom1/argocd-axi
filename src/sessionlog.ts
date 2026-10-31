@@ -6,7 +6,6 @@ import {
   openSync,
   readFileSync,
   renameSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -17,7 +16,6 @@ import { configPath } from "./config.js";
 
 const MAX_DIRECTORIES = 100;
 const LOCK_WAIT_MS = 2_000;
-const STALE_LOCK_MS = 30_000;
 const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 const TOOL = "argocd-axi";
 const COMMANDS = new Set([
@@ -231,20 +229,6 @@ function errorCode(error: unknown): string | undefined {
     : undefined;
 }
 
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return errorCode(error) !== "ESRCH";
-  }
-}
-
-function lockPid(token: string): number | undefined {
-  const pid = Number(token.trim().split(/\s+/, 1)[0]);
-  return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
-}
-
 async function acquireLock(path: string): Promise<SessionLock | undefined> {
   const lockPath = `${path}.lock`;
   const deadline = Date.now() + LOCK_WAIT_MS;
@@ -266,22 +250,6 @@ async function acquireLock(path: string): Promise<SessionLock | undefined> {
       }
     } catch (error) {
       if (errorCode(error) !== "EEXIST") return undefined;
-      try {
-        const info = statSync(lockPath);
-        const owner = readFileSync(lockPath, "utf8");
-        const pid = lockPid(owner);
-        if (
-          Date.now() - info.mtimeMs > STALE_LOCK_MS &&
-          pid !== undefined &&
-          !processAlive(pid) &&
-          readFileSync(lockPath, "utf8") === owner
-        ) {
-          unlinkSync(lockPath);
-          continue;
-        }
-      } catch (error) {
-        if (errorCode(error) === "ENOENT") continue;
-      }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
