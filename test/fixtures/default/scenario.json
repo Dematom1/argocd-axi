@@ -7,6 +7,7 @@
     { "argv": ["account", "get-user-info"], "stdoutFile": "user.json" },
     { "argv": ["account", "can-i", "sync", "applications"], "stdout": "yes\n" },
     { "argv": ["account", "can-i", "update", "applications"], "stdout": "yes\n" },
+    { "argv": ["account", "can-i", "action/argoproj.io/Rollout/restart", "applications", "shop/web"], "stdout": "yes\n" },
     { "argv": ["app", "actions", "run", "web", "restart"], "stdout": "" },
     { "argv": ["app", "set", "web"], "stdout": "" },
     { "argv": ["account", "can-i", "delete"], "stdout": "no\n" },
