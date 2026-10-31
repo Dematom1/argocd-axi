@@ -70,7 +70,9 @@ export function parseConfig(path: string, text: string): ToolConfig {
     throw invalid(path, "the top level must be a mapping");
   }
   const record = data as Record<string, unknown>;
-  const unknown = Object.keys(record).filter((key) => !KNOWN_KEYS.includes(key));
+  const unknown = Object.keys(record).filter(
+    (key) => !KNOWN_KEYS.includes(key),
+  );
   if (unknown.length > 0) {
     throw invalid(
       path,
