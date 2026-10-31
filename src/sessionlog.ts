@@ -17,7 +17,6 @@ import { configPath } from "./config.js";
 
 const MAX_DIRECTORIES = 100;
 const LOCK_WAIT_MS = 2_000;
-const STALE_LOCK_MS = 30_000;
 const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 const TOOL = "argocd-axi";
 const COMMANDS = new Set([
@@ -84,11 +83,31 @@ function words(command: string): string[] {
   return result;
 }
 
+function commandParts(line: string): string[] {
+  const parts: string[] = [];
+  let quote = "";
+  let start = 0;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (quote) {
+      if (c === "\\" && quote === '"') i++;
+      else if (c === quote) quote = "";
+    } else if (c === "\\") i++;
+    else if (c === "'" || c === '"') quote = c;
+    else if (/[;|&\n]/.test(c)) {
+      parts.push(line.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(line.slice(start));
+  return parts;
+}
+
 function commandCalls(
   line: string,
 ): Array<{ command: string; context?: string }> {
   const calls: Array<{ command: string; context?: string }> = [];
-  for (const part of line.split(/[;|&\n]/)) {
+  for (const part of commandParts(line)) {
     const args = words(part);
     const index = args.findIndex(
       (word) => word.split("/").pop()?.replace(/\.js$/, "") === TOOL,
@@ -175,7 +194,8 @@ function isSessionSummary(value: unknown): value is SessionSummary {
         Number.isSafeInteger(count) &&
         count > 0,
     ) &&
-    (value.context === undefined || typeof value.context === "string")
+    (value.context === undefined ||
+      (typeof value.context === "string" && !/[\r\n]/.test(value.context)))
   );
 }
 
@@ -203,14 +223,6 @@ async function acquireLock(path: string): Promise<number | undefined> {
       return openSync(lockPath, "wx", 0o600);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") return undefined;
-      try {
-        if (Date.now() - statSync(lockPath).mtimeMs > STALE_LOCK_MS) {
-          unlinkSync(lockPath);
-          continue;
-        }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
@@ -273,5 +285,5 @@ export function sessionText(summary: SessionSummary): string {
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => `${name} ${count}`)
     .join("; ");
-  return `${commands}${summary.context ? ` - context ${summary.context}` : ""}`;
+  return `${commands}${summary.context ? ` - context ${JSON.stringify(summary.context)}` : ""}`;
 }
