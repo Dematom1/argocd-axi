@@ -34,7 +34,7 @@ Run `npx -y argocd-axi auth guide` for offline instructions. A human operator lo
 ## Commands
 
 ```
-commands[20]:
+commands[23]:
   (no command): live overview - context, server, user, apps needing attention with the reason, running operations
   ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)
   ctx use <context>: switch the argocd CLI's current context (local config only)
@@ -46,6 +46,9 @@ commands[20]:
   apps resources <app> [--problems --orphaned]: managed resources with sync and health
   apps diff <app> [--revision <rev>] [--full]: what differs from Git, per resource; raw diff with --full
   apps sync <app> [--confirm] [--prune] [--timeout <s>]: preview, then optionally sync one app
+  apps rollback <app> <history-id> [--confirm] [--timeout <s>]: preview revision, then optionally roll back
+  apps refresh <app> [--hard] [--confirm]: preview, then optionally refresh one app
+  apps terminate-op <app> [--confirm] [--timeout <s>]: preview, then optionally stop a running operation
   apps history <app>: deployments, newest first
   apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted
   apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows

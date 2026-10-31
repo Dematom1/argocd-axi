@@ -1,19 +1,19 @@
 # Roadmap
 
-argocd-axi is read-only except for confirmed app syncs on contexts explicitly
-listed as writable. This file records the remaining write tier and shared
-safety rules.
+argocd-axi supports confirmed app sync, rollback, refresh and terminate-op on
+contexts explicitly listed as writable. This file records remaining write
+tier work and shared safety rules.
 
 ## Next: the write tier
 
-These write verbs still answer `REFUSED` and name the raw `argocd` command a
-human can run:
+These confirmed single-Application writes share preview, explicit-context,
+`writable-contexts`, RBAC and bounded-wait checks:
 
-| Command                                          | Wraps                      | Notes                                                                                            |
+| Command                                          | Wraps                      | Safety                                                                                           |
 | ------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `apps rollback <app> <history-id> --context <c>` | `argocd app rollback`      | Preview synthesized from target history and current app state; refuse while auto-sync is enabled |
-| `apps terminate-op <app> --context <c>`          | `argocd app terminate-op`  | No-op when no operation is running                                                               |
-| `apps refresh <app> [--hard] --context <c>`      | `argocd app get --refresh` | Triggers a reconcile                                                                             |
+| `apps rollback <app> <history-id> --context <c>` | `argocd app rollback`      | Preview target revision; refuse while auto-sync is enabled                                       |
+| `apps terminate-op <app> --context <c>`          | `argocd app terminate-op`  | Preview running operation; refuse when none is running                                           |
+| `apps refresh <app> [--hard] --context <c>`      | `argocd app get --refresh` | Preview refresh mode; hard refresh bypasses caches                                               |
 
 Later, a third tier: `apps action run <app> <action> --kind <kind>` for
 resource actions such as restart, and Argo Rollouts promote and abort

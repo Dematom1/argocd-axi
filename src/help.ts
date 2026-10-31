@@ -16,6 +16,9 @@ export const COMMAND_LINES = [
   "apps resources <app> [--problems --orphaned]: managed resources with sync and health",
   "apps diff <app> [--revision <rev>] [--full]: what differs from Git, per resource; raw diff with --full",
   "apps sync <app> [--confirm] [--prune] [--timeout <s>]: preview, then optionally sync one app",
+  "apps rollback <app> <history-id> [--confirm] [--timeout <s>]: preview revision, then optionally roll back",
+  "apps refresh <app> [--hard] [--confirm]: preview, then optionally refresh one app",
+  "apps terminate-op <app> [--confirm] [--timeout <s>]: preview, then optionally stop a running operation",
   "apps history <app>: deployments, newest first",
   "apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted",
   "apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows",
@@ -43,7 +46,7 @@ export const TOP_HELP = `${renderBlocks([
     "argocd-axi apps diff payments-api",
   ]),
   renderHelpBlock("notes", [
-    "Read-only except opt-in writes on writable contexts: apps sync requires --confirm and never prunes unless --prune is given; other writes answer REFUSED",
+    "Read-only except opt-in writes on writable contexts: apps sync, rollback, refresh and terminate-op require --confirm; sync never prunes unless --prune is given",
     "Output is TOON on stdout, errors included; exit 0 = success (an unhealthy app is data, not an error), 1 = error, 2 = usage",
     "Secret-looking values are redacted and counted; no flag reveals them",
     "Uses your existing argocd CLI session or ARGOCD_AUTH_TOKEN; never logs in, never reads the argocd config file",

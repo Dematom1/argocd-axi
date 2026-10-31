@@ -58,6 +58,9 @@ describe("allowlist registry", () => {
       "app get": "read app get",
       "app diff": "read app diff",
       "app sync": "write app sync",
+      "app rollback": "write app rollback",
+      "app terminate-op": "write app terminate-op",
+      "app refresh": "write app get",
       "app resources": "read app resources",
       "app manifests": "read app manifests",
       "app logs": "read app logs",
@@ -80,7 +83,7 @@ describe("allowlist registry", () => {
     });
   });
 
-  it("only exposes the approved app sync write", async () => {
+  it("only exposes approved single-application writes", async () => {
     for (const op of Object.values(OPERATIONS)) {
       if (op.tier !== "write")
         for (const token of op.argv) expect(WRITE_VERBS).not.toContain(token);
@@ -102,6 +105,9 @@ describe("allowlist registry", () => {
     expect(() => buildArgv("app get", ["guestbook", "--refresh=true"])).toThrow(
       /never passed/,
     );
+    expect(buildArgv("app refresh", ["guestbook", "--refresh"])).toContain(
+      "--refresh",
+    );
     expect(buildArgv("app get", ["guestbook", "-o", "json"], "prod")).toEqual([
       "app",
       "get",
@@ -121,12 +127,7 @@ describe("allowlist registry", () => {
       expect(refusal.reason.length).toBeGreaterThan(10);
       expect(refusal.help.length).toBeGreaterThan(0);
     }
-    expect(Object.keys(PLANNED_WRITES).sort()).toEqual([
-      "apps action",
-      "apps refresh",
-      "apps rollback",
-      "apps terminate-op",
-    ]);
+    expect(Object.keys(PLANNED_WRITES).sort()).toEqual(["apps action"]);
   });
 });
 

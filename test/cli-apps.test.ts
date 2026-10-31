@@ -6,6 +6,37 @@ import { describe, expect, it } from "vitest";
 import { makeHome, runCli, scenario } from "./helpers.js";
 
 describe("apps", () => {
+  it.each([
+    ["rollback", "payments-api", "7"],
+    ["refresh", "payments-api"],
+  ])("%s preview never invokes a write", async (...args) => {
+    const { stdout, calls } = await runCli([
+      "apps",
+      ...args,
+      "--context",
+      "prod",
+    ]);
+    expect(stdout).toContain("No changes made; add --confirm");
+    expect(
+      calls.some((call) =>
+        ["rollback", "terminate-op"].includes(call[1] ?? ""),
+      ),
+    ).toBe(false);
+  });
+
+  it("terminate-op refuses when nothing is running", async () => {
+    const { stdout, exitCode } = await runCli([
+      "apps",
+      "terminate-op",
+      "payments-api",
+      "--context",
+      "prod",
+    ]);
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain("code: REFUSED");
+    expect(stdout).toContain("no operation is running");
+  });
+
   it("sync preview is explicit-context and never invokes a write", async () => {
     const { stdout, calls } = await runCli([
       "apps",

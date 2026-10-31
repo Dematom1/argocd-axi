@@ -1531,6 +1531,256 @@ function refuseActionRun(): never {
   );
 }
 
+// ---------------------------------------------------------------- app writes
+
+function writeSpec(
+  path: string,
+  summary: string,
+  positionals: CommandSpec["positionals"],
+): CommandSpec {
+  return {
+    path,
+    summary,
+    positionals,
+    flags: [
+      { name: "--confirm", kind: "bool", description: "Execute after preview" },
+      {
+        name: "--timeout",
+        kind: "value",
+        valueName: "s",
+        description: "Maximum wait in seconds (default 120)",
+      },
+      ...(path === "apps refresh"
+        ? [
+            {
+              name: "--hard",
+              kind: "bool" as const,
+              description: "Hard refresh, bypassing the cache",
+            },
+          ]
+        : []),
+      CONTEXT_FLAG,
+    ],
+    examples: [
+      `argocd-axi ${path} ${path === "apps rollback" ? "guestbook 3" : "guestbook"} --context staging`,
+    ],
+  };
+}
+
+const WRITE_TIMEOUT = { default: 120, min: 1, max: 3600 } as const;
+
+async function checkWritePermission(
+  action: string,
+  app: Application,
+  name: string,
+  options: { context?: string },
+): Promise<void> {
+  const permission = await runArgocd(
+    "account can-i",
+    [action, "applications", `${app.spec?.project ?? "default"}/${name}`],
+    { ...options, allowFailure: true },
+  );
+  if (permission.exitCode !== 0 || !/^yes\\s*$/i.test(permission.stdout.trim()))
+    throw axiError(
+      `REFUSED: Argo CD RBAC denies ${action} for ${name}`,
+      CODES.REFUSED,
+    );
+}
+
+async function runApplicationWrite(
+  op: "app rollback" | "app terminate-op" | "app refresh",
+  args: string[],
+  options: { context?: string },
+  name: string,
+): Promise<void> {
+  try {
+    await runArgocd(op, args, options);
+  } catch (error) {
+    if (error instanceof AxiError && error.code === CODES.FORBIDDEN)
+      throw axiError(
+        `REFUSED: Argo CD RBAC denied ${op.slice(4)} for ${name}`,
+        CODES.REFUSED,
+      );
+    throw error;
+  }
+}
+
+async function waitForWrite(
+  name: string,
+  timeout: number,
+  options: { context?: string },
+): Promise<void> {
+  await runArgocd(
+    "app wait",
+    [name, "--operation", "--timeout", String(timeout)],
+    { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
+  );
+}
+
+const APPS_ROLLBACK_SPEC = writeSpec(
+  "apps rollback",
+  "Preview and optionally roll back one Application",
+  [
+    APP_ARG,
+    {
+      name: "history-id",
+      required: true,
+      description: "Deployment history id",
+    },
+  ],
+);
+export async function appsRollback(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_ROLLBACK_SPEC, args);
+  const name = validateName("app", parsed.positionals[0] as string);
+  const id = Number(parsed.positionals[1]);
+  if (!Number.isSafeInteger(id) || id < 0)
+    throw validationError("history-id must be a non-negative integer");
+  const context = getString(parsed, "--context"),
+    confirm = getBool(parsed, "--confirm");
+  const gate = evaluateWriteGate(
+    {
+      command: "apps rollback",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
+  );
+  const options = { context: gate.context },
+    app = await getApp(name, options);
+  const history = app.status?.history?.find((entry) => entry.id === id);
+  if (!history)
+    throw axiError(
+      `REFUSED: history id ${id} not found for ${name}`,
+      CODES.REFUSED,
+    );
+  if (autoSyncSummary(app) !== "manual")
+    throw axiError(
+      `REFUSED: disable auto-sync before rolling back ${name}`,
+      CODES.REFUSED,
+    );
+  const target = history.revisions?.join(", ") ?? history.revision ?? "unknown";
+  const previewBlocks = [
+    encodeObject({
+      rollback: name,
+      currentRevision: syncRevision(app),
+      targetHistoryId: id,
+      targetRevision: target,
+    }),
+  ];
+  if (!confirm)
+    return finish(previewBlocks, undefined, [
+      "No changes made; add --confirm to roll back",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  await checkWritePermission("sync", app, name, options);
+  await runApplicationWrite(
+    "app rollback",
+    [name, String(id), "--info", "initiated-by=argocd-axi"],
+    options,
+    name,
+  );
+  await waitForWrite(name, getInt(parsed, "--timeout", WRITE_TIMEOUT), options);
+  return finish(
+    [...previewBlocks, encodeObject({ rollback: "submitted", historyId: id })],
+    undefined,
+  );
+}
+
+const APPS_REFRESH_SPEC = writeSpec(
+  "apps refresh",
+  "Preview and optionally refresh one Application",
+  [APP_ARG],
+);
+export async function appsRefresh(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_REFRESH_SPEC, args);
+  const name = validateName("app", parsed.positionals[0] as string);
+  const context = getString(parsed, "--context"),
+    confirm = getBool(parsed, "--confirm"),
+    hard = getBool(parsed, "--hard");
+  const gate = evaluateWriteGate(
+    {
+      command: "apps refresh",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
+  );
+  const options = { context: gate.context },
+    app = await getApp(name, options);
+  const blocks = [
+    encodeObject({
+      refresh: name,
+      mode: hard ? "hard" : "normal",
+      reRead: hard ? "live state and source caches" : "live state",
+    }),
+  ];
+  if (!confirm)
+    return finish(blocks, undefined, [
+      "No changes made; add --confirm to refresh",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  await checkWritePermission("update", app, name, options);
+  await runApplicationWrite(
+    "app refresh",
+    [name, hard ? "--hard-refresh" : "--refresh"],
+    options,
+    name,
+  );
+  await waitForWrite(name, getInt(parsed, "--timeout", WRITE_TIMEOUT), options);
+  return finish([...blocks, encodeObject({ refresh: "complete" })], undefined);
+}
+
+const APPS_TERMINATE_SPEC = writeSpec(
+  "apps terminate-op",
+  "Preview and optionally terminate one running operation",
+  [APP_ARG],
+);
+export async function appsTerminateOp(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_TERMINATE_SPEC, args);
+  const name = validateName("app", parsed.positionals[0] as string);
+  const context = getString(parsed, "--context"),
+    confirm = getBool(parsed, "--confirm");
+  const gate = evaluateWriteGate(
+    {
+      command: "apps terminate-op",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
+  );
+  const options = { context: gate.context },
+    app = await getApp(name, options),
+    phase = app.status?.operationState?.phase;
+  if (!isOperationRunning(app))
+    throw axiError(
+      `REFUSED: no operation is running for ${name}`,
+      CODES.REFUSED,
+    );
+  const blocks = [
+    encodeObject({
+      terminateOperation: name,
+      phase,
+      startedAt: app.status?.operationState?.startedAt,
+      message: app.status?.operationState?.message,
+    }),
+  ];
+  if (!confirm)
+    return finish(blocks, undefined, [
+      "No changes made; add --confirm to terminate the operation",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  await checkWritePermission("update", app, name, options);
+  await runApplicationWrite("app terminate-op", [name], options, name);
+  await waitForWrite(name, getInt(parsed, "--timeout", WRITE_TIMEOUT), options);
+  return finish(
+    [...blocks, encodeObject({ terminateOperation: "submitted" })],
+    undefined,
+  );
+}
+
 // ---------------------------------------------------------------- dispatcher
 
 const SUBCOMMANDS: Record<string, Subcommand> = {
@@ -1543,6 +1793,9 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
   wait: { spec: APPS_WAIT_SPEC, run: appsWait },
   actions: { spec: APPS_ACTIONS_SPEC, run: appsActions },
   sync: { spec: APPS_SYNC_SPEC, run: appsSync },
+  rollback: { spec: APPS_ROLLBACK_SPEC, run: appsRollback },
+  refresh: { spec: APPS_REFRESH_SPEC, run: appsRefresh },
+  "terminate-op": { spec: APPS_TERMINATE_SPEC, run: appsTerminateOp },
 };
 
 export const APPS_SPECS = [
