@@ -1611,7 +1611,10 @@ async function appsActionRun(args: string[]): Promise<string> {
   if (resources.length > 1)
     throw axiError(
       `REFUSED: ${kind}/${resourceName} is ambiguous; candidates: ${resources
-        .map((r) => `${r.group ?? "core"}/${r.kind} ${r.namespace ?? "_cluster"}/${r.name}`)
+        .map(
+          (r) =>
+            `${r.group ?? "core"}/${r.kind} ${r.namespace ?? "_cluster"}/${r.name}`,
+        )
         .join(", ")}. Specify --group and/or --namespace`,
       CODES.REFUSED,
     );
@@ -1689,13 +1692,14 @@ async function appsActionRun(args: string[]): Promise<string> {
           r.health?.status === "Healthy",
       ) ?? false,
   );
-  const state = current.status?.resources?.find(
-    (r) =>
-      r.group === resource.group &&
-      r.kind === resource.kind &&
-      r.namespace === resource.namespace &&
-      r.name === resource.name,
-  )?.health?.status ?? "unknown";
+  const state =
+    current.status?.resources?.find(
+      (r) =>
+        r.group === resource.group &&
+        r.kind === resource.kind &&
+        r.namespace === resource.namespace &&
+        r.name === resource.name,
+    )?.health?.status ?? "unknown";
   return finish(
     [...blocks, encodeObject({ result: "submitted", state })],
     undefined,
@@ -2111,14 +2115,10 @@ async function appsAutoSync(args: string[]): Promise<string> {
     options,
     name,
   );
-  const observed = await waitForAppState(
-    name,
-    timeout,
-    options,
-    (fresh) =>
-      (mode === "on"
-        ? autoSyncSummary(fresh).startsWith("automated")
-        : autoSyncSummary(fresh) === "manual"),
+  const observed = await waitForAppState(name, timeout, options, (fresh) =>
+    mode === "on"
+      ? autoSyncSummary(fresh).startsWith("automated")
+      : autoSyncSummary(fresh) === "manual",
   );
   return finish(
     [

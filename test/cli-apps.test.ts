@@ -36,20 +36,48 @@ describe("apps", () => {
     );
     const { stdout, calls } = await runCli(
       [
-        "apps", "actions", "run", "web", "restart", "--kind", "Rollout",
-        "--name", "web", "--group", "argoproj.io", "--namespace", "shop",
-        "--context", "prod", "--confirm",
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Rollout",
+        "--name",
+        "web",
+        "--group",
+        "argoproj.io",
+        "--namespace",
+        "shop",
+        "--context",
+        "prod",
+        "--confirm",
       ],
       {
         home,
         scenario: scenario([
           { argv: ["app", "get", "web"], stdoutFile: "app-web.json" },
           {
-            argv: ["app", "actions", "list", "web", "--kind", "Rollout", "-o", "json"],
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Rollout",
+              "-o",
+              "json",
+            ],
             stdoutFile: "actions-web.json",
           },
           {
-            argv: ["account", "can-i", "action/argoproj.io/Rollout/restart", "applications", "shop/web"],
+            argv: [
+              "account",
+              "can-i",
+              "action/argoproj.io/Rollout/restart",
+              "applications",
+              "shop/web",
+            ],
             stdout: "no\n",
           },
         ]),
@@ -57,10 +85,17 @@ describe("apps", () => {
     );
     expect(stdout).toContain("code: REFUSED");
     expect(calls).toContainEqual([
-      "account", "can-i", "action/argoproj.io/Rollout/restart",
-      "applications", "shop/web", "--argocd-context", "prod",
+      "account",
+      "can-i",
+      "action/argoproj.io/Rollout/restart",
+      "applications",
+      "shop/web",
+      "--argocd-context",
+      "prod",
     ]);
-    expect(calls.some((call) => call[1] === "actions" && call[2] === "run")).toBe(false);
+    expect(
+      calls.some((call) => call[1] === "actions" && call[2] === "run"),
+    ).toBe(false);
   });
 
   it("does not authorize an action from a same-named resource in another namespace", async () => {
@@ -68,32 +103,79 @@ describe("apps", () => {
       spec: { project: "shop" },
       status: {
         resources: [
-          { group: "apps", kind: "Deployment", name: "worker", namespace: "one" },
-          { group: "apps", kind: "Deployment", name: "worker", namespace: "two" },
+          {
+            group: "apps",
+            kind: "Deployment",
+            name: "worker",
+            namespace: "one",
+          },
+          {
+            group: "apps",
+            kind: "Deployment",
+            name: "worker",
+            namespace: "two",
+          },
         ],
       },
     });
     const { stdout, calls } = await runCli(
       [
-        "apps", "actions", "run", "web", "restart", "--kind", "Deployment",
-        "--name", "worker", "--group", "apps", "--namespace", "one",
-        "--context", "staging",
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Deployment",
+        "--name",
+        "worker",
+        "--group",
+        "apps",
+        "--namespace",
+        "one",
+        "--context",
+        "staging",
       ],
       {
         scenario: scenario([
           { argv: ["app", "get", "web"], stdout: app },
           {
-            argv: ["app", "actions", "list", "web", "--kind", "Deployment", "-o", "json"],
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Deployment",
+              "-o",
+              "json",
+            ],
             stdout: JSON.stringify([
-              { Group: "apps", Kind: "Deployment", Name: "worker", Action: "restart", Namespace: "one", Disabled: true },
-              { Group: "apps", Kind: "Deployment", Name: "worker", Action: "restart", Namespace: "two", Disabled: false },
+              {
+                Group: "apps",
+                Kind: "Deployment",
+                Name: "worker",
+                Action: "restart",
+                Namespace: "one",
+                Disabled: true,
+              },
+              {
+                Group: "apps",
+                Kind: "Deployment",
+                Name: "worker",
+                Action: "restart",
+                Namespace: "two",
+                Disabled: false,
+              },
             ]),
           },
         ]),
       },
     );
     expect(stdout).toContain("code: REFUSED");
-    expect(calls.some((call) => call[1] === "actions" && call[2] === "run")).toBe(false);
+    expect(
+      calls.some((call) => call[1] === "actions" && call[2] === "run"),
+    ).toBe(false);
   });
 
   it("terminate-op succeeds when nothing is running", async () => {
@@ -1063,12 +1145,7 @@ describe("apps", () => {
     );
     expect(actionCall).toContain("--info");
     expect(actionCall).toContain("--resource-name");
-    expect(actionCall?.slice(0, 4)).toEqual([
-      "app",
-      "actions",
-      "run",
-      "web",
-    ]);
+    expect(actionCall?.slice(0, 4)).toEqual(["app", "actions", "run", "web"]);
   });
 
   it("observes resource health after an action even when initially healthy", async () => {
@@ -1083,7 +1160,10 @@ describe("apps", () => {
       status: {
         resources: [
           {
-            group: "apps", kind: "Deployment", name: "worker", namespace: "shop",
+            group: "apps",
+            kind: "Deployment",
+            name: "worker",
+            namespace: "shop",
             health: { status: "Healthy" },
           },
         ],
@@ -1091,21 +1171,54 @@ describe("apps", () => {
     });
     const { stdout, calls } = await runCli(
       [
-        "apps", "actions", "run", "web", "restart", "--kind", "Deployment",
-        "--name", "worker", "--context", "prod", "--confirm", "--timeout", "1",
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Deployment",
+        "--name",
+        "worker",
+        "--context",
+        "prod",
+        "--confirm",
+        "--timeout",
+        "1",
       ],
       {
         home,
         scenario: scenario([
           { argv: ["app", "get", "web"], stdout: app },
           {
-            argv: ["app", "actions", "list", "web", "--kind", "Deployment", "-o", "json"],
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Deployment",
+              "-o",
+              "json",
+            ],
             stdout: JSON.stringify([
-              { Group: "apps", Kind: "Deployment", Name: "worker", Action: "restart", Disabled: false },
+              {
+                Group: "apps",
+                Kind: "Deployment",
+                Name: "worker",
+                Action: "restart",
+                Disabled: false,
+              },
             ]),
           },
           {
-            argv: ["account", "can-i", "action/apps/Deployment/restart", "applications", "shop/web"],
+            argv: [
+              "account",
+              "can-i",
+              "action/apps/Deployment/restart",
+              "applications",
+              "shop/web",
+            ],
             stdout: "yes\n",
           },
           {
@@ -1117,7 +1230,9 @@ describe("apps", () => {
       },
     );
     expect(stdout).toContain("state:");
-    expect(calls.filter((call) => call[0] === "app" && call[1] === "get")).toHaveLength(2);
+    expect(
+      calls.filter((call) => call[0] === "app" && call[1] === "get"),
+    ).toHaveLength(2);
   });
 
   it("previews auto-sync changes and requires explicit confirmation", async () => {
@@ -1142,14 +1257,25 @@ describe("apps", () => {
     );
     const executed = await runCli(
       [
-        "apps", "auto-sync", "web", "on", "--confirm", "--timeout", "1",
-        "--context", "staging",
+        "apps",
+        "auto-sync",
+        "web",
+        "on",
+        "--confirm",
+        "--timeout",
+        "1",
+        "--context",
+        "staging",
       ],
       { home: result.home },
     );
     expect(executed.stdout).toContain("state:");
-    expect(executed.calls.some((call) => call[0] === "app" && call[1] === "get")).toBe(true);
-    const setCall = executed.calls.find((call) => call[0] === "app" && call[1] === "set");
+    expect(
+      executed.calls.some((call) => call[0] === "app" && call[1] === "get"),
+    ).toBe(true);
+    const setCall = executed.calls.find(
+      (call) => call[0] === "app" && call[1] === "set",
+    );
     expect(setCall).toContain("--sync-policy");
     expect(setCall).toContain("automated");
     expect(setCall).toContain("--info");
