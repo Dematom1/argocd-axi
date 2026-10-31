@@ -159,7 +159,9 @@ describe("session-end memory", () => {
         input: { command: "argocd-axi apps" },
       }),
     );
-    writeFileSync(join(dir, "sessions.json.lock"), "held");
+    const lock = join(dir, "sessions.json.lock");
+    mkdirSync(lock);
+    writeFileSync(join(lock, "owner-held"), "held");
     const result = await runCli(["context", "end"], {
       home,
       stdin: JSON.stringify({
@@ -177,10 +179,12 @@ describe("session-end memory", () => {
     const dir = join(home, ".config", "argocd-axi");
     mkdirSync(dir, { recursive: true });
     const lock = join(dir, "sessions.json.lock");
+    mkdirSync(lock);
+    const ownerPath = join(lock, "owner-live");
     const owner = `${process.pid} live-owner\n`;
-    writeFileSync(lock, owner);
+    writeFileSync(ownerPath, owner);
     const old = new Date(Date.now() - 31_000);
-    utimesSync(lock, old, old);
+    utimesSync(ownerPath, old, old);
     writeFileSync(
       join(home, "transcript.jsonl"),
       JSON.stringify({
@@ -197,7 +201,7 @@ describe("session-end memory", () => {
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("session log is busy");
-    expect(readFileSync(lock, "utf8")).toBe(owner);
+    expect(readFileSync(ownerPath, "utf8")).toBe(owner);
   });
 
   it("reclaims a stale lock whose owner process is gone", async () => {
@@ -205,9 +209,11 @@ describe("session-end memory", () => {
     const dir = join(home, ".config", "argocd-axi");
     mkdirSync(dir, { recursive: true });
     const lock = join(dir, "sessions.json.lock");
-    writeFileSync(lock, "2147483647 dead-owner\n");
+    mkdirSync(lock);
+    const ownerPath = join(lock, "owner-dead");
+    writeFileSync(ownerPath, "2147483647 dead-owner\n");
     const old = new Date(Date.now() - 31_000);
-    utimesSync(lock, old, old);
+    utimesSync(ownerPath, old, old);
     writeFileSync(
       join(home, "transcript.jsonl"),
       JSON.stringify({
@@ -233,14 +239,17 @@ describe("session-end memory", () => {
   it("does not remove a successor lock when releasing its own", () => {
     const home = makeHome();
     const lockPath = join(home, "sessions.json.lock");
+    mkdirSync(lockPath);
+    const ownerPath = join(lockPath, "owner-current");
     const token = `${process.pid} current-owner\n`;
-    const fd = openSync(lockPath, "wx", 0o600);
+    const fd = openSync(ownerPath, "wx", 0o600);
     writeFileSync(fd, token);
-    unlinkSync(lockPath);
+    unlinkSync(ownerPath);
+    const successorPath = join(lockPath, "owner-successor");
     const successor = `${process.pid} successor-owner\n`;
-    writeFileSync(lockPath, successor);
-    releaseSessionLock({ fd, path: lockPath, token });
-    expect(readFileSync(lockPath, "utf8")).toBe(successor);
+    writeFileSync(successorPath, successor);
+    releaseSessionLock({ fd, path: ownerPath, token });
+    expect(readFileSync(successorPath, "utf8")).toBe(successor);
   });
 
   it("treats missing and corrupt session files as empty memory", async () => {

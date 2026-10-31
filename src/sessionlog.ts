@@ -4,8 +4,10 @@ import {
   createReadStream,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   renameSync,
+  rmdirSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -249,16 +251,25 @@ async function acquireLock(path: string): Promise<SessionLock | undefined> {
   const lockPath = `${path}.lock`;
   const deadline = Date.now() + LOCK_WAIT_MS;
   while (Date.now() < deadline) {
-    const token = `${process.pid} ${randomUUID()}\n`;
     try {
-      const fd = openSync(lockPath, "wx", 0o600);
+      mkdirSync(lockPath, 0o700);
+      const ownerPath = join(lockPath, `owner-${randomUUID()}`);
+      const token = `${process.pid} ${randomUUID()}\n`;
+      let fd: number;
+      try {
+        fd = openSync(ownerPath, "wx", 0o600);
+      } catch {
+        rmdirSync(lockPath);
+        return undefined;
+      }
       try {
         writeFileSync(fd, token);
-        return { fd, path: lockPath, token };
+        return { fd, path: ownerPath, token };
       } catch {
         closeSync(fd);
         try {
-          unlinkSync(lockPath);
+          unlinkSync(ownerPath);
+          rmdirSync(lockPath);
         } catch {
           /* The lock may already be gone. */
         }
@@ -274,42 +285,42 @@ async function acquireLock(path: string): Promise<SessionLock | undefined> {
 }
 
 function reclaimStaleLock(lockPath: string): boolean {
-  const reclaimPath = `${lockPath}.reclaim`;
-  let fd: number;
   try {
-    fd = openSync(reclaimPath, "wx", 0o600);
-  } catch {
-    return false;
-  }
-  try {
-    const info = statSync(lockPath);
-    const owner = readFileSync(lockPath, "utf8");
-    const pid = lockPid(owner);
-    if (
-      Date.now() - info.mtimeMs <= STALE_LOCK_MS ||
-      pid === undefined ||
-      processAlive(pid) ||
-      readFileSync(lockPath, "utf8") !== owner
-    )
-      return false;
-    unlinkSync(lockPath);
-    return true;
-  } catch {
-    return false;
-  } finally {
-    closeSync(fd);
-    try {
-      unlinkSync(reclaimPath);
-    } catch {
-      /* The claim may already be gone. */
+    const owners = readdirSync(lockPath);
+    if (owners.length === 0) {
+      if (Date.now() - statSync(lockPath).mtimeMs <= STALE_LOCK_MS) return false;
+      rmdirSync(lockPath);
+      return true;
     }
+    for (const ownerFile of owners) {
+      const ownerPath = join(lockPath, ownerFile);
+      const info = statSync(ownerPath);
+      const owner = readFileSync(ownerPath, "utf8");
+      const pid = lockPid(owner);
+      if (
+        Date.now() - info.mtimeMs <= STALE_LOCK_MS ||
+        pid === undefined ||
+        processAlive(pid) ||
+        readFileSync(ownerPath, "utf8") !== owner
+      )
+        continue;
+      unlinkSync(ownerPath);
+      rmdirSync(lockPath);
+      return true;
+    }
+  } catch {
+    return false;
   }
+  return false;
 }
 
 export function releaseSessionLock(lock: SessionLock): void {
   closeSync(lock.fd);
   try {
-    if (readFileSync(lock.path, "utf8") === lock.token) unlinkSync(lock.path);
+    if (readFileSync(lock.path, "utf8") === lock.token) {
+      unlinkSync(lock.path);
+      rmdirSync(dirname(lock.path));
+    }
   } catch {
     /* A successor owns the lock, or it is already gone. */
   }
