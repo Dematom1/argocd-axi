@@ -1580,7 +1580,7 @@ async function checkWritePermission(
     [action, "applications", `${app.spec?.project ?? "default"}/${name}`],
     { ...options, allowFailure: true },
   );
-  if (permission.exitCode !== 0 || !/^yes\\s*$/i.test(permission.stdout.trim()))
+  if (permission.exitCode !== 0 || !/^yes\s*$/i.test(permission.stdout.trim()))
     throw axiError(
       `REFUSED: Argo CD RBAC denies ${action} for ${name}`,
       CODES.REFUSED,
@@ -1613,7 +1613,7 @@ async function waitForWrite(
   await runArgocd(
     "app wait",
     [name, "--operation", "--timeout", String(timeout)],
-    { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
+    { ...options, timeoutMs: (timeout + 10) * 1000 },
   );
 }
 
