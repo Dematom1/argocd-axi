@@ -241,8 +241,11 @@ export async function readConfirmation(
   prompt: string,
 ): Promise<string> {
   const rl = createInterface({ input, output });
+  const closed = new Promise<string>((resolve) =>
+    rl.once("close", () => resolve("")),
+  );
   try {
-    return await rl.question(prompt);
+    return await Promise.race([rl.question(prompt), closed]);
   } finally {
     rl.close();
   }
@@ -260,6 +263,40 @@ export async function confirmWritableContext(
     `Allow argocd-axi to sync, rollback, refresh, and terminate operations on context ${name} (${server})? [y/N] `,
   );
   return /^y(?:es)?$/i.test(answer.trim());
+}
+
+export async function contextDetails(
+  contexts: Array<{ name: string; server: string; current: boolean }>,
+  lookup: (name: string) => Promise<string | undefined> = async (name) =>
+    (
+      await argocdJson<{ username?: string }>(
+        "account get-user-info",
+        ["-o", "json"],
+        { context: name, timeoutMs: 1_500 },
+      )
+    ).username,
+): Promise<
+  Array<{ name: string; server: string; current: boolean; username: string }>
+> {
+  const result = [];
+  for (let offset = 0; offset < contexts.length; offset += 3) {
+    const batch = await Promise.all(
+      contexts.slice(offset, offset + 3).map(async (context) => ({
+        ...context,
+        username:
+          (await lookup(context.name).catch(() => undefined)) ?? "unknown",
+      })),
+    );
+    result.push(...batch);
+  }
+  return result;
+}
+
+export function addWritableContextIfConfirmed(
+  name: string,
+  confirmed: boolean,
+): boolean {
+  return confirmed ? addWritableContext(name) : false;
 }
 
 export async function chooseContext(
@@ -316,19 +353,7 @@ async function writableAdd(args: string[]): Promise<string> {
         "no configured Argo CD contexts to select",
         CODES.NO_CONTEXT,
       );
-    const details = await Promise.all(
-      listing.contexts.map(async (context) => {
-        const username =
-          (
-            await argocdJson<{ username?: string }>(
-              "account get-user-info",
-              ["-o", "json"],
-              { context: context.name },
-            ).catch(() => undefined)
-          )?.username ?? "unknown";
-        return { ...context, username };
-      }),
-    );
+    const details = await contextDetails(listing.contexts);
     name = await chooseContext(
       details,
       writable,
@@ -365,14 +390,14 @@ async function writableAdd(args: string[]): Promise<string> {
   process.stdout.write(
     `Context: ${selectedName}\nServer: ${match.server}\nUser: ${username ?? "unknown"}\n`,
   );
-  if (
-    !(await confirmWritableContext(
-      selectedName,
-      match.server,
-      process.stdin,
-      process.stdout,
-    ))
-  )
+  const confirmed = await confirmWritableContext(
+    selectedName,
+    match.server,
+    process.stdin,
+    process.stdout,
+  );
+  const changed = addWritableContextIfConfirmed(selectedName, confirmed);
+  if (!confirmed)
     return finish(
       [
         encodeObject({
@@ -381,7 +406,6 @@ async function writableAdd(args: string[]): Promise<string> {
       ],
       undefined,
     );
-  const changed = addWritableContext(selectedName);
   return finish(
     [
       encodeObject({

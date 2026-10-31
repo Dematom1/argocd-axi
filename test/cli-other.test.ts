@@ -12,7 +12,14 @@ import { describe, expect, it } from "vitest";
 import { decode } from "@toon-format/toon";
 import { VERSION } from "../src/version.js";
 import { PassThrough } from "node:stream";
-import { chooseContext, confirmWritableContext } from "../src/commands/ctx.js";
+import {
+  addWritableContextIfConfirmed,
+  chooseContext,
+  confirmWritableContext,
+  contextDetails,
+  readConfirmation,
+} from "../src/commands/ctx.js";
+import { loadConfig } from "../src/config.js";
 import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
@@ -88,6 +95,57 @@ describe("writable context management", () => {
     expect(shown).toContain("2. staging - https://staging - bob");
     input.write("2\n");
     await expect(selected).resolves.toBe("staging");
+  });
+
+  it.each(["0", "3", "abc", ""])(
+    "refuses invalid context selection (%s)",
+    async (answer) => {
+      const input = new PassThrough();
+      const output = new PassThrough();
+      const selected = chooseContext(
+        [
+          {
+            name: "prod",
+            server: "https://prod",
+            username: "alice",
+          },
+        ],
+        [],
+        input,
+        output,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      input.write(`${answer}\n`);
+      await expect(selected).rejects.toThrow("invalid context selection");
+    },
+  );
+
+  it("treats input close as a declined confirmation without changing config", async () => {
+    const configHome = makeHome();
+    const previous = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = configHome;
+    try {
+      expect(loadConfig().config.writableContexts).toEqual([]);
+      expect(addWritableContextIfConfirmed("staging", false)).toBe(false);
+      expect(loadConfig().config.writableContexts).toEqual([]);
+      const input = new PassThrough();
+      const answer = readConfirmation(input, new PassThrough(), "confirm? ");
+      input.end();
+      await expect(answer).resolves.toBe("");
+    } finally {
+      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previous;
+    }
+  });
+
+  it("shows unknown when user lookup fails", async () => {
+    const [context] = await contextDetails(
+      [{ name: "staging", server: "https://staging", current: false }],
+      async () => {
+        throw new Error("offline");
+      },
+    );
+    expect(context?.username).toBe("unknown");
   });
 
   it.each([
