@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeHome, runCli } from "./helpers.js";
@@ -44,7 +50,8 @@ describe("session-end memory", () => {
     expect(recorded).toContain('"context": "prod"');
     expect(recorded).not.toContain("SECRET_TOKEN");
     expect(recorded).not.toContain("--token");
-    expect(statSync(sessions).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32")
+      expect(statSync(sessions).mode & 0o777).toBe(0o600);
     const view = await runCli(["context"], { home });
     expect(view.exitCode).toBe(0);
     expect(view.stdout).toContain("last_session:");
@@ -56,6 +63,36 @@ describe("session-end memory", () => {
     expect((await runCli(["setup", "status"], { home })).stdout).toContain(
       "sessionEnd: not installed",
     );
+  });
+
+  it("preserves malformed hook groups and existing settings permissions", async () => {
+    const home = makeHome();
+    const claude = join(home, ".claude");
+    mkdirSync(claude, { recursive: true });
+    const settings = join(claude, "settings.json");
+    const retained = [
+      null,
+      "unexpected",
+      { matcher: "without-hooks" },
+      { matcher: "user", hooks: [{ type: "command", command: "echo keep" }] },
+    ];
+    writeFileSync(
+      settings,
+      JSON.stringify({ hooks: { SessionEnd: retained } }),
+    );
+    const setup = await runCli(["setup", "hooks"], { home });
+    expect(setup.exitCode).toBe(0);
+    const installed = JSON.parse(readFileSync(settings, "utf8")) as {
+      hooks: { SessionEnd: unknown[] };
+    };
+    expect(installed.hooks.SessionEnd.slice(0, retained.length)).toEqual(
+      retained,
+    );
+    chmodSync(settings, 0o640);
+    const removed = await runCli(["setup", "uninstall"], { home });
+    expect(removed.exitCode).toBe(0);
+    if (process.platform !== "win32")
+      expect(statSync(settings).mode & 0o777).toBe(0o640);
   });
 
   it("treats missing and corrupt session files as empty memory", async () => {

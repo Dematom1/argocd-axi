@@ -1,4 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -9,32 +19,55 @@ const path = () =>
   );
 const command = "argocd-axi context end";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function settings(): Record<string, unknown> {
   const file = path();
   if (!existsSync(file)) return {};
   const value: unknown = JSON.parse(readFileSync(file, "utf8"));
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error(`${file} is not a JSON object`);
-  return value as Record<string, unknown>;
+  if (!isRecord(value)) throw new Error(`${file} is not a JSON object`);
+  return value;
+}
+
+function writeSettings(value: Record<string, unknown>): void {
+  const file = path();
+  mkdirSync(join(file, ".."), { recursive: true });
+  const mode = existsSync(file) ? statSync(file).mode & 0o777 : 0o600;
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode });
+    chmodSync(temporary, mode);
+    renameSync(temporary, file);
+  } catch (error) {
+    try {
+      unlinkSync(temporary);
+    } catch {
+      /* No temporary file to remove. */
+    }
+    throw error;
+  }
 }
 
 export function installSessionEndHook(): void {
   const value = settings();
-  const hooks = (value.hooks ??= {}) as Record<string, unknown>;
-  const groups = Array.isArray(hooks.SessionEnd)
-    ? (hooks.SessionEnd as Array<Record<string, unknown>>)
-    : [];
-  const next: Array<Record<string, unknown>> = [];
+  const hooks = isRecord(value.hooks) ? value.hooks : {};
+  value.hooks = hooks;
+  const groups = Array.isArray(hooks.SessionEnd) ? hooks.SessionEnd : [];
+  const next: unknown[] = [];
   let installed = false;
   for (const group of groups) {
-    const entries = Array.isArray(group.hooks)
-      ? (group.hooks as Array<Record<string, unknown>>)
-      : [];
-    const kept = entries.filter((entry) => {
+    if (!isRecord(group) || !Array.isArray(group.hooks)) {
+      next.push(group);
+      continue;
+    }
+    const kept = group.hooks.filter((entry) => {
       const ours =
-        entry.command === command ||
-        (typeof entry.command === "string" &&
-          entry.command.endsWith("/argocd-axi context end"));
+        isRecord(entry) &&
+        (entry.command === command ||
+          (typeof entry.command === "string" &&
+            entry.command.endsWith("/argocd-axi context end")));
       if (ours && !installed) {
         installed = true;
         return false;
@@ -48,30 +81,27 @@ export function installSessionEndHook(): void {
     hooks: [{ type: "command", command, timeout: 30 }],
   });
   hooks.SessionEnd = next;
-  mkdirSync(join(path(), ".."), { recursive: true });
-  writeFileSync(path(), `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  writeSettings(value);
 }
 
 export function sessionEndHookStatus(): boolean {
   try {
-    const hooks = settings().hooks as Record<string, unknown> | undefined;
-    const groups = hooks?.SessionEnd;
+    const hooks = settings().hooks;
+    const groups = isRecord(hooks) ? hooks.SessionEnd : undefined;
     return (
       Array.isArray(groups) &&
-      groups.some((group) => {
-        if (
-          !group ||
-          typeof group !== "object" ||
-          !Array.isArray((group as Record<string, unknown>).hooks)
-        )
-          return false;
-        return (group as { hooks: Array<Record<string, unknown>> }).hooks.some(
-          (entry) =>
-            entry.command === command ||
-            (typeof entry.command === "string" &&
-              entry.command.endsWith("/argocd-axi context end")),
-        );
-      })
+      groups.some(
+        (group) =>
+          isRecord(group) &&
+          Array.isArray(group.hooks) &&
+          group.hooks.some(
+            (entry) =>
+              isRecord(entry) &&
+              (entry.command === command ||
+                (typeof entry.command === "string" &&
+                  entry.command.endsWith("/argocd-axi context end"))),
+          ),
+      )
     );
   } catch {
     return false;
@@ -80,33 +110,26 @@ export function sessionEndHookStatus(): boolean {
 
 export function uninstallSessionEndHook(): boolean {
   const value = settings();
-  const hooks = value.hooks as Record<string, unknown> | undefined;
-  const groups = hooks?.SessionEnd;
-  if (!Array.isArray(groups)) return false;
+  const hooks = value.hooks;
+  if (!isRecord(hooks) || !Array.isArray(hooks.SessionEnd)) return false;
   let removed = false;
-  const next = groups.flatMap((group) => {
-    if (
-      !group ||
-      typeof group !== "object" ||
-      !Array.isArray((group as Record<string, unknown>).hooks)
-    )
-      return [group];
-    const entries = (
-      group as { hooks: Array<Record<string, unknown>> }
-    ).hooks.filter((entry) => {
+  const next = hooks.SessionEnd.flatMap((group) => {
+    if (!isRecord(group) || !Array.isArray(group.hooks)) return [group];
+    const entries = group.hooks.filter((entry) => {
       const ours =
-        entry.command === command ||
-        (typeof entry.command === "string" &&
-          entry.command.endsWith("/argocd-axi context end"));
+        isRecord(entry) &&
+        (entry.command === command ||
+          (typeof entry.command === "string" &&
+            entry.command.endsWith("/argocd-axi context end")));
       removed ||= ours;
       return !ours;
     });
     return entries.length ? [{ ...group, hooks: entries }] : [];
   });
-  if (!removed || !hooks) return false;
+  if (!removed) return false;
   if (next.length) hooks.SessionEnd = next;
   else delete hooks.SessionEnd;
   if (Object.keys(hooks).length === 0) delete value.hooks;
-  writeFileSync(path(), `${JSON.stringify(value, null, 2)}\n`);
+  writeSettings(value);
   return true;
 }

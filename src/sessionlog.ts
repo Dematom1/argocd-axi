@@ -3,9 +3,12 @@ import {
   createReadStream,
   mkdirSync,
   readFileSync,
+  renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { configPath } from "./config.js";
@@ -200,10 +203,21 @@ export function recordSession(
     delete directories[old];
   const path = sessionsPath();
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify({ directories }, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  chmodSync(path, 0o600);
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, `${JSON.stringify({ directories }, null, 2)}\n`, {
+      mode: 0o600,
+    });
+    chmodSync(temporary, 0o600);
+    renameSync(temporary, path);
+  } catch (error) {
+    try {
+      unlinkSync(temporary);
+    } catch {
+      /* No temporary file to remove. */
+    }
+    throw error;
+  }
 }
 
 export function lastSession(directory: string): SessionSummary | undefined {
