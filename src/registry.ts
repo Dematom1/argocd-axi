@@ -70,6 +70,18 @@ export const OPERATIONS = {
     network: true,
     timeoutMs: READ_TIMEOUT_MS,
   },
+  "app actions run": {
+    argv: ["app", "actions", "run"],
+    tier: "write",
+    network: true,
+    timeoutMs: READ_TIMEOUT_MS,
+  },
+  "app set": {
+    argv: ["app", "set"],
+    tier: "write",
+    network: true,
+    timeoutMs: READ_TIMEOUT_MS,
+  },
   "app resources": {
     argv: ["app", "resources"],
     tier: "read",
@@ -219,22 +231,11 @@ export interface Refusal {
   help: string[];
 }
 
-const PLANNED =
-  "planned for the write tier, behind preview-by-default and the writable-contexts allowlist; not in v1 (see ROADMAP.md)";
-
 /**
  * Writes the design names for the next tier (decision A2): known verbs that
  * answer REFUSED with the raw argocd route a human can take today.
  */
-export const PLANNED_WRITES: Record<string, Refusal> = {
-  "apps action": {
-    reason: `running resource actions is ${PLANNED}`,
-    help: [
-      "List available actions with `argocd-axi apps actions <app>`",
-      "A human can run one with the raw CLI: `argocd app actions run <app> <action> --kind <kind>`",
-    ],
-  },
-};
+export const PLANNED_WRITES: Record<string, Refusal> = {};
 
 const HUMAN_ONLY = "A human runs this with the raw argocd CLI";
 

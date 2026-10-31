@@ -2,7 +2,7 @@ import { AxiError } from "axi-sdk-js";
 import { parseAllDocuments, stringify } from "yaml";
 import { argocdJson, runArgocd } from "../argocd.js";
 import { loadConfig } from "../config.js";
-import { evaluateWriteGate } from "../gate.js";
+import { attributionArgs, evaluateWriteGate } from "../gate.js";
 import type { SyncWindow } from "../windows.js";
 import {
   CONTEXT_FLAG,
@@ -1478,9 +1478,7 @@ export const APPS_ACTIONS_SPEC: CommandSpec = {
     "argocd-axi apps actions guestbook",
     "argocd-axi apps actions guestbook --kind Rollout",
   ],
-  notes: [
-    "Running an action is planned for a later write tier; this command only lists them",
-  ],
+  notes: ["List actions before running one with `apps actions run`"],
 };
 
 function pick(record: Record<string, unknown>, key: string): unknown {
@@ -1489,7 +1487,7 @@ function pick(record: Record<string, unknown>, key: string): unknown {
 }
 
 export async function appsActions(args: string[]): Promise<string> {
-  if (args[0] === "run") refuseActionRun();
+  if (args[0] === "run") return appsActionRun(args.slice(1));
   const parsed = parseArgs(APPS_ACTIONS_SPEC, args);
   const name = validateName("app", parsed.positionals[0] as string);
   const argv = [name, "-o", "json"];
@@ -1526,14 +1524,106 @@ export async function appsActions(args: string[]): Promise<string> {
   );
 }
 
-function refuseActionRun(): never {
-  throw axiError(
-    "running resource actions is planned for the write tier, behind preview-by-default and the writable-contexts allowlist; not in v1 (see ROADMAP.md)",
-    CODES.REFUSED,
-    [
-      "A human can run one with the raw CLI: `argocd app actions run <app> <action> --kind <kind>`",
-    ],
+const APPS_ACTION_RUN_SPEC: CommandSpec = {
+  path: "apps actions run",
+  summary: "Preview and optionally run one action on one resource",
+  positionals: [
+    APP_ARG,
+    { name: "action", required: true, description: "Listed resource action" },
+  ],
+  flags: [
+    {
+      name: "--kind",
+      kind: "value",
+      valueName: "kind",
+      description: "Resource kind",
+    },
+    {
+      name: "--name",
+      kind: "value",
+      valueName: "resource",
+      description: "Resource name",
+    },
+    { name: "--confirm", kind: "bool", description: "Execute after preview" },
+    CONTEXT_FLAG,
+  ],
+  examples: [
+    "argocd-axi apps actions run guestbook restart --kind Deployment --name guestbook --context staging",
+  ],
+};
+
+async function appsActionRun(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_ACTION_RUN_SPEC, args);
+  const appNameArg = validateName("app", parsed.positionals[0] as string);
+  const action = validateName("action", parsed.positionals[1] as string);
+  const kind = getString(parsed, "--kind");
+  const resourceName = getString(parsed, "--name");
+  if (!kind || !resourceName)
+    throw validationError("apps actions run needs --kind and --name");
+  const context = getString(parsed, "--context"),
+    confirm = getBool(parsed, "--confirm");
+  const gate = evaluateWriteGate(
+    {
+      command: "apps actions run",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
   );
+  const options = { context: gate.context };
+  const app = await getApp(appNameArg, options);
+  const resource = (app.status?.resources ?? []).find(
+    (r) => r.kind === kind && r.name === resourceName,
+  );
+  if (!resource)
+    throw axiError(
+      `REFUSED: ${kind}/${resourceName} is not managed by ${appNameArg}`,
+      CODES.REFUSED,
+    );
+  const actions = await argocdJson<Array<Record<string, unknown>>>(
+    "app actions list",
+    [appNameArg, "--kind", kind, "-o", "json"],
+    options,
+  );
+  if (
+    !actions.some(
+      (entry) =>
+        String(pick(entry, "name") ?? "") === resourceName &&
+        String(pick(entry, "action") ?? "") === action &&
+        pick(entry, "disabled") !== true,
+    )
+  )
+    throw axiError(
+      `REFUSED: action ${action} is unavailable for ${kind}/${resourceName}`,
+      CODES.REFUSED,
+    );
+  const blocks = [
+    encodeObject({ action, app: appNameArg, kind, resource: resourceName }),
+  ];
+  if (!confirm)
+    return finish(blocks, undefined, [
+      "No changes made; add --confirm to run the action",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  await checkWritePermission("update", app, appNameArg, options);
+  await runApplicationWrite(
+    "app actions run",
+    [
+      appNameArg,
+      action,
+      "--kind",
+      kind,
+      "--resource-name",
+      resourceName,
+      ...(resource.group ? ["--group", resource.group] : []),
+      ...(resource.namespace ? ["--namespace", resource.namespace] : []),
+      ...attributionArgs(),
+    ],
+    options,
+    appNameArg,
+  );
+  return finish([...blocks, encodeObject({ result: "submitted" })], undefined);
 }
 
 // ---------------------------------------------------------------- app writes
@@ -1597,7 +1687,12 @@ async function checkWritePermission(
 }
 
 async function runApplicationWrite(
-  op: "app rollback" | "app terminate-op" | "app refresh",
+  op:
+    | "app rollback"
+    | "app terminate-op"
+    | "app refresh"
+    | "app actions run"
+    | "app set",
   args: string[],
   options: { context?: string },
   name: string,
@@ -1865,6 +1960,63 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
   refresh: { spec: APPS_REFRESH_SPEC, run: appsRefresh },
   "terminate-op": { spec: APPS_TERMINATE_SPEC, run: appsTerminateOp },
 };
+
+const APPS_AUTO_SYNC_SPEC: CommandSpec = {
+  path: "apps auto-sync",
+  summary: "Preview and optionally enable or disable automated sync",
+  positionals: [
+    APP_ARG,
+    { name: "mode", required: true, description: "on or off" },
+  ],
+  flags: [
+    { name: "--confirm", kind: "bool", description: "Execute after preview" },
+    CONTEXT_FLAG,
+  ],
+  examples: ["argocd-axi apps auto-sync guestbook on --context staging"],
+};
+
+async function appsAutoSync(args: string[]): Promise<string> {
+  const parsed = parseArgs(APPS_AUTO_SYNC_SPEC, args);
+  const name = validateName("app", parsed.positionals[0] as string);
+  const mode = parsed.positionals[1];
+  if (mode !== "on" && mode !== "off")
+    throw validationError("mode must be on or off");
+  const context = getString(parsed, "--context"),
+    confirm = getBool(parsed, "--confirm");
+  const gate = evaluateWriteGate(
+    {
+      command: "apps auto-sync",
+      context,
+      execute: confirm,
+      executeFlag: "--confirm",
+    },
+    loadConfig().config,
+  );
+  const options = { context: gate.context },
+    app = await getApp(name, options);
+  const current = autoSyncSummary(app),
+    blocks = [encodeObject({ autoSync: name, current, target: mode })];
+  if (!confirm)
+    return finish(blocks, undefined, [
+      "No changes made; add --confirm to change automated sync",
+      ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  await checkWritePermission("update", app, name, options);
+  await runApplicationWrite(
+    "app set",
+    [
+      name,
+      "--sync-policy",
+      mode === "on" ? "automated" : "none",
+      ...attributionArgs(),
+    ],
+    options,
+    name,
+  );
+  return finish([...blocks, encodeObject({ result: "submitted" })], undefined);
+}
+
+SUBCOMMANDS["auto-sync"] = { spec: APPS_AUTO_SYNC_SPEC, run: appsAutoSync };
 
 export const APPS_SPECS = [
   APPS_LIST_SPEC,

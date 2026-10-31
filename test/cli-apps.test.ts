@@ -921,10 +921,106 @@ describe("apps", () => {
 
   it("lists resource actions and refuses running them", async () => {
     expect((await runCli(["apps", "actions", "web"])).stdout).toContain(
-      "actions[3]{kind,name,action,disabled}:\n  Rollout,web,promote-full,no\n  Rollout,web,abort,no\n  Rollout,web,resume,yes",
+      "actions[4]{kind,name,action,disabled}:\n  Rollout,web,promote-full,no\n  Rollout,web,abort,no\n  Rollout,web,resume,yes\n  Rollout,web,restart,no",
     );
-    const run = await runCli(["apps", "actions", "run", "web", "promote-full"]);
+    const run = await runCli([
+      "apps",
+      "actions",
+      "run",
+      "web",
+      "not-listed",
+      "--kind",
+      "Rollout",
+      "--name",
+      "web",
+      "--context",
+      "staging",
+    ]);
     expect(run.stdout).toContain("code: REFUSED");
-    expect(run.calls).toEqual([]);
+    expect(
+      run.calls.some((call) => call[1] === "actions" && call[2] === "run"),
+    ).toBe(false);
+  });
+
+  it("previews and gates a single listed resource action", async () => {
+    const preview = await runCli([
+      "apps",
+      "actions",
+      "run",
+      "web",
+      "restart",
+      "--kind",
+      "Rollout",
+      "--name",
+      "web",
+      "--context",
+      "staging",
+    ]);
+    expect(preview.stdout).toContain("No changes made; add --confirm");
+    expect(preview.calls.map((call) => call.slice(0, 3))).toEqual([
+      ["app", "get", "web"],
+      ["app", "actions", "list"],
+    ]);
+
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]\n",
+    );
+    const executed = await runCli(
+      [
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Rollout",
+        "--name",
+        "web",
+        "--confirm",
+        "--context",
+        "staging",
+      ],
+      { home },
+    );
+    expect(executed.calls.at(-1)).toContain("--info");
+    expect(executed.calls.at(-1)).toContain("--resource-name");
+    expect(executed.calls.at(-1)?.slice(0, 4)).toEqual([
+      "app",
+      "actions",
+      "run",
+      "web",
+    ]);
+  });
+
+  it("previews auto-sync changes and requires explicit confirmation", async () => {
+    const result = await runCli([
+      "apps",
+      "auto-sync",
+      "web",
+      "on",
+      "--context",
+      "staging",
+    ]);
+    expect(result.stdout).toContain("target: on");
+    expect(result.stdout).toContain("No changes made");
+    expect(
+      result.calls.some((call) => call[0] === "app" && call[1] === "set"),
+    ).toBe(false);
+
+    mkdirSync(join(result.home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(result.home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]\n",
+    );
+    const executed = await runCli(
+      ["apps", "auto-sync", "web", "on", "--confirm", "--context", "staging"],
+      { home: result.home },
+    );
+    expect(executed.calls.at(-1)).toContain("--sync-policy");
+    expect(executed.calls.at(-1)).toContain("automated");
+    expect(executed.calls.at(-1)).toContain("--info");
   });
 });

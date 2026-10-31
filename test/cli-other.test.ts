@@ -15,18 +15,6 @@ import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
 describe("refusals (A2, A-c22)", () => {
-  it.each([["apps", "action", "run", "web", "restart"]])(
-    "plans the write tier for %s %s",
-    async (...args) => {
-      const { stdout, exitCode, calls } = await runCli(args);
-      expect(exitCode).toBe(1);
-      expect(stdout).toContain("code: REFUSED");
-      expect(stdout).toContain("not in v1 (see ROADMAP.md)");
-      expect(stdout).toMatch(/A human can .* with the raw CLI: `argocd app /);
-      expect(calls).toEqual([]);
-    },
-  );
-
   it.each([
     ["login"],
     ["relogin"],
@@ -236,7 +224,7 @@ describe("help, version and setup", () => {
     const top = await runCli(["--help"]);
     expect(
       (decode(top.stdout) as { commands: string[] }).commands,
-    ).toHaveLength(23);
+    ).toHaveLength(25);
     const view = await runCli(["apps", "view", "--help"]);
     expect(decode(view.stdout)).toMatchObject({
       usage: "argocd-axi apps view <app> [flags]",
@@ -254,7 +242,7 @@ describe("help, version and setup", () => {
 
   it("prints each group subcommand on its own help line", async () => {
     for (const [group, count] of [
-      ["apps", 12],
+      ["apps", 13],
       ["projects", 2],
       ["appsets", 2],
     ] as const) {
@@ -271,14 +259,14 @@ describe("help, version and setup", () => {
 
   it("prints top-level and per-command help without calling argocd", async () => {
     const top = await runCli(["--help"]);
-    expect(top.stdout).toContain("commands[23]:");
+    expect(top.stdout).toContain("commands[25]:");
     expect(top.calls).toEqual([]);
     const view = await runCli(["apps", "view", "--help"]);
     expect(view.stdout).toContain("usage: argocd-axi apps view <app> [flags]");
     expect(view.stdout).toContain("examples[2]:");
     expect(view.calls).toEqual([]);
     expect((await runCli(["apps", "--help"])).stdout).toContain(
-      "subcommands[12]:",
+      "subcommands[13]:",
     );
   });
 
@@ -341,7 +329,7 @@ describe("guards", () => {
       expect(run.calls).toEqual([]);
       const help = await runCli(["apps", verb, "--help"]);
       expect(help.exitCode).toBe(0);
-      expect(help.stdout).toContain("subcommands[12]:");
+      expect(help.stdout).toContain("subcommands[13]:");
       const top = await runCli([verb]);
       expect(top.exitCode).toBe(2);
       expect(top.stdout).toContain("code: VALIDATION_ERROR");

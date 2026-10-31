@@ -34,7 +34,7 @@ Run `npx -y argocd-axi auth guide` for offline instructions. A human operator lo
 ## Commands
 
 ```
-commands[23]:
+commands[25]:
   (no command): live overview - context, server, user, apps needing attention with the reason, running operations
   ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)
   ctx use <context>: switch the argocd CLI's current context (local config only)
@@ -49,11 +49,13 @@ commands[23]:
   apps rollback <app> <history-id> [--confirm] [--timeout <s>]: preview revision, then optionally roll back
   apps refresh <app> [--hard] [--confirm]: preview, then optionally refresh one app
   apps terminate-op <app> [--confirm] [--timeout <s>]: preview, then optionally stop a running operation
+  apps auto-sync <app> <on|off> [--confirm]: preview, then optionally change automated sync
+  apps actions run <app> <action> --kind <kind> --name <resource> [--confirm]: preview, then optionally run one listed resource action
   apps history <app>: deployments, newest first
   apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted
   apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows
   apps wait <app> [--sync --health --operation] [--timeout <s>]: bounded wait, returns the state either way
-  apps actions <app>: resource actions available (listing only)
+  apps actions <app>: list available resource actions
   projects | projects view <p> | projects windows <p>: projects, their rules, and whether sync is allowed now
   appsets | appsets view <name> | appsets generate <file>: ApplicationSets and what a spec would generate
   repos | clusters: repositories and destination clusters with connection status
