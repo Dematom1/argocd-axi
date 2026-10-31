@@ -319,11 +319,13 @@ async function writableAdd(args: string[]): Promise<string> {
     const details = await Promise.all(
       listing.contexts.map(async (context) => {
         const username =
-          (await argocdJson<{ username?: string }>(
-            "account get-user-info",
-            ["-o", "json"],
-            { context: context.name },
-          ).catch(() => undefined))?.username ?? "unknown";
+          (
+            await argocdJson<{ username?: string }>(
+              "account get-user-info",
+              ["-o", "json"],
+              { context: context.name },
+            ).catch(() => undefined)
+          )?.username ?? "unknown";
         return { ...context, username };
       }),
     );
