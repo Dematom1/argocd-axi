@@ -1606,7 +1606,12 @@ async function appsActionRun(args: string[]): Promise<string> {
       "No changes made; add --confirm to run the action",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
-  await checkWritePermission("update", app, appNameArg, options);
+  await checkWritePermission(
+    `action/${resource.group ?? ""}/${kind}/${action}`,
+    app,
+    appNameArg,
+    options,
+  );
   await runApplicationWrite(
     "app actions run",
     [

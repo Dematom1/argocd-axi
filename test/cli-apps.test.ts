@@ -27,6 +27,41 @@ describe("apps", () => {
     ).toBe(false);
   });
 
+  it("checks action-specific RBAC before running a resource action", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const { stdout, calls } = await runCli(
+      [
+        "apps", "actions", "run", "web", "restart", "--kind", "Rollout",
+        "--name", "web", "--context", "prod", "--confirm",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "web"], stdoutFile: "app-web.json" },
+          {
+            argv: ["app", "actions", "list", "web", "--kind", "Rollout", "-o", "json"],
+            stdoutFile: "actions-web.json",
+          },
+          {
+            argv: ["account", "can-i", "action/argoproj.io/Rollout/restart", "applications", "shop/web"],
+            stdout: "no\\n",
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain("code: REFUSED");
+    expect(calls).toContainEqual([
+      "account", "can-i", "action/argoproj.io/Rollout/restart",
+      "applications", "shop/web", "--argocd-context", "prod",
+    ]);
+    expect(calls.some((call) => call[1] === "actions" && call[2] === "run")).toBe(false);
+  });
+
   it("terminate-op succeeds when nothing is running", async () => {
     const { stdout, exitCode } = await runCli([
       "apps",
