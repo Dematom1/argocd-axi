@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { decode } from "@toon-format/toon";
 import { VERSION } from "../src/version.js";
+import { PassThrough } from "node:stream";
+import { readConfirmation } from "../src/commands/ctx.js";
 import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
@@ -63,6 +65,21 @@ describe("refusals (A2, A-c22)", () => {
 });
 
 describe("writable context management", () => {
+  it("shows the confirmation prompt and accepts the typed context", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let shown = "";
+    output.setEncoding("utf8");
+    output.on("data", (chunk: string) => (shown += chunk));
+
+    const answer = readConfirmation(input, output, "Type staging to allow writes: ");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(shown).toContain("Type staging to allow writes: ");
+    input.write("staging\n");
+
+    await expect(answer).resolves.toBe("staging");
+  });
+
   it("reports no-op add and remove outcomes accurately", async () => {
     const home = makeHome();
     const configDir = join(home, ".config", "argocd-axi");

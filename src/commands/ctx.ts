@@ -232,6 +232,19 @@ const WRITABLE_LIST_SPEC: CommandSpec = {
   examples: ["argocd-axi ctx writable list"],
 };
 
+export async function readConfirmation(
+  input: NodeJS.ReadableStream,
+  output: NodeJS.WritableStream,
+  prompt: string,
+): Promise<string> {
+  const rl = createInterface({ input, output });
+  try {
+    return await rl.question(prompt);
+  } finally {
+    rl.close();
+  }
+}
+
 async function writableAdd(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
   const name = validateContextName(parsed.positionals[0] as string);
@@ -270,15 +283,13 @@ async function writableAdd(args: string[]): Promise<string> {
     { context: name },
   );
   process.stdout.write(
-    `Context: ${name}\nServer: ${match.server}\nUser: ${info.username ?? "unknown"}\nType ${name} to allow writes: `,
+    `Context: ${name}\nServer: ${match.server}\nUser: ${info.username ?? "unknown"}\n`,
   );
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  let answer: string;
-  try {
-    answer = await rl.question("");
-  } finally {
-    rl.close();
-  }
+  const answer = await readConfirmation(
+    process.stdin,
+    process.stdout,
+    `Type ${name} to allow writes: `,
+  );
   if (answer !== name)
     throw axiError(
       "confirmation did not match; no changes made",
