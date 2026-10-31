@@ -19,7 +19,7 @@ export function encodeObject(value: Record<string, unknown>): string {
 
 /** Render next-step suggestions as a TOON list. */
 export function renderHelp(lines: string[]): string {
-  return encodeObject({ help: lines });
+  return lines.length === 0 ? "" : encodeObject({ help: lines });
 }
 
 /** Render help sections as TOON list items. */

@@ -85,6 +85,14 @@ export const COMMANDS: Record<string, AxiCliCommand<undefined>> = Object.assign(
 export async function main(
   argv: string[] = process.argv.slice(2),
 ): Promise<void> {
+  if (
+    argv.length === 1 &&
+    argv[0] !== undefined &&
+    ["--version", "-v", "-V"].includes(argv[0])
+  ) {
+    process.stdout.write(`${encode(VERSION)}\n`);
+    return;
+  }
   await runAxiCli({
     description: DESCRIPTION,
     version: VERSION,

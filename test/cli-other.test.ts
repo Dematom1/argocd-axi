@@ -193,7 +193,7 @@ describe("help, version and setup", () => {
     expect(VERSION).toBe(pkg.version);
     for (const flag of ["--version", "-v", "-V"]) {
       const { stdout, calls } = await runCli([flag]);
-      expect(stdout).toBe(`${VERSION}\n`);
+      expect(decode(stdout)).toBe(VERSION);
       expect(calls).toEqual([]);
     }
   });
