@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
+import { decode } from "@toon-format/toon";
 import { FORBIDDEN_ARGS, OPERATIONS } from "../src/registry.js";
 
 /**
@@ -82,6 +83,7 @@ export async function runCli(
         .filter(Boolean)
         .map((line) => JSON.parse(line) as string[])
     : [];
+  expect(() => decode(stdout), args.join(" ") || "home").not.toThrow();
   return { stdout, exitCode, calls, home };
 }
 

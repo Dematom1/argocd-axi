@@ -754,7 +754,10 @@ export function parseDiffHeaders(
   return rows;
 }
 
-export async function appsDiff(args: string[]): Promise<string> {
+export async function appsDiff(
+  args: string[],
+  includeHelp = true,
+): Promise<string> {
   const parsed = parseArgs(APPS_DIFF_SPEC, args);
   const name = validateName("app", parsed.positionals[0] as string);
   const revision = getString(parsed, "--revision");
@@ -797,9 +800,11 @@ export async function appsDiff(args: string[]): Promise<string> {
         }),
       ],
       redactor,
-      [
-        `Run \`argocd-axi apps diff ${name} --full${scope}\` to see the line-level diff`,
-      ],
+      includeHelp
+        ? [
+            `Run \`argocd-axi apps diff ${name} --full${scope}\` to see the line-level diff`,
+          ]
+        : [],
     );
   }
 
@@ -837,7 +842,7 @@ export async function appsDiff(args: string[]): Promise<string> {
   return finish(
     blocks,
     redactor,
-    full
+    full || !includeHelp
       ? []
       : [
           `Run \`argocd-axi apps diff ${name}${revision ? ` --revision ${revision}` : ""} --full${scope}\` to see the line-level diff`,
@@ -1355,7 +1360,7 @@ export async function appsSync(args: string[]): Promise<string> {
     loadConfig().config,
   );
   const options = { context: gate.context };
-  const diff = await appsDiff([name, "--context", gate.context]);
+  const diff = await appsDiff([name, "--context", gate.context], false);
   const app = await getApp(name, options);
   const project = validateName("project", app.spec?.project ?? "default");
   const windows =
