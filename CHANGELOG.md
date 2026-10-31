@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.5...argocd-axi-v0.1.6) (2026-10-31)
+
+
+### Features
+
+* **apps:** add resource actions and automated sync writes ([#29](https://github.com/Dematom1/argocd-axi/issues/29)) ([3558dc5](https://github.com/Dematom1/argocd-axi/commit/3558dc5c738f12cc36a9f5b4788512a21189cfea))
+* **ctx:** add interactive writable context selection ([#28](https://github.com/Dematom1/argocd-axi/issues/28)) ([f5ddbe4](https://github.com/Dematom1/argocd-axi/commit/f5ddbe448b7b688f92193f0ddaaf9c0cb5f46463))
+
 ## [0.1.5](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.4...argocd-axi-v0.1.5) (2026-10-31)
 
 
