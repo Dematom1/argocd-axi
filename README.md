@@ -74,7 +74,7 @@ Requirements:
   v3.3.6. There is no hard minimum; `ctx` and the home view warn when the CLI
   and server differ by a major version.
 
-## Credentials
+## Setup
 
 argocd-axi adds no auth of its own. It uses whatever the `argocd` CLI already
 has: the current context's session, or `ARGOCD_SERVER` and
@@ -88,6 +88,8 @@ login syntax and asks for the server address. Run
 `argocd login <server> --sso --grpc-web` interactively themselves. Agents and
 CI should set `ARGOCD_SERVER` and `ARGOCD_AUTH_TOKEN` from a scoped account
 token. Verify the selected context with `argocd-axi ctx`. The tool never logs in.
+
+### Scoped agent credentials
 
 An agent that uses your own SSO session has all of your Argo CD permissions.
 The recommended agent credential is a **short-lived project-role token**,
