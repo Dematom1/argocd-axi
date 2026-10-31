@@ -69,7 +69,7 @@ describe("session-end memory", () => {
     expect(view.exitCode).toBe(0);
     expect(view.stdout).toContain("last_session:");
     expect(view.stdout).toContain("apps 2");
-    expect(view.stdout).toContain("context prod");
+    expect(view.stdout).toContain('context \\"prod\\"');
     expect((await runCli(["setup", "uninstall"], { home })).stdout).toContain(
       "sessionEnd: removed",
     );
