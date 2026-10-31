@@ -31,7 +31,7 @@ For anything argocd-axi does not cover, the raw `argocd` CLI is the fallback.
 ## Commands
 
 ```
-commands[19]:
+commands[20]:
   (no command): live overview - context, server, user, apps needing attention with the reason, running operations
   ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)
   ctx use <context>: switch the argocd CLI's current context (local config only)
