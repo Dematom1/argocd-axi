@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.6...argocd-axi-v0.1.7) (2026-10-31)
+
+
+### Features
+
+* **context:** add session-end memory ([#31](https://github.com/Dematom1/argocd-axi/issues/31)) ([ae40baf](https://github.com/Dematom1/argocd-axi/commit/ae40bafb10af3988cd8ee95a004e078f568c7a4b))
+
 ## [0.1.6](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.5...argocd-axi-v0.1.6) (2026-10-31)
 
 
