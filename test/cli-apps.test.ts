@@ -18,8 +18,11 @@ describe("apps", () => {
     ]);
     expect(stdout).toContain("No changes made; add --confirm");
     expect(
-      calls.some((call) =>
-        ["rollback", "terminate-op"].includes(call[1] ?? ""),
+      calls.some(
+        (call) =>
+          ["rollback", "terminate-op"].includes(call[1] ?? "") ||
+          call.includes("--refresh") ||
+          call.includes("--hard-refresh"),
       ),
     ).toBe(false);
   });
