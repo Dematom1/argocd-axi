@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { setTimeout as delay } from "node:timers/promises";
 import { parseAllDocuments, stringify } from "yaml";
 import { argocdJson, runArgocd } from "../argocd.js";
 import { loadConfig } from "../config.js";
@@ -1557,6 +1558,12 @@ const APPS_ACTION_RUN_SPEC: CommandSpec = {
       description: "Resource namespace when needed to disambiguate",
     },
     { name: "--confirm", kind: "bool", description: "Execute after preview" },
+    {
+      name: "--timeout",
+      kind: "value",
+      valueName: "s",
+      description: "Maximum wait in seconds (default 120)",
+    },
     CONTEXT_FLAG,
   ],
   examples: [
@@ -1572,6 +1579,7 @@ async function appsActionRun(args: string[]): Promise<string> {
   const resourceName = getString(parsed, "--name");
   const group = getString(parsed, "--group");
   const namespace = getString(parsed, "--namespace");
+  const timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
   if (!kind || !resourceName)
     throw validationError("apps actions run needs --kind and --name");
   const context = getString(parsed, "--context"),
@@ -1602,7 +1610,9 @@ async function appsActionRun(args: string[]): Promise<string> {
     );
   if (resources.length > 1)
     throw axiError(
-      `REFUSED: ${kind}/${resourceName} is ambiguous; specify --group and/or --namespace`,
+      `REFUSED: ${kind}/${resourceName} is ambiguous; candidates: ${resources
+        .map((r) => `${r.group ?? "core"}/${r.kind} ${r.namespace ?? "_cluster"}/${r.name}`)
+        .join(", ")}. Specify --group and/or --namespace`,
       CODES.REFUSED,
     );
   const actions = await argocdJson<Array<Record<string, unknown>>>(
@@ -1665,7 +1675,25 @@ async function appsActionRun(args: string[]): Promise<string> {
     options,
     appNameArg,
   );
-  return finish([...blocks, encodeObject({ result: "submitted" })], undefined);
+  const deadline = Date.now() + timeout * 1000;
+  let current = app;
+  let state = resource.health?.status ?? "unknown";
+  while (state !== "Healthy" && Date.now() < deadline) {
+    await delay(Math.min(1000, deadline - Date.now()));
+    current = await getApp(appNameArg, options);
+    const updated = current.status?.resources?.find(
+      (r) =>
+        r.group === resource.group &&
+        r.kind === resource.kind &&
+        r.namespace === resource.namespace &&
+        r.name === resource.name,
+    );
+    state = updated?.health?.status ?? "unknown";
+  }
+  return finish(
+    [...blocks, encodeObject({ result: "submitted", state })],
+    undefined,
+  );
 }
 
 // ---------------------------------------------------------------- app writes

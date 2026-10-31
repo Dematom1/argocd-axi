@@ -1049,14 +1049,21 @@ describe("apps", () => {
         "--name",
         "web",
         "--confirm",
+        "--timeout",
+        "1",
         "--context",
         "staging",
       ],
       { home },
     );
-    expect(executed.calls.at(-1)).toContain("--info");
-    expect(executed.calls.at(-1)).toContain("--resource-name");
-    expect(executed.calls.at(-1)?.slice(0, 4)).toEqual([
+    expect(executed.stdout).toContain("state:");
+    expect(executed.stdout).toContain("Suspended");
+    const actionCall = executed.calls.find(
+      (call) => call[1] === "actions" && call[2] === "run",
+    );
+    expect(actionCall).toContain("--info");
+    expect(actionCall).toContain("--resource-name");
+    expect(actionCall?.slice(0, 4)).toEqual([
       "app",
       "actions",
       "run",
