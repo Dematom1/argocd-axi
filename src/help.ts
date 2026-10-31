@@ -7,6 +7,8 @@ export const DESCRIPTION =
 export const COMMAND_LINES = [
   "(no command): live overview - context, server, user, apps needing attention with the reason, running operations",
   "ctx [--context <c>]: current context, server and CLI version, local only (what the session hook prints)",
+  "context: last session's argocd-axi command summary for this directory",
+  "context end: record the current Claude Code session summary (SessionEnd hook)",
   "ctx use <context>: switch the argocd CLI's current context (local config only)",
   "auth guide [--context <c>]: offline human login and agent token setup instructions",
   "whoami: user, issuer and groups of the current credential",
@@ -29,7 +31,7 @@ export const COMMAND_LINES = [
   "projects | projects view <p> | projects windows <p>: projects, their rules, and whether sync is allowed now",
   "appsets | appsets view <name> | appsets generate <file>: ApplicationSets and what a spec would generate",
   "repos | clusters: repositories and destination clusters with connection status",
-  "setup hooks: install the SessionStart hook (runs the offline ctx view)",
+  "setup hooks | status | uninstall: manage the Claude Code SessionEnd memory hook; setup hooks also installs SessionStart hooks",
 ];
 
 export const TOP_HELP = `${renderBlocks([

@@ -37,6 +37,7 @@ export interface RunOptions {
   env?: Record<string, string>;
   home?: string;
   bin?: "argocd-axi" | "argocd-axi-ctx";
+  stdin?: string;
 }
 
 export function makeHome(): string {
@@ -56,7 +57,7 @@ export async function runCli(
   writeFileSync(log, "");
   const entry = join(ROOT, "dist", "bin", `${options.bin ?? "argocd-axi"}.js`);
   const child = spawn(process.execPath, [entry, ...args], {
-    stdio: ["ignore", "pipe", "ignore"],
+    stdio: ["pipe", "pipe", "ignore"],
     timeout: 30_000,
     env: {
       PATH: FAKE_BIN,
@@ -70,6 +71,8 @@ export async function runCli(
       ...options.env,
     },
   });
+  if (options.stdin !== undefined) child.stdin.end(options.stdin);
+  else child.stdin.end();
   let stdout = "";
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string) => (stdout += chunk));

@@ -121,14 +121,20 @@ and every other command that prints or changes a credential.
 
 Pick one; you do not need both.
 
-- **Session hook (recommended).** `argocd-axi setup hooks` installs a
-  SessionStart hook for Claude Code, Codex and OpenCode. The hook runs
-  `argocd-axi-ctx`, which is local only: current context, server, CLI version
-  and the cached server version. It makes no network call, triggers no SSO
-  refresh and reads no credential, so a dead context can never hang a session
-  start. It needs a persistent install (`npm install -g argocd-axi`); run from
-  an npx cache, it answers `REFUSED` because the hook would point at a
-  temporary path.
+- **Session hook (recommended).** `argocd-axi setup hooks` installs
+  SessionStart hooks for Claude Code, Codex and OpenCode, plus a Claude Code
+  SessionEnd hook. The start hook runs `argocd-axi-ctx`, which is local only:
+  current context, server, CLI version and the cached server version. It makes
+  no network call, triggers no SSO refresh and reads no credential, so a dead
+  context can never hang a session start. The end hook records only argocd-axi
+  command names, their counts and the most-used `--context` value for that
+  working directory; it does not save arguments or other values. The session
+  log is limited to 100 directories and stored with `0600` permissions. Run
+  `argocd-axi context` to view the current directory's last session, or
+  `argocd-axi setup status` / `argocd-axi setup uninstall` to inspect or remove
+  the Claude Code SessionEnd hook. Hooks need a persistent install
+  (`npm install -g argocd-axi`); run from an npx cache, installation is refused
+  because hooks would point at a temporary path.
 - **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi`
   installs [`skills/argocd-axi/SKILL.md`](skills/argocd-axi/SKILL.md), which
   is generated from the CLI's own help and loads when a task is about Argo CD.
@@ -156,7 +162,8 @@ argocd-axi apps actions run <app> <action> --kind <k> --name <resource> [--confi
 argocd-axi projects | projects view <p> | projects windows <p>
 argocd-axi appsets | appsets view <name> | appsets generate <file>
 argocd-axi repos | clusters
-argocd-axi setup hooks
+argocd-axi context [end]
+argocd-axi setup hooks | status | uninstall
 argocd-axi update [--check]
 ```
 

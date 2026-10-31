@@ -345,7 +345,7 @@ describe("help, version and setup", () => {
     const top = await runCli(["--help"]);
     expect(
       (decode(top.stdout) as { commands: string[] }).commands,
-    ).toHaveLength(25);
+    ).toHaveLength(27);
     const view = await runCli(["apps", "view", "--help"]);
     expect(decode(view.stdout)).toMatchObject({
       usage: "argocd-axi apps view <app> [flags]",
@@ -380,7 +380,7 @@ describe("help, version and setup", () => {
 
   it("prints top-level and per-command help without calling argocd", async () => {
     const top = await runCli(["--help"]);
-    expect(top.stdout).toContain("commands[25]:");
+    expect(top.stdout).toContain("commands[27]:");
     expect(top.calls).toEqual([]);
     const view = await runCli(["apps", "view", "--help"]);
     expect(view.stdout).toContain("usage: argocd-axi apps view <app> [flags]");
