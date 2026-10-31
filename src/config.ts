@@ -6,6 +6,7 @@ import {
   statSync,
   mkdirSync,
   unlinkSync,
+  rmSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
@@ -92,6 +93,30 @@ export function parseConfig(path: string, text: string): ToolConfig {
 }
 
 function updateWritableContext(name: string, add: boolean): void {
+  const path = configPath();
+  mkdirSync(join(path, ".."), { recursive: true });
+  const lockPath = `${path}.lock`;
+  while (true) {
+    try {
+      mkdirSync(lockPath);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  try {
+    updateWritableContextLocked(path, name, add);
+  } finally {
+    rmSync(lockPath, { recursive: true, force: true });
+  }
+}
+
+function updateWritableContextLocked(
+  path: string,
+  name: string,
+  add: boolean,
+): void {
   const loaded = loadConfig();
   const contexts = loaded.config.writableContexts;
   const updated = add
