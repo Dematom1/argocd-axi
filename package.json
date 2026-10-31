@@ -1,6 +1,6 @@
 {
   "name": "argocd-axi",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Agent-ergonomic Argo CD CLI with opt-in writes - AXI-compliant argocd wrapper with token-efficient TOON output",
   "type": "module",
   "license": "MIT",
