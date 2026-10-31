@@ -37,6 +37,8 @@ export interface LoadedConfig {
   config: ToolConfig;
 }
 
+const KNOWN_KEYS = ["writable-contexts"];
+
 export function configPath(): string {
   const base =
     process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
@@ -68,6 +70,13 @@ export function parseConfig(path: string, text: string): ToolConfig {
     throw invalid(path, "the top level must be a mapping");
   }
   const record = data as Record<string, unknown>;
+  const unknown = Object.keys(record).filter((key) => !KNOWN_KEYS.includes(key));
+  if (unknown.length > 0) {
+    throw invalid(
+      path,
+      `unknown setting ${unknown.join(", ")} (known: ${KNOWN_KEYS.join(", ")})`,
+    );
+  }
   const raw = record["writable-contexts"];
   if (raw === undefined || raw === null) return { writableContexts: [] };
   if (!Array.isArray(raw)) {

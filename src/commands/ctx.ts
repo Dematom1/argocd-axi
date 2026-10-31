@@ -312,8 +312,10 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
     spec: WRITABLE_SPEC,
     run: (args) =>
       dispatch("ctx writable", args, WRITABLE_SUBCOMMANDS, {
-        spec: WRITABLE_LIST_SPEC,
-        run: writableList,
+        spec: WRITABLE_SPEC,
+        run: async () => {
+          throw validationError("expected list, add, or remove for `ctx writable`");
+        },
       }),
   },
 };
