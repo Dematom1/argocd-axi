@@ -63,6 +63,39 @@ describe("apps", () => {
     expect(calls.some((call) => call[1] === "actions" && call[2] === "run")).toBe(false);
   });
 
+  it("does not authorize an action from a same-named resource in another namespace", async () => {
+    const app = JSON.stringify({
+      spec: { project: "shop" },
+      status: {
+        resources: [
+          { group: "apps", kind: "Deployment", name: "worker", namespace: "one" },
+          { group: "apps", kind: "Deployment", name: "worker", namespace: "two" },
+        ],
+      },
+    });
+    const { stdout, calls } = await runCli(
+      [
+        "apps", "actions", "run", "web", "restart", "--kind", "Deployment",
+        "--name", "worker", "--group", "apps", "--namespace", "one",
+        "--context", "staging",
+      ],
+      {
+        scenario: scenario([
+          { argv: ["app", "get", "web"], stdout: app },
+          {
+            argv: ["app", "actions", "list", "web", "--kind", "Deployment", "-o", "json"],
+            stdout: JSON.stringify([
+              { Group: "apps", Kind: "Deployment", Name: "worker", Action: "restart", Namespace: "one", Disabled: true },
+              { Group: "apps", Kind: "Deployment", Name: "worker", Action: "restart", Namespace: "two", Disabled: false },
+            ]),
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain("code: REFUSED");
+    expect(calls.some((call) => call[1] === "actions" && call[2] === "run")).toBe(false);
+  });
+
   it("terminate-op succeeds when nothing is running", async () => {
     const { stdout, exitCode } = await runCli([
       "apps",

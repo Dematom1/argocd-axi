@@ -1610,16 +1610,27 @@ async function appsActionRun(args: string[]): Promise<string> {
     [appNameArg, "--kind", kind, "-o", "json"],
     options,
   );
-  if (
-    !actions.some(
-      (entry) =>
-        String(pick(entry, "name") ?? "") === resourceName &&
-        String(pick(entry, "group") ?? "") === (resource.group ?? "") &&
-        String(pick(entry, "kind") ?? "") === kind &&
-        String(pick(entry, "action") ?? "") === action &&
-        pick(entry, "disabled") !== true,
-    )
-  )
+  const matchingActions = actions.filter(
+    (entry) =>
+      String(pick(entry, "name") ?? "") === resourceName &&
+      String(pick(entry, "group") ?? "") === (resource.group ?? "") &&
+      String(pick(entry, "kind") ?? "") === kind &&
+      String(pick(entry, "action") ?? "") === action,
+  );
+  const namespacedActions = matchingActions.filter(
+    (entry) => pick(entry, "namespace") !== undefined,
+  );
+  const unnamespacedAction =
+    matchingActions.length === 1 ? matchingActions[0] : undefined;
+  const actionAvailable = namespacedActions.length
+    ? namespacedActions.some(
+        (entry) =>
+          pick(entry, "namespace") === resource.namespace &&
+          pick(entry, "disabled") !== true,
+      )
+    : unnamespacedAction !== undefined &&
+      pick(unnamespacedAction, "disabled") !== true;
+  if (!actionAvailable)
     throw axiError(
       `REFUSED: action ${action} is unavailable for ${kind}/${resourceName}`,
       CODES.REFUSED,
