@@ -2,13 +2,17 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   statSync,
+  unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeHome, runCli } from "./helpers.js";
+import { releaseSessionLock } from "../src/sessionlog.js";
 
 describe("session-end memory", () => {
   it("records only command names, counts and the most-used context", async () => {
@@ -166,6 +170,77 @@ describe("session-end memory", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("session log is busy");
     expect(existsSync(join(dir, "sessions.json"))).toBe(false);
+  });
+
+  it("keeps a stale lock while its owner process is alive", async () => {
+    const home = makeHome();
+    const dir = join(home, ".config", "argocd-axi");
+    mkdirSync(dir, { recursive: true });
+    const lock = join(dir, "sessions.json.lock");
+    const owner = `${process.pid} live-owner\n`;
+    writeFileSync(lock, owner);
+    const old = new Date(Date.now() - 31_000);
+    utimesSync(lock, old, old);
+    writeFileSync(
+      join(home, "transcript.jsonl"),
+      JSON.stringify({
+        type: "tool_use",
+        input: { command: "argocd-axi apps" },
+      }),
+    );
+    const result = await runCli(["context", "end"], {
+      home,
+      stdin: JSON.stringify({
+        transcript_path: join(home, "transcript.jsonl"),
+        cwd: "/workspace/live-lock",
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("session log is busy");
+    expect(readFileSync(lock, "utf8")).toBe(owner);
+  });
+
+  it("reclaims a stale lock whose owner process is gone", async () => {
+    const home = makeHome();
+    const dir = join(home, ".config", "argocd-axi");
+    mkdirSync(dir, { recursive: true });
+    const lock = join(dir, "sessions.json.lock");
+    writeFileSync(lock, "2147483647 dead-owner\n");
+    const old = new Date(Date.now() - 31_000);
+    utimesSync(lock, old, old);
+    writeFileSync(
+      join(home, "transcript.jsonl"),
+      JSON.stringify({
+        type: "tool_use",
+        input: { command: "argocd-axi apps" },
+      }),
+    );
+    const result = await runCli(["context", "end"], {
+      home,
+      stdin: JSON.stringify({
+        transcript_path: join(home, "transcript.jsonl"),
+        cwd: "/workspace/recovered-lock",
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(lock)).toBe(false);
+    const sessions = JSON.parse(
+      readFileSync(join(dir, "sessions.json"), "utf8"),
+    ) as { directories: Record<string, unknown> };
+    expect(sessions.directories["/workspace/recovered-lock"]).toBeDefined();
+  });
+
+  it("does not remove a successor lock when releasing its own", () => {
+    const home = makeHome();
+    const lockPath = join(home, "sessions.json.lock");
+    const token = `${process.pid} current-owner\n`;
+    const fd = openSync(lockPath, "wx", 0o600);
+    writeFileSync(fd, token);
+    unlinkSync(lockPath);
+    const successor = `${process.pid} successor-owner\n`;
+    writeFileSync(lockPath, successor);
+    releaseSessionLock({ fd, path: lockPath, token });
+    expect(readFileSync(lockPath, "utf8")).toBe(successor);
   });
 
   it("treats missing and corrupt session files as empty memory", async () => {

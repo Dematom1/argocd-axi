@@ -17,6 +17,7 @@ import { configPath } from "./config.js";
 
 const MAX_DIRECTORIES = 100;
 const LOCK_WAIT_MS = 2_000;
+const STALE_LOCK_MS = 30_000;
 const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 const TOOL = "argocd-axi";
 const COMMANDS = new Set([
@@ -215,18 +216,85 @@ function readSessions(): Record<string, SessionSummary> {
   return {};
 }
 
-async function acquireLock(path: string): Promise<number | undefined> {
+export interface SessionLock {
+  fd: number;
+  path: string;
+  token: string;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return errorCode(error) !== "ESRCH";
+  }
+}
+
+function lockPid(token: string): number | undefined {
+  const pid = Number(token.trim().split(/\s+/, 1)[0]);
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
+}
+
+async function acquireLock(path: string): Promise<SessionLock | undefined> {
   const lockPath = `${path}.lock`;
   const deadline = Date.now() + LOCK_WAIT_MS;
   while (Date.now() < deadline) {
+    const token = `${process.pid} ${randomUUID()}\n`;
     try {
-      return openSync(lockPath, "wx", 0o600);
+      const fd = openSync(lockPath, "wx", 0o600);
+      try {
+        writeFileSync(fd, token);
+        return { fd, path: lockPath, token };
+      } catch {
+        closeSync(fd);
+        try {
+          unlinkSync(lockPath);
+        } catch {
+          /* The lock may already be gone. */
+        }
+        return undefined;
+      }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") return undefined;
+      if (errorCode(error) !== "EEXIST") return undefined;
+      try {
+        const info = statSync(lockPath);
+        const owner = readFileSync(lockPath, "utf8");
+        const pid = lockPid(owner);
+        if (
+          Date.now() - info.mtimeMs > STALE_LOCK_MS &&
+          pid !== undefined &&
+          !processAlive(pid) &&
+          readFileSync(lockPath, "utf8") === owner
+        ) {
+          unlinkSync(lockPath);
+          continue;
+        }
+      } catch (error) {
+        if (errorCode(error) === "ENOENT") continue;
+      }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
   return undefined;
+}
+
+export function releaseSessionLock(lock: SessionLock): void {
+  closeSync(lock.fd);
+  try {
+    if (readFileSync(lock.path, "utf8") === lock.token) unlinkSync(lock.path);
+  } catch {
+    /* A successor owns the lock, or it is already gone. */
+  }
 }
 
 export async function recordSession(
@@ -267,12 +335,7 @@ export async function recordSession(
     }
     return true;
   } finally {
-    closeSync(lock);
-    try {
-      unlinkSync(`${path}.lock`);
-    } catch {
-      /* The lock may have been removed as stale. */
-    }
+    releaseSessionLock(lock);
   }
 }
 
