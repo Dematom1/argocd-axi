@@ -1544,6 +1544,18 @@ const APPS_ACTION_RUN_SPEC: CommandSpec = {
       valueName: "resource",
       description: "Resource name",
     },
+    {
+      name: "--group",
+      kind: "value",
+      valueName: "group",
+      description: "Resource API group when needed to disambiguate",
+    },
+    {
+      name: "--namespace",
+      kind: "value",
+      valueName: "namespace",
+      description: "Resource namespace when needed to disambiguate",
+    },
     { name: "--confirm", kind: "bool", description: "Execute after preview" },
     CONTEXT_FLAG,
   ],
@@ -1558,6 +1570,8 @@ async function appsActionRun(args: string[]): Promise<string> {
   const action = validateName("action", parsed.positionals[1] as string);
   const kind = getString(parsed, "--kind");
   const resourceName = getString(parsed, "--name");
+  const group = getString(parsed, "--group");
+  const namespace = getString(parsed, "--namespace");
   if (!kind || !resourceName)
     throw validationError("apps actions run needs --kind and --name");
   const context = getString(parsed, "--context"),
@@ -1573,12 +1587,22 @@ async function appsActionRun(args: string[]): Promise<string> {
   );
   const options = { context: gate.context };
   const app = await getApp(appNameArg, options);
-  const resource = (app.status?.resources ?? []).find(
-    (r) => r.kind === kind && r.name === resourceName,
+  const resources = (app.status?.resources ?? []).filter(
+    (r) =>
+      r.kind === kind &&
+      r.name === resourceName &&
+      (group === undefined || r.group === group) &&
+      (namespace === undefined || r.namespace === namespace),
   );
+  const resource = resources[0];
   if (!resource)
     throw axiError(
       `REFUSED: ${kind}/${resourceName} is not managed by ${appNameArg}`,
+      CODES.REFUSED,
+    );
+  if (resources.length > 1)
+    throw axiError(
+      `REFUSED: ${kind}/${resourceName} is ambiguous; specify --group and/or --namespace`,
       CODES.REFUSED,
     );
   const actions = await argocdJson<Array<Record<string, unknown>>>(
@@ -1590,6 +1614,8 @@ async function appsActionRun(args: string[]): Promise<string> {
     !actions.some(
       (entry) =>
         String(pick(entry, "name") ?? "") === resourceName &&
+        String(pick(entry, "group") ?? "") === (resource.group ?? "") &&
+        String(pick(entry, "kind") ?? "") === kind &&
         String(pick(entry, "action") ?? "") === action &&
         pick(entry, "disabled") !== true,
     )

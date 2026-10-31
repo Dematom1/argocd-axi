@@ -37,7 +37,8 @@ describe("apps", () => {
     const { stdout, calls } = await runCli(
       [
         "apps", "actions", "run", "web", "restart", "--kind", "Rollout",
-        "--name", "web", "--context", "prod", "--confirm",
+        "--name", "web", "--group", "argoproj.io", "--namespace", "shop",
+        "--context", "prod", "--confirm",
       ],
       {
         home,
@@ -49,7 +50,7 @@ describe("apps", () => {
           },
           {
             argv: ["account", "can-i", "action/argoproj.io/Rollout/restart", "applications", "shop/web"],
-            stdout: "no\\n",
+            stdout: "no\n",
           },
         ]),
       },
