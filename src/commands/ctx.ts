@@ -236,6 +236,14 @@ async function writableAdd(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
   const name = validateContextName(parsed.positionals[0] as string);
   const listing = await listContexts();
+  if (listing.notInstalled) throw listing.notInstalled;
+  if (listing.unavailable) {
+    throw axiError(
+      `cannot list Argo CD contexts: ${listing.unavailable}`,
+      CODES.NO_CONTEXT,
+      LOGIN_HELP,
+    );
+  }
   const match = listing.contexts.find((context) => context.name === name);
   if (!match)
     throw axiError(

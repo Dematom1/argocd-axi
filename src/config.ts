@@ -96,13 +96,20 @@ function updateWritableContext(name: string, add: boolean): void {
   const path = configPath();
   mkdirSync(join(path, ".."), { recursive: true });
   const lockPath = `${path}.lock`;
+  const waitCell = new Int32Array(new SharedArrayBuffer(4));
+  const deadline = Date.now() + 5000;
   while (true) {
     try {
       mkdirSync(lockPath);
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      if (Date.now() >= deadline)
+        throw axiError(
+          `timed out waiting for writable-context config lock ${lockPath}`,
+          CODES.CONFIG_INVALID,
+        );
+      Atomics.wait(waitCell, 0, 0, 10);
     }
   }
   try {
