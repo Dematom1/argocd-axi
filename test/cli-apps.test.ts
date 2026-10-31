@@ -1071,6 +1071,55 @@ describe("apps", () => {
     ]);
   });
 
+  it("observes resource health after an action even when initially healthy", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const app = JSON.stringify({
+      spec: { project: "shop" },
+      status: {
+        resources: [
+          {
+            group: "apps", kind: "Deployment", name: "worker", namespace: "shop",
+            health: { status: "Healthy" },
+          },
+        ],
+      },
+    });
+    const { stdout, calls } = await runCli(
+      [
+        "apps", "actions", "run", "web", "restart", "--kind", "Deployment",
+        "--name", "worker", "--context", "prod", "--confirm", "--timeout", "1",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "web"], stdout: app },
+          {
+            argv: ["app", "actions", "list", "web", "--kind", "Deployment", "-o", "json"],
+            stdout: JSON.stringify([
+              { Group: "apps", Kind: "Deployment", Name: "worker", Action: "restart", Disabled: false },
+            ]),
+          },
+          {
+            argv: ["account", "can-i", "action/apps/Deployment/restart", "applications", "shop/web"],
+            stdout: "yes\n",
+          },
+          {
+            argv: ["app", "actions", "run", "web"],
+            contains: ["--resource-name", "worker"],
+            stdout: "",
+          },
+        ]),
+      },
+    );
+    expect(stdout).toContain("state:");
+    expect(calls.filter((call) => call[0] === "app" && call[1] === "get")).toHaveLength(2);
+  });
+
   it("previews auto-sync changes and requires explicit confirmation", async () => {
     const result = await runCli([
       "apps",
@@ -1092,11 +1141,17 @@ describe("apps", () => {
       "writable-contexts: [staging]\n",
     );
     const executed = await runCli(
-      ["apps", "auto-sync", "web", "on", "--confirm", "--context", "staging"],
+      [
+        "apps", "auto-sync", "web", "on", "--confirm", "--timeout", "1",
+        "--context", "staging",
+      ],
       { home: result.home },
     );
-    expect(executed.calls.at(-1)).toContain("--sync-policy");
-    expect(executed.calls.at(-1)).toContain("automated");
-    expect(executed.calls.at(-1)).toContain("--info");
+    expect(executed.stdout).toContain("state:");
+    expect(executed.calls.some((call) => call[0] === "app" && call[1] === "get")).toBe(true);
+    const setCall = executed.calls.find((call) => call[0] === "app" && call[1] === "set");
+    expect(setCall).toContain("--sync-policy");
+    expect(setCall).toContain("automated");
+    expect(setCall).toContain("--info");
   });
 });

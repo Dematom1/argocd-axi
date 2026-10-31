@@ -1675,21 +1675,27 @@ async function appsActionRun(args: string[]): Promise<string> {
     options,
     appNameArg,
   );
-  const deadline = Date.now() + timeout * 1000;
-  let current = app;
-  let state = resource.health?.status ?? "unknown";
-  while (state !== "Healthy" && Date.now() < deadline) {
-    await delay(Math.min(1000, deadline - Date.now()));
-    current = await getApp(appNameArg, options);
-    const updated = current.status?.resources?.find(
-      (r) =>
-        r.group === resource.group &&
-        r.kind === resource.kind &&
-        r.namespace === resource.namespace &&
-        r.name === resource.name,
-    );
-    state = updated?.health?.status ?? "unknown";
-  }
+  const current = await waitForAppState(
+    appNameArg,
+    timeout,
+    options,
+    (fresh) =>
+      fresh.status?.resources?.some(
+        (r) =>
+          r.group === resource.group &&
+          r.kind === resource.kind &&
+          r.namespace === resource.namespace &&
+          r.name === resource.name &&
+          r.health?.status === "Healthy",
+      ) ?? false,
+  );
+  const state = current.status?.resources?.find(
+    (r) =>
+      r.group === resource.group &&
+      r.kind === resource.kind &&
+      r.namespace === resource.namespace &&
+      r.name === resource.name,
+  )?.health?.status ?? "unknown";
   return finish(
     [...blocks, encodeObject({ result: "submitted", state })],
     undefined,
@@ -1788,6 +1794,21 @@ function writeOutcome(
   if (phase === "Succeeded") return completed;
   if (timedOut) return "waiting";
   return phase ?? "unknown";
+}
+
+async function waitForAppState(
+  name: string,
+  timeout: number,
+  options: { context?: string },
+  settled: (app: Application) => boolean,
+): Promise<Application> {
+  const deadline = Date.now() + timeout * 1000;
+  let app = await getApp(name, options);
+  while (!settled(app) && Date.now() < deadline) {
+    await delay(Math.min(1000, Math.max(0, deadline - Date.now())));
+    app = await getApp(name, options);
+  }
+  return app;
 }
 
 async function waitForWrite(
@@ -2040,6 +2061,12 @@ const APPS_AUTO_SYNC_SPEC: CommandSpec = {
   ],
   flags: [
     { name: "--confirm", kind: "bool", description: "Execute after preview" },
+    {
+      name: "--timeout",
+      kind: "value",
+      valueName: "s",
+      description: "Maximum wait in seconds (default 120)",
+    },
     CONTEXT_FLAG,
   ],
   examples: ["argocd-axi apps auto-sync guestbook on --context staging"],
@@ -2052,7 +2079,8 @@ async function appsAutoSync(args: string[]): Promise<string> {
   if (mode !== "on" && mode !== "off")
     throw validationError("mode must be on or off");
   const context = getString(parsed, "--context"),
-    confirm = getBool(parsed, "--confirm");
+    confirm = getBool(parsed, "--confirm"),
+    timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
   const gate = evaluateWriteGate(
     {
       command: "apps auto-sync",
@@ -2083,7 +2111,22 @@ async function appsAutoSync(args: string[]): Promise<string> {
     options,
     name,
   );
-  return finish([...blocks, encodeObject({ result: "submitted" })], undefined);
+  const current = await waitForAppState(
+    name,
+    timeout,
+    options,
+    (fresh) =>
+      (mode === "on"
+        ? autoSyncSummary(fresh).startsWith("automated")
+        : autoSyncSummary(fresh) === "manual"),
+  );
+  return finish(
+    [
+      ...blocks,
+      encodeObject({ result: "submitted", state: autoSyncSummary(current) }),
+    ],
+    undefined,
+  );
 }
 
 SUBCOMMANDS["auto-sync"] = { spec: APPS_AUTO_SYNC_SPEC, run: appsAutoSync };
