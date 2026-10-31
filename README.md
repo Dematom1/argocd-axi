@@ -231,9 +231,11 @@ specific app.
 - **Writable contexts.** argocd-axi's own config file,
   `~/.config/argocd-axi/config` (or `$XDG_CONFIG_HOME/argocd-axi/config`),
   holds the allowlist of contexts where Application writes may execute.
-  It defaults to none. To allow writes on a context, a human runs
-  `argocd-axi ctx writable add <context>` in a terminal and confirms the exact
-  context name. Use `argocd-axi ctx writable remove <context>` to revoke access.
+  It defaults to none. To allow writes, a human runs
+  `argocd-axi ctx writable add` in a terminal to select a configured context,
+  or passes `<context>` directly; either path requires an explicit y/yes
+  confirmation. Non-interactive runs are refused. Use
+  `argocd-axi ctx writable remove <context>` to revoke access.
 
 - **Version cache.** The server version is checked at most once every 12
   hours per context and server, and cached in `~/.cache/argocd-axi/`

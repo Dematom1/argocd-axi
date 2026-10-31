@@ -11,6 +11,15 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { decode } from "@toon-format/toon";
 import { VERSION } from "../src/version.js";
+import { PassThrough } from "node:stream";
+import {
+  addWritableContextIfConfirmed,
+  chooseContext,
+  confirmWritableContext,
+  contextDetails,
+  readConfirmation,
+} from "../src/commands/ctx.js";
+import { loadConfig } from "../src/config.js";
 import { renderHelp } from "../src/toon.js";
 import { ROOT, makeHome, runCli, scenario } from "./helpers.js";
 
@@ -63,7 +72,121 @@ describe("refusals (A2, A-c22)", () => {
 });
 
 describe("writable context management", () => {
-  it("reports no-op add and remove outcomes accurately", async () => {
+  it("lists contexts with server, user, and writable state, then picks by number", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let shown = "";
+    output.setEncoding("utf8");
+    output.on("data", (chunk: string) => (shown += chunk));
+
+    const selected = chooseContext(
+      [
+        { name: "prod", server: "https://prod", username: "alice" },
+        { name: "staging", server: "https://staging", username: "bob" },
+      ],
+      ["prod"],
+      input,
+      output,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(shown).toContain(
+      "1. prod - https://prod - alice (already writable)",
+    );
+    expect(shown).toContain("2. staging - https://staging - bob");
+    input.write("2\n");
+    await expect(selected).resolves.toBe("staging");
+  });
+
+  it.each(["0", "3", "abc", ""])(
+    "refuses invalid context selection (%s)",
+    async (answer) => {
+      const input = new PassThrough();
+      const output = new PassThrough();
+      const selected = chooseContext(
+        [
+          {
+            name: "prod",
+            server: "https://prod",
+            username: "alice",
+          },
+        ],
+        [],
+        input,
+        output,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      input.write(`${answer}\n`);
+      await expect(selected).rejects.toThrow("invalid context selection");
+    },
+  );
+
+  it("treats input close as a declined confirmation without changing config", async () => {
+    const configHome = makeHome();
+    const previous = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = configHome;
+    try {
+      expect(loadConfig().config.writableContexts).toEqual([]);
+      expect(addWritableContextIfConfirmed("staging", false)).toBe(false);
+      expect(loadConfig().config.writableContexts).toEqual([]);
+      const input = new PassThrough();
+      const answer = readConfirmation(input, new PassThrough(), "confirm? ");
+      input.end();
+      await expect(answer).resolves.toBe("");
+    } finally {
+      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previous;
+    }
+  });
+
+  it("shows unknown when user lookup fails", async () => {
+    const [context] = await contextDetails(
+      [{ name: "staging", server: "https://staging", current: false }],
+      async () => {
+        throw new Error("offline");
+      },
+    );
+    expect(context?.username).toBe("unknown");
+  });
+
+  it.each([
+    ["y", true],
+    ["yes", true],
+    ["n", false],
+    ["", false],
+  ])(
+    "requires an explicit yes for the write grant (%s)",
+    async (answer, allowed) => {
+      const input = new PassThrough();
+      const output = new PassThrough();
+      let shown = "";
+      output.setEncoding("utf8");
+      output.on("data", (chunk: string) => (shown += chunk));
+      const confirmation = confirmWritableContext(
+        "staging",
+        "https://staging",
+        input,
+        output,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(shown).toContain(
+        "sync, rollback, refresh, and terminate operations",
+      );
+      expect(shown).toContain("context staging (https://staging)? [y/N]");
+      input.write(`${answer}\n`);
+      await expect(confirmation).resolves.toBe(allowed);
+    },
+  );
+
+  it("refuses add without an interactive terminal", async () => {
+    const named = await runCli(["ctx", "writable", "add", "staging"]);
+    const picker = await runCli(["ctx", "writable", "add"]);
+    expect(named.stdout).toContain("require an interactive terminal");
+    expect(picker.stdout).toContain("require an interactive terminal");
+    expect(named.calls).toEqual([]);
+    expect(picker.calls).toEqual([]);
+  });
+
+  it("refuses non-interactive adds and reports no-op removes", async () => {
     const home = makeHome();
     const configDir = join(home, ".config", "argocd-axi");
     mkdirSync(configDir, { recursive: true });
@@ -73,11 +196,9 @@ describe("writable context management", () => {
     );
 
     const add = await runCli(["ctx", "writable", "add", "staging"], { home });
-    expect(add.exitCode).toBe(0);
-    expect(add.stdout).toContain("staging is already writable (no change)");
-    expect(add.calls.some((argv) => argv.includes("get-user-info"))).toBe(
-      false,
-    );
+    expect(add.exitCode).toBe(1);
+    expect(add.stdout).toContain("require an interactive terminal");
+    expect(add.calls).toEqual([]);
 
     const remove = await runCli(["ctx", "writable", "remove", "missing"], {
       home,
