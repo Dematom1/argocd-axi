@@ -16,17 +16,8 @@ The gate is built in `src/gate.ts`, with its allowlist loaded from
 
 1. **Preview by default.** Without `--confirm`, no write is sent. Each write
    previews the target action before execution.
-2. **A local allowlist of writable contexts, default none.** Executing needs
-   the context listed in argocd-axi's own config file,
-   `~/.config/argocd-axi/config` (or `$XDG_CONFIG_HOME/argocd-axi/config`):
-
-   ```yaml
-   writable-contexts:
-     - staging
-   ```
-
-   A production context stays read-only until a human opts it in locally.
-   `ctx` and the home view already show `writableContexts: none`.
+2. **A local allowlist of writable contexts, default none.** See [README.md](README.md)
+   for how a human manages the allowlist.
 
 3. **An explicit target.** Every write names `--context <name>`; the current
    context is never used implicitly, and the result echoes the context and
@@ -78,4 +69,3 @@ instances (version, SSO provider, app count) are known.
 
 Submission to the [AXI community catalog](https://github.com/kunchenguid/axi)
 comes after v1. npm releases are automated; see the Releases section in
-[README.md](README.md).

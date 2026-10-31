@@ -1,4 +1,6 @@
-import { runArgocd } from "../argocd.js";
+import { runArgocd, argocdJson } from "../argocd.js";
+import { addWritableContext, removeWritableContext } from "../config.js";
+import { createInterface } from "node:readline/promises";
 import {
   CONTEXT_FLAG,
   getString,
@@ -189,15 +191,168 @@ export async function ctxUse(args: string[]): Promise<string> {
   );
 }
 
+const WRITABLE_SPEC: CommandSpec = {
+  path: "ctx writable",
+  summary: "Manage contexts allowed to perform writes",
+  positionals: [],
+  flags: [],
+  examples: ["argocd-axi ctx writable list"],
+};
+const WRITABLE_ADD_SPEC: CommandSpec = {
+  path: "ctx writable add",
+  summary: "Allow writes on a context after interactive confirmation",
+  positionals: [
+    {
+      name: "context",
+      required: true,
+      description: "Configured Argo CD context",
+    },
+  ],
+  flags: [],
+  examples: ["argocd-axi ctx writable add staging"],
+};
+const WRITABLE_REMOVE_SPEC: CommandSpec = {
+  path: "ctx writable remove",
+  summary: "Remove write access from a context",
+  positionals: [
+    {
+      name: "context",
+      required: true,
+      description: "Configured Argo CD context",
+    },
+  ],
+  flags: [],
+  examples: ["argocd-axi ctx writable remove staging"],
+};
+const WRITABLE_LIST_SPEC: CommandSpec = {
+  path: "ctx writable list",
+  summary: "List contexts allowed to perform writes",
+  positionals: [],
+  flags: [],
+  examples: ["argocd-axi ctx writable list"],
+};
+
+async function writableAdd(args: string[]): Promise<string> {
+  const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
+  const name = validateContextName(parsed.positionals[0] as string);
+  const listing = await listContexts();
+  if (listing.notInstalled) throw listing.notInstalled;
+  if (listing.unavailable) {
+    throw axiError(
+      `cannot list Argo CD contexts: ${listing.unavailable}`,
+      CODES.NO_CONTEXT,
+      LOGIN_HELP,
+    );
+  }
+  const match = listing.contexts.find((context) => context.name === name);
+  if (!match)
+    throw axiError(
+      `Argo CD context ${name} is not configured`,
+      CODES.CONTEXT_NOT_FOUND,
+    );
+  if (loadConfig().config.writableContexts.includes(name))
+    return finish(
+      [
+        encodeObject({
+          writableContext: `${name} is already writable (no change)`,
+        }),
+      ],
+      undefined,
+    );
+  if (!process.stdin.isTTY || !process.stdout.isTTY)
+    throw axiError(
+      "writable context changes require an interactive terminal",
+      CODES.REFUSED,
+    );
+  const info = await argocdJson<{ username?: string }>(
+    "account get-user-info",
+    ["-o", "json"],
+    { context: name },
+  );
+  process.stdout.write(
+    `Context: ${name}\nServer: ${match.server}\nUser: ${info.username ?? "unknown"}\nType ${name} to allow writes: `,
+  );
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  let answer: string;
+  try {
+    answer = await rl.question("");
+  } finally {
+    rl.close();
+  }
+  if (answer !== name)
+    throw axiError(
+      "confirmation did not match; no changes made",
+      CODES.REFUSED,
+    );
+  const changed = addWritableContext(name);
+  return finish(
+    [
+      encodeObject({
+        writableContext: changed
+          ? `added ${name}`
+          : `${name} is already writable (no change)`,
+      }),
+    ],
+    undefined,
+  );
+}
+
+async function writableRemove(args: string[]): Promise<string> {
+  const parsed = parseArgs(WRITABLE_REMOVE_SPEC, args);
+  const name = validateContextName(parsed.positionals[0] as string);
+  const changed = removeWritableContext(name);
+  return finish(
+    [
+      encodeObject({
+        writableContext: changed
+          ? `removed ${name}`
+          : `${name} is not in writable-contexts (no change)`,
+      }),
+    ],
+    undefined,
+  );
+}
+
+async function writableList(args: string[]): Promise<string> {
+  parseArgs(WRITABLE_LIST_SPEC, args);
+  return finish(
+    [encodeObject({ writableContexts: loadConfig().config.writableContexts })],
+    undefined,
+  );
+}
+
+const WRITABLE_SUBCOMMANDS: Record<string, Subcommand> = {
+  add: { spec: WRITABLE_ADD_SPEC, run: writableAdd },
+  remove: { spec: WRITABLE_REMOVE_SPEC, run: writableRemove },
+  list: { spec: WRITABLE_LIST_SPEC, run: writableList },
+};
+
 const SUBCOMMANDS: Record<string, Subcommand> = {
   use: { spec: CTX_USE_SPEC, run: ctxUse },
+  writable: {
+    spec: WRITABLE_SPEC,
+    run: (args) =>
+      dispatch("ctx writable", args, WRITABLE_SUBCOMMANDS, {
+        spec: WRITABLE_SPEC,
+        run: async () => {
+          throw validationError(
+            "expected list, add, or remove for `ctx writable`",
+          );
+        },
+      }),
+  },
 };
 
 export const CTX_SPECS = [CTX_SPEC, CTX_USE_SPEC];
 
 export async function ctxCommand(args: string[]): Promise<string> {
   const first = args[0];
-  if (first !== undefined && !first.startsWith("-") && first !== "use") {
+  if (
+    first !== undefined &&
+    !first.startsWith("-") &&
+    first !== "use" &&
+    first !== "writable"
+  ) {
     throw validationError(`unexpected argument ${first} for \`ctx\``, [
       `To switch contexts, run \`argocd-axi ctx use ${first}\``,
       `To read another context without switching, run \`argocd-axi ctx --context ${first}\``,

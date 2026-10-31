@@ -1,8 +1,14 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { configPath, loadConfig, parseConfig } from "../src/config.js";
+import {
+  addWritableContext,
+  configPath,
+  loadConfig,
+  parseConfig,
+  removeWritableContext,
+} from "../src/config.js";
 import {
   ATTRIBUTION_INFO,
   attributionArgs,
@@ -43,14 +49,30 @@ describe("config loader (decision A4)", () => {
     });
   });
 
+  it("updates an empty or comments-only config and reports whether it changed", () => {
+    expect(addWritableContext("staging")).toBe(true);
+    expect(addWritableContext("staging")).toBe(false);
+    expect(loadConfig().config).toEqual({ writableContexts: ["staging"] });
+    expect(removeWritableContext("missing")).toBe(false);
+    expect(removeWritableContext("staging")).toBe(true);
+
+    mkdirSync(join(dir, "argocd-axi"), { recursive: true });
+    writeFileSync(configPath(), "# existing comment\n");
+    expect(addWritableContext("dev")).toBe(true);
+    expect(readFileSync(configPath(), "utf8")).toContain("# existing comment");
+    expect(loadConfig().config).toEqual({ writableContexts: ["dev"] });
+
+    writeFileSync(configPath(), "---\n");
+    expect(addWritableContext("prod")).toBe(true);
+    expect(loadConfig().config).toEqual({ writableContexts: ["prod"] });
+  });
+
   it("rejects malformed files loudly", () => {
     const bad = (text: string) => () => parseConfig("/x/config", text);
     expect(parseConfig("/x/config", "")).toEqual({ writableContexts: [] });
     expect(bad("writable-contexts: staging")).toThrow(/must be a list/);
     expect(bad("writable-contexts: ['*']")).toThrow(/not patterns/);
-    expect(bad("writeable-contexts: [a]")).toThrow(
-      /unknown setting writeable-contexts/,
-    );
+    expect(bad("other-setting: [a]")).toThrow(/unknown setting other-setting/);
     expect(bad("- a")).toThrow(/mapping/);
     expect(bad("writable-contexts: [1]")).toThrow(/non-empty context name/);
     expect(bad("a: [")).toThrow(/not valid YAML/);

@@ -1,7 +1,16 @@
-import { readFileSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  renameSync,
+  chmodSync,
+  statSync,
+  mkdirSync,
+  unlinkSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { parse } from "yaml";
+import { parse, parseDocument } from "yaml";
 import { CODES, axiError } from "./errors.js";
 
 /**
@@ -91,6 +100,53 @@ export function parseConfig(path: string, text: string): ToolConfig {
     writableContexts.push(entry.trim());
   }
   return { writableContexts: [...new Set(writableContexts)] };
+}
+
+// ponytail: concurrent CLI writers can lose updates; serialize if concurrent config mutations become supported.
+function updateWritableContext(name: string, add: boolean): boolean {
+  const path = configPath();
+  mkdirSync(join(path, ".."), { recursive: true });
+  const loaded = loadConfig();
+  const contexts = loaded.config.writableContexts;
+  const updated = add
+    ? [...new Set([...contexts, name])]
+    : contexts.filter((item) => item !== name);
+  if (
+    updated.length === contexts.length &&
+    updated.every((item, index) => item === contexts[index])
+  )
+    return false;
+  mkdirSync(join(loaded.path, ".."), { recursive: true });
+  const source = loaded.exists ? readFileSync(loaded.path, "utf8") : "";
+  const doc = parseDocument(source || "{}");
+  if (doc.toJS() === null) doc.contents = null;
+  const root = doc.contents;
+  if (root !== null && (root === undefined || !("set" in root)))
+    throw invalid(loaded.path, "the top level must be a mapping");
+  doc.set("writable-contexts", updated);
+  const temp = `${loaded.path}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temp, doc.toString(), {
+      mode: loaded.exists ? statSync(loaded.path).mode & 0o777 : 0o600,
+    });
+    if (loaded.exists) chmodSync(temp, statSync(loaded.path).mode & 0o777);
+    renameSync(temp, loaded.path);
+    return true;
+  } catch (error) {
+    try {
+      unlinkSync(temp);
+    } catch {
+      /* no temporary file */
+    }
+    throw error;
+  }
+}
+
+export function addWritableContext(name: string): boolean {
+  return updateWritableContext(name, true);
+}
+export function removeWritableContext(name: string): boolean {
+  return updateWritableContext(name, false);
 }
 
 export function loadConfig(): LoadedConfig {

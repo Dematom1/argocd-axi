@@ -37,7 +37,7 @@ For anything argocd-axi does not cover, the raw \`argocd\` CLI is the fallback.
 
 ## Setup
 
-Run \`npx -y argocd-axi auth guide\` for offline instructions. A human operator logs in interactively with \`argocd login <server> --sso --grpc-web\`; agents and CI use \`ARGOCD_SERVER\` and \`ARGOCD_AUTH_TOKEN\` from a scoped account token. The user owns login; argocd-axi never logs in. Verify access with \`npx -y argocd-axi whoami\`.
+Run \`npx -y argocd-axi auth guide\` for offline instructions. A human operator logs in interactively with \`argocd login <server> --sso --grpc-web\`; agents and CI use \`ARGOCD_SERVER\` and \`ARGOCD_AUTH_TOKEN\` from a scoped account token. The user owns login; argocd-axi never logs in. Verify access with \`npx -y argocd-axi whoami\`. To enable writes on a context, a human runs \`argocd-axi ctx writable add <context>\` in a terminal and confirms the context name.
 
 ## Workflow
 
