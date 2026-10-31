@@ -73,9 +73,9 @@ Requirements:
   on `PATH`, ideally matching your server's version. Tested with argocd
   v3.3.6. There is no hard minimum; `ctx` and the home view warn when the CLI
   and server differ by a major version.
-- Windows is not supported: suggested commands use POSIX shell quoting, which
-  is not valid in Windows shells. CI runs Windows to catch portability issues,
-  but that does not make the CLI's printed commands safe to copy there.
+- Windows is not tested or supported yet. Config/cache paths, credential
+  storage, Claude Code hook installation and session-end, and printed-command
+  shell quoting are deferred to a separate follow-up PR.
 
 ## Setup
 
