@@ -94,7 +94,11 @@ export async function contextCommand(args: string[]): Promise<string> {
     );
   const cwd = typeof payload.cwd === "string" ? payload.cwd : process.cwd();
   try {
-    recordSession(directory(cwd), summary);
+    if (!(await recordSession(directory(cwd), summary)))
+      return finish(
+        [encodeObject({ recorded: "nothing - session log is busy" })],
+        undefined,
+      );
   } catch {
     return finish(
       [

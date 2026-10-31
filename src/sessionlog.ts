@@ -1,7 +1,9 @@
 import {
   chmodSync,
+  closeSync,
   createReadStream,
   mkdirSync,
+  openSync,
   readFileSync,
   renameSync,
   statSync,
@@ -14,6 +16,8 @@ import { createInterface } from "node:readline";
 import { configPath } from "./config.js";
 
 const MAX_DIRECTORIES = 100;
+const LOCK_WAIT_MS = 2_000;
+const STALE_LOCK_MS = 30_000;
 const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 const TOOL = "argocd-axi";
 const COMMANDS = new Set([
@@ -191,34 +195,72 @@ function readSessions(): Record<string, SessionSummary> {
   return {};
 }
 
-export function recordSession(
+async function acquireLock(path: string): Promise<number | undefined> {
+  const lockPath = `${path}.lock`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (Date.now() < deadline) {
+    try {
+      return openSync(lockPath, "wx", 0o600);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") return undefined;
+      try {
+        if (Date.now() - statSync(lockPath).mtimeMs > STALE_LOCK_MS) {
+          unlinkSync(lockPath);
+          continue;
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  return undefined;
+}
+
+export async function recordSession(
   directory: string,
   summary: SessionSummary,
-): void {
-  const directories = readSessions();
-  delete directories[directory];
-  directories[directory] = summary;
-  for (const old of Object.keys(directories).slice(
-    0,
-    Math.max(0, Object.keys(directories).length - MAX_DIRECTORIES),
-  ))
-    delete directories[old];
+): Promise<boolean> {
   const path = sessionsPath();
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${randomUUID()}.tmp`;
+  const lock = await acquireLock(path);
+  if (lock === undefined) return false;
   try {
-    writeFileSync(temporary, `${JSON.stringify({ directories }, null, 2)}\n`, {
-      mode: 0o600,
-    });
-    chmodSync(temporary, 0o600);
-    renameSync(temporary, path);
-  } catch (error) {
+    const directories = readSessions();
+    delete directories[directory];
+    directories[directory] = summary;
+    for (const old of Object.keys(directories).slice(
+      0,
+      Math.max(0, Object.keys(directories).length - MAX_DIRECTORIES),
+    ))
+      delete directories[old];
+    const temporary = `${path}.${randomUUID()}.tmp`;
     try {
-      unlinkSync(temporary);
-    } catch {
-      /* No temporary file to remove. */
+      writeFileSync(
+        temporary,
+        `${JSON.stringify({ directories }, null, 2)}\n`,
+        {
+          mode: 0o600,
+        },
+      );
+      chmodSync(temporary, 0o600);
+      renameSync(temporary, path);
+    } catch (error) {
+      try {
+        unlinkSync(temporary);
+      } catch {
+        /* No temporary file to remove. */
+      }
+      throw error;
     }
-    throw error;
+    return true;
+  } finally {
+    closeSync(lock);
+    try {
+      unlinkSync(`${path}.lock`);
+    } catch {
+      /* The lock may have been removed as stale. */
+    }
   }
 }
 

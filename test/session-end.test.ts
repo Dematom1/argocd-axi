@@ -1,5 +1,6 @@
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   statSync,
@@ -105,6 +106,66 @@ describe("session-end memory", () => {
     expect(removed.exitCode).toBe(0);
     if (process.platform !== "win32")
       expect(statSync(settings).mode & 0o777).toBe(0o640);
+  });
+
+  it("keeps both directory records when session ends run concurrently", async () => {
+    const home = makeHome();
+    const transcript = (name: string) => {
+      const path = join(home, `${name}.jsonl`);
+      const calls = Array.from({ length: 5000 }, () =>
+        JSON.stringify({
+          type: "tool_use",
+          input: { command: "argocd-axi apps" },
+        }),
+      );
+      writeFileSync(path, calls.join("\n"));
+      return path;
+    };
+    const first = JSON.stringify({
+      transcript_path: transcript("first"),
+      cwd: "/workspace/first",
+    });
+    const second = JSON.stringify({
+      transcript_path: transcript("second"),
+      cwd: "/workspace/second",
+    });
+    const results = await Promise.all([
+      runCli(["context", "end"], { home, stdin: first }),
+      runCli(["context", "end"], { home, stdin: second }),
+    ]);
+    expect(results.map((result) => result.exitCode)).toEqual([0, 0]);
+    const sessions = JSON.parse(
+      readFileSync(
+        join(home, ".config", "argocd-axi", "sessions.json"),
+        "utf8",
+      ),
+    ) as { directories: Record<string, { commands: Record<string, number> }> };
+    expect(sessions.directories["/workspace/first"]?.commands.apps).toBe(5000);
+    expect(sessions.directories["/workspace/second"]?.commands.apps).toBe(5000);
+  });
+
+  it("skips recording when another session holds the lock", async () => {
+    const home = makeHome();
+    const dir = join(home, ".config", "argocd-axi");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(home, "transcript.jsonl"),
+      JSON.stringify({
+        type: "tool_use",
+        input: { command: "argocd-axi apps" },
+      }),
+    );
+    writeFileSync(join(dir, "sessions.json.lock"), "held");
+    const result = await runCli(["context", "end"], {
+      home,
+      stdin: JSON.stringify({
+        transcript_path: join(home, "transcript.jsonl"),
+        cwd: "/workspace/busy",
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("session log is busy");
+    expect(existsSync(join(dir, "sessions.json"))).toBe(false);
   });
 
   it("treats missing and corrupt session files as empty memory", async () => {
