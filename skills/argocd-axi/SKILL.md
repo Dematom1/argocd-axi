@@ -13,14 +13,14 @@ If argocd-axi output suggests a command starting with `argocd-axi`, run it as `n
 
 argocd-axi wraps the `argocd` CLI, which must be on PATH and already logged in (or have `ARGOCD_AUTH_TOKEN` set).
 It uses that session as is and adds no auth of its own; it never logs in, never prompts, and never reads the argocd config file.
-Run `npx -y argocd-axi auth guide` for setup instructions; the README is the authority for credential setup. The tool never logs in. If a command answers `AUTH_EXPIRED`, show its exact login command to the operator; an unreachable server is a separate error.
+Run `npx -y argocd-axi auth guide` for setup instructions; the README is the authority for credential setup. The tool never logs in. If a command answers `AUTH_EXPIRED`, show the exact operator login command when the server is known; otherwise show the fallback login syntax and ask for the server address. An unreachable server is a separate error.
 
 It is read-only except for opt-in writes on contexts listed in `writable-contexts`. `apps sync` previews the diff and does nothing unless `--confirm` is passed; pruning also requires `--prune`. Other writes answer `REFUSED`.
 For anything argocd-axi does not cover, the raw `argocd` CLI is the fallback.
 
 ## Workflow
 
-1. Set up access: `npx -y argocd-axi auth guide`, then verify with `npx -y argocd-axi ctx`.
+1. Set up access: `npx -y argocd-axi auth guide`, then verify credentials with `npx -y argocd-axi whoami`.
 2. Start wide: `npx -y argocd-axi` shows the context, server, user, every app needing attention with the reason, and running operations.
 3. Drill in: `apps view <app>` gives source, destination, sync and health, the last operation and its message, conditions, auto-sync, and problem resources.
 4. Find out why it is out of sync: `apps diff <app>` lists the resources that differ (`--full` adds the line diff); `apps history <app>` shows what was deployed when and by whom.

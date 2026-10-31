@@ -16,12 +16,20 @@ export async function authCommand(args: string[]): Promise<string> {
   if (args[0] !== "guide") throw validationError("expected auth guide");
   const parsed = parseArgs(GUIDE_SPEC, args.slice(1));
   const explicitContext = contextOption(parsed).context;
-  const listing = await listContexts();
+  let listing: Awaited<ReturnType<typeof listContexts>>;
+  try {
+    listing = await listContexts();
+  } catch (error) {
+    listing = {
+      contexts: [],
+      unavailable: error instanceof Error ? error.message : String(error),
+    };
+  }
   const { target } = await resolveTarget(explicitContext, listing);
   const server = target.envServer ?? target.server;
   const login = server
     ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
-    : undefined;
+    : "argocd login <server> --sso --grpc-web";
   return finish(
     [
       encodeObject({
@@ -38,8 +46,10 @@ export async function authCommand(args: string[]): Promise<string> {
       }),
     ],
     undefined,
-    login
+    server
       ? []
-      : ["Run `argocd-axi ctx` to identify the server for the login command"],
+      : [
+          "Obtain the Argo CD server address, then replace `<server>` in the login command",
+        ],
   );
 }

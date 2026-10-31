@@ -81,8 +81,9 @@ has: the current context's session, or `ARGOCD_SERVER` and
 `ARGOCD_AUTH_TOKEN` from the environment. It never starts a login, never
 prompts, and never reads the argocd config file (`~/.config/argocd/config`,
 which holds clear-text tokens). A missing session answers `AUTH_REQUIRED`; an
-expired or rejected login answers `AUTH_EXPIRED` with the exact operator login
-command. Run
+expired or rejected login answers `AUTH_EXPIRED`. When the target server is
+known, help includes the exact operator login command; otherwise it shows the
+login syntax and asks for the server address. Run
 `argocd-axi auth guide` for offline setup instructions. Human operators run
 `argocd login <server> --sso --grpc-web` interactively themselves. Agents and
 CI should set `ARGOCD_SERVER` and `ARGOCD_AUTH_TOKEN` from a scoped account
@@ -191,21 +192,21 @@ specific app.
   Unknown flags are rejected before any argocd call, with the valid flags
   listed.
 
-| Code                              | Meaning                                                                                |
-| --------------------------------- | -------------------------------------------------------------------------------------- |
-| `VALIDATION_ERROR`                | Bad flag or argument (exit 2)                                                          |
-| `AUTH_REQUIRED`                   | No session is configured                                                               |
-| `AUTH_EXPIRED`                    | Argo CD rejected or expired the login; help prints the exact operator command          |
-| `FORBIDDEN`                       | Argo CD RBAC denied it (Argo CD also says this for objects in projects you cannot see) |
-| `NOT_FOUND`                       | No such app, project or ApplicationSet                                                 |
-| `RATE_LIMITED`                    | The server asked to slow down                                                          |
-| `SERVER_UNREACHABLE`              | Network or TLS failure reaching the server                                             |
-| `REFUSED`                         | A verb argocd-axi does not run, with the reason and the human route                    |
-| `NO_CONTEXT`, `CONTEXT_NOT_FOUND` | No current context, or `--context` names one that is not configured                    |
-| `TIMEOUT`                         | argocd did not answer in time                                                          |
-| `ARGOCD_NOT_INSTALLED`            | No `argocd` on `PATH`                                                                  |
-| `CONFIG_INVALID`                  | argocd-axi's own config file is malformed                                              |
-| `UPSTREAM_ERROR`                  | Any other argocd failure, with its cleaned message                                     |
+| Code                              | Meaning                                                                                       |
+| --------------------------------- | --------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`                | Bad flag or argument (exit 2)                                                                 |
+| `AUTH_REQUIRED`                   | No session is configured                                                                      |
+| `AUTH_EXPIRED`                    | Argo CD rejected or expired the login; help prints the exact command when the server is known |
+| `FORBIDDEN`                       | Argo CD RBAC denied it (Argo CD also says this for objects in projects you cannot see)        |
+| `NOT_FOUND`                       | No such app, project or ApplicationSet                                                        |
+| `RATE_LIMITED`                    | The server asked to slow down                                                                 |
+| `SERVER_UNREACHABLE`              | Network or TLS failure reaching the server                                                    |
+| `REFUSED`                         | A verb argocd-axi does not run, with the reason and the human route                           |
+| `NO_CONTEXT`, `CONTEXT_NOT_FOUND` | No current context, or `--context` names one that is not configured                           |
+| `TIMEOUT`                         | argocd did not answer in time                                                                 |
+| `ARGOCD_NOT_INSTALLED`            | No `argocd` on `PATH`                                                                         |
+| `CONFIG_INVALID`                  | argocd-axi's own config file is malformed                                                     |
+| `UPSTREAM_ERROR`                  | Any other argocd failure, with its cleaned message                                            |
 
 ## Safety model
 

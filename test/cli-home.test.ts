@@ -29,6 +29,21 @@ describe("home view", () => {
     expect(calls.filter(isNetworkCall)).toEqual([]);
   });
 
+  it("keeps the guide usable when context lookup times out without a server", async () => {
+    const timedOutLookup = scenario([
+      { argv: ["context"], exact: true, delayMs: 15_000 },
+    ]);
+    const { stdout, exitCode } = await runCli(["auth", "guide"], {
+      scenario: timedOutLookup,
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(
+      "contexts: unavailable - argocd did not answer within 10s",
+    );
+    expect(stdout).toContain("argocd login <server> --sso --grpc-web");
+    expect(stdout).toContain("Obtain the Argo CD server address");
+  });
+
   it("includes the context lookup failure in the offline guide", async () => {
     const failedLookup = scenario([
       {
