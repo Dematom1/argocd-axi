@@ -309,6 +309,7 @@ async function writableAdd(args: string[]): Promise<string> {
   let name = parsed.positionals[0]
     ? validateContextName(parsed.positionals[0])
     : undefined;
+  let username: string | undefined;
   if (name === undefined) {
     if (listing.contexts.length === 0)
       throw axiError(
@@ -316,17 +317,15 @@ async function writableAdd(args: string[]): Promise<string> {
         CODES.NO_CONTEXT,
       );
     const details = await Promise.all(
-      listing.contexts.map(async (context) => ({
-        ...context,
-        username:
-          (
-            await argocdJson<{ username?: string }>(
-              "account get-user-info",
-              ["-o", "json"],
-              { context: context.name },
-            )
-          ).username ?? "unknown",
-      })),
+      listing.contexts.map(async (context) => {
+        const username =
+          (await argocdJson<{ username?: string }>(
+            "account get-user-info",
+            ["-o", "json"],
+            { context: context.name },
+          ).catch(() => undefined))?.username ?? "unknown";
+        return { ...context, username };
+      }),
     );
     name = await chooseContext(
       details,
@@ -334,6 +333,7 @@ async function writableAdd(args: string[]): Promise<string> {
       process.stdin,
       process.stdout,
     );
+    username = details.find((context) => context.name === name)?.username;
   }
   const selectedName = name;
   const match = listing.contexts.find(
@@ -353,13 +353,15 @@ async function writableAdd(args: string[]): Promise<string> {
       ],
       undefined,
     );
-  const info = await argocdJson<{ username?: string }>(
-    "account get-user-info",
-    ["-o", "json"],
-    { context: selectedName },
-  );
+  username ??= (
+    await argocdJson<{ username?: string }>(
+      "account get-user-info",
+      ["-o", "json"],
+      { context: selectedName },
+    )
+  ).username;
   process.stdout.write(
-    `Context: ${selectedName}\nServer: ${match.server}\nUser: ${info.username ?? "unknown"}\n`,
+    `Context: ${selectedName}\nServer: ${match.server}\nUser: ${username ?? "unknown"}\n`,
   );
   if (
     !(await confirmWritableContext(
