@@ -43,7 +43,14 @@ export function buildArgv(
   const operation = OPERATIONS[op];
   for (const arg of args) {
     const name = arg.startsWith("--") ? arg.split("=")[0] : arg;
-    if (name !== undefined && FORBIDDEN_ARGS.includes(name)) {
+    if (
+      name !== undefined &&
+      FORBIDDEN_ARGS.includes(name) &&
+      !(
+        op === "app refresh" &&
+        (name === "--refresh" || name === "--hard-refresh")
+      )
+    ) {
       throw axiError(
         `internal guard: argument ${name} is never passed to argocd`,
         CODES.REFUSED,

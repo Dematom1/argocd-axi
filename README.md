@@ -219,9 +219,7 @@ specific app.
   local-file and delete flags whatever a command passes, gives argocd no
   stdin, and enforces a timeout and an output cap. Tests fail if a new
   operation becomes reachable without updating the registry.
-- **A refusal registry.** Known writes and credential commands answer
-  `REFUSED` with a reason and the raw command a human can run instead of
-  failing blind.
+- **Opt-in Application writes.** Sync, rollback, refresh and terminate-op require an explicit context, preview and `--confirm`; execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
 - **Redaction.** Kubernetes Secret `data`, `stringData` and their
   last-applied annotation, values under sensitive-looking keys, and env-var or
   Helm-parameter pairs with sensitive-looking names are replaced with
@@ -232,8 +230,8 @@ specific app.
   reach them.
 - **Writable contexts.** argocd-axi's own config file,
   `~/.config/argocd-axi/config` (or `$XDG_CONFIG_HOME/argocd-axi/config`),
-  holds the allowlist of contexts where the future write tier may execute.
-  It defaults to none, and v1 only displays it:
+  holds the allowlist of contexts where Application writes may execute.
+  It defaults to none:
 
   ```yaml
   writable-contexts:

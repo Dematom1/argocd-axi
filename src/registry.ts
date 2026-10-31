@@ -52,6 +52,24 @@ export const OPERATIONS = {
     network: true,
     timeoutMs: READ_TIMEOUT_MS,
   },
+  "app rollback": {
+    argv: ["app", "rollback"],
+    tier: "write",
+    network: true,
+    timeoutMs: READ_TIMEOUT_MS,
+  },
+  "app terminate-op": {
+    argv: ["app", "terminate-op"],
+    tier: "write",
+    network: true,
+    timeoutMs: READ_TIMEOUT_MS,
+  },
+  "app refresh": {
+    argv: ["app", "get"],
+    tier: "write",
+    network: true,
+    timeoutMs: READ_TIMEOUT_MS,
+  },
   "app resources": {
     argv: ["app", "resources"],
     tier: "read",
@@ -209,27 +227,6 @@ const PLANNED =
  * answer REFUSED with the raw argocd route a human can take today.
  */
 export const PLANNED_WRITES: Record<string, Refusal> = {
-  "apps rollback": {
-    reason: `apps rollback is ${PLANNED}`,
-    help: [
-      "List deployable history ids with `argocd-axi apps history <app>`",
-      "A human can roll back with the raw CLI: `argocd app rollback <app> <history-id>`",
-    ],
-  },
-  "apps terminate-op": {
-    reason: `apps terminate-op is ${PLANNED}`,
-    help: [
-      "Inspect the running operation with `argocd-axi apps view <app>`",
-      "A human can stop it with the raw CLI: `argocd app terminate-op <app>`",
-    ],
-  },
-  "apps refresh": {
-    reason: `apps refresh triggers a reconcile, so it counts as a write; it is ${PLANNED}`,
-    help: [
-      "Read the last reconciled state with `argocd-axi apps view <app>`",
-      "A human can refresh with the raw CLI: `argocd app get <app> --refresh`",
-    ],
-  },
   "apps action": {
     reason: `running resource actions is ${PLANNED}`,
     help: [
