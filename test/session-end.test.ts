@@ -41,7 +41,9 @@ describe("session-end memory", () => {
         }),
         JSON.stringify({
           type: "tool_use",
-          input: { command: "argocd-axi can-i get applications '*' --context prod" },
+          input: {
+            command: "argocd-axi can-i get applications '*' --context prod",
+          },
         }),
       ].join("\n"),
     );
