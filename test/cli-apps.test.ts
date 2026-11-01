@@ -27,6 +27,24 @@ describe("apps", () => {
     ).toBe(false);
   });
 
+  it("resolves refresh output target before submitting the write", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const { stdout, calls } = await runCli(
+      ["apps", "refresh", "payments-api", "--confirm", "--context", "prod"],
+      { home },
+    );
+    expect(stdout).toContain("refresh: submitted");
+    const targetLookup = calls.findIndex((call) => call[0] === "context");
+    const refresh = calls.findIndex((call) => call.includes("--refresh"));
+    expect(targetLookup).toBeGreaterThanOrEqual(0);
+    expect(targetLookup).toBeLessThan(refresh);
+  });
+
   it("checks action-specific RBAC before running a resource action", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
