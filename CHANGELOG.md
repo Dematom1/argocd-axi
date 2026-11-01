@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.7...argocd-axi-v0.1.8) (2026-11-01)
+
+
+### Bug Fixes
+
+* default writes to the sole writable context ([#34](https://github.com/Dematom1/argocd-axi/issues/34)) ([6acfd6c](https://github.com/Dematom1/argocd-axi/commit/6acfd6c27f34947cf258b8ecb75a72ef94cd4861))
+
 ## [0.1.7](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.6...argocd-axi-v0.1.7) (2026-10-31)
 
 
