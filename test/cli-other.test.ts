@@ -352,7 +352,7 @@ describe("help, version and setup", () => {
       args: ["<app>: Application name, or namespace/name"],
       flags: [
         "--full: Do not truncate messages or Helm values",
-        "--context <name>: Argo CD context to use (as listed by `argocd-axi ctx`); default: the current context",
+        "--context <name>: Argo CD context to use (as listed by `argocd-axi ctx`); write commands default to the sole writable context, if configured",
       ],
       examples: [
         "argocd-axi apps view guestbook",

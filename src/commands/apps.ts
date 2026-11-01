@@ -46,7 +46,7 @@ import {
   type Application,
   type ResourceStatus,
 } from "../model.js";
-import { parseTable } from "../context.js";
+import { describeTarget, parseTable, resolveTarget } from "../context.js";
 import { Redactor } from "../redact.js";
 import { encodeObject, renderTextBlock } from "../toon.js";
 import {
@@ -68,6 +68,29 @@ const NOT_FOUND_HELP = ["Run `argocd-axi apps` to list applications"];
 const MESSAGE_CHARS = 300;
 const LOG_CHAR_CAP = 20_000;
 const FULL_LOG_CHAR_CAP = 1_000_000;
+
+type WriteTarget = ReturnType<typeof describeTarget> & { defaulted: boolean };
+
+async function resolveWriteTarget(
+  gate: Awaited<ReturnType<typeof evaluateWriteGate>>,
+): Promise<WriteTarget> {
+  const { target, listing } = await resolveTarget(gate.context);
+  return { ...describeTarget(target, listing), defaulted: gate.defaulted };
+}
+
+async function finishWrite(
+  gate: Awaited<ReturnType<typeof evaluateWriteGate>>,
+  blocks: Array<string | undefined | false>,
+  help: string[] = [],
+  target: WriteTarget | undefined = undefined,
+): Promise<string> {
+  const resolvedTarget = target ?? (await resolveWriteTarget(gate));
+  return finish(
+    [encodeObject({ target: resolvedTarget }), ...blocks],
+    undefined,
+    help,
+  );
+}
 
 async function getApp(
   name: string,
@@ -1372,7 +1395,7 @@ export async function appsSync(args: string[]): Promise<string> {
     )) ?? [];
   const preview = [diff, encodeObject({ syncWindows: windows })];
   if (!confirm)
-    return finish(preview, undefined, [
+    return finishWrite(gate, preview, [
       "No changes made; add --confirm to sync",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
@@ -1386,6 +1409,7 @@ export async function appsSync(args: string[]): Promise<string> {
       `REFUSED: Argo CD RBAC denies sync for ${name}`,
       CODES.REFUSED,
     );
+  const writeTarget = await resolveWriteTarget(gate);
   const syncArgs = [name, "--async", "--info", "initiated-by=argocd-axi"];
   if (prune) syncArgs.push("--prune");
   try {
@@ -1429,7 +1453,8 @@ export async function appsSync(args: string[]): Promise<string> {
         : phase === "Running" && waitTimedOut
           ? "timeout"
           : "error";
-  return finish(
+  return finishWrite(
+    gate,
     [
       ...preview,
       encodeObject({
@@ -1456,6 +1481,7 @@ export async function appsSync(args: string[]): Promise<string> {
       }),
     ],
     undefined,
+    writeTarget,
   );
 }
 
@@ -1652,7 +1678,7 @@ async function appsActionRun(args: string[]): Promise<string> {
     encodeObject({ action, app: appNameArg, kind, resource: resourceName }),
   ];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to run the action",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
@@ -1662,6 +1688,7 @@ async function appsActionRun(args: string[]): Promise<string> {
     appNameArg,
     options,
   );
+  const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite(
     "app actions run",
     [
@@ -1700,9 +1727,11 @@ async function appsActionRun(args: string[]): Promise<string> {
         r.namespace === resource.namespace &&
         r.name === resource.name,
     )?.health?.status ?? "unknown";
-  return finish(
+  return finishWrite(
+    gate,
     [...blocks, encodeObject({ result: "submitted", state })],
-    undefined,
+    [],
+    writeTarget,
   );
 }
 
@@ -1895,11 +1924,12 @@ export async function appsRollback(args: string[]): Promise<string> {
     }),
   ];
   if (!confirm)
-    return finish(previewBlocks, undefined, [
+    return finishWrite(gate, previewBlocks, [
       "No changes made; add --confirm to roll back",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
   await checkWritePermission("sync", app, name, options);
+  const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite(
     "app rollback",
     [name, String(id), "--info", "initiated-by=argocd-axi"],
@@ -1912,7 +1942,8 @@ export async function appsRollback(args: string[]): Promise<string> {
     current.timedOut,
     "submitted",
   );
-  return finish(
+  return finishWrite(
+    gate,
     [
       ...previewBlocks,
       encodeObject({
@@ -1922,8 +1953,8 @@ export async function appsRollback(args: string[]): Promise<string> {
         operation: current.app.status?.operationState,
       }),
     ],
-    undefined,
     outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
+    writeTarget,
   );
 }
 
@@ -1951,24 +1982,30 @@ export async function appsRefresh(args: string[]): Promise<string> {
     app = await getApp(name, options);
   const blocks = [
     encodeObject({
-      refresh: name,
+      app: name,
       mode: hard ? "hard" : "normal",
       reRead: hard ? "live state and source caches" : "live state",
     }),
   ];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to refresh",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
   await checkWritePermission("update", app, name, options);
+  const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite(
     "app refresh",
     [name, hard ? "--hard-refresh" : "--refresh"],
     options,
     name,
   );
-  return finish([...blocks, encodeObject({ refresh: "submitted" })], undefined);
+  return finishWrite(
+    gate,
+    [...blocks, encodeObject({ refresh: "submitted" })],
+    [],
+    writeTarget,
+  );
 }
 
 const APPS_TERMINATE_SPEC = writeSpec(
@@ -1995,7 +2032,8 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     app = await getApp(name, options),
     phase = app.status?.operationState?.phase;
   if (!isOperationRunning(app))
-    return finish(
+    return finishWrite(
+      gate,
       [
         encodeObject({
           terminateOperation: name,
@@ -2013,11 +2051,12 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     }),
   ];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to terminate the operation",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
   await checkWritePermission("update", app, name, options);
+  const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite("app terminate-op", [name], options, name);
   const current = await waitForWrite(name, timeout, options);
   const outcome = writeOutcome(
@@ -2025,7 +2064,8 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     current.timedOut,
     "submitted",
   );
-  return finish(
+  return finishWrite(
+    gate,
     [
       ...blocks,
       encodeObject({
@@ -2034,8 +2074,8 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
         operation: current.app.status?.operationState,
       }),
     ],
-    undefined,
     outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
+    writeTarget,
   );
 }
 
@@ -2097,13 +2137,14 @@ async function appsAutoSync(args: string[]): Promise<string> {
   const options = { context: gate.context },
     app = await getApp(name, options);
   const current = autoSyncSummary(app),
-    blocks = [encodeObject({ autoSync: name, current, target: mode })];
+    blocks = [encodeObject({ autoSync: name, current, policy: mode })];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to change automated sync",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
   await checkWritePermission("update", app, name, options);
+  const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite(
     "app set",
     [
@@ -2120,12 +2161,14 @@ async function appsAutoSync(args: string[]): Promise<string> {
       ? autoSyncSummary(fresh).startsWith("automated")
       : autoSyncSummary(fresh) === "manual",
   );
-  return finish(
+  return finishWrite(
+    gate,
     [
       ...blocks,
       encodeObject({ result: "submitted", state: autoSyncSummary(observed) }),
     ],
-    undefined,
+    [],
+    writeTarget,
   );
 }
 

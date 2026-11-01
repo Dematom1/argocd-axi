@@ -27,6 +27,24 @@ describe("apps", () => {
     ).toBe(false);
   });
 
+  it("resolves refresh output target before submitting the write", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      'writable-contexts: ["prod"]',
+    );
+    const { stdout, calls } = await runCli(
+      ["apps", "refresh", "payments-api", "--confirm", "--context", "prod"],
+      { home },
+    );
+    expect(stdout).toContain("refresh: submitted");
+    const targetLookup = calls.findIndex((call) => call[0] === "context");
+    const refresh = calls.findIndex((call) => call.includes("--refresh"));
+    expect(targetLookup).toBeGreaterThanOrEqual(0);
+    expect(targetLookup).toBeLessThan(refresh);
+  });
+
   it("checks action-specific RBAC before running a resource action", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
@@ -190,7 +208,7 @@ describe("apps", () => {
     expect(stdout).toContain("status: no operation running");
   });
 
-  it("sync preview is explicit-context and never invokes a write", async () => {
+  it("sync preview names its context and server and never invokes a write", async () => {
     const { stdout, calls } = await runCli([
       "apps",
       "sync",
@@ -199,6 +217,8 @@ describe("apps", () => {
       "prod",
     ]);
     expect(stdout).toContain("No changes made; add --confirm to sync");
+    expect(stdout).toContain("context: prod");
+    expect(stdout).toContain("server: argocd.example.com");
     expect(calls).toContainEqual([
       "app",
       "get",
@@ -1111,6 +1131,7 @@ describe("apps", () => {
     expect(preview.calls.map((call) => call.slice(0, 3))).toEqual([
       ["app", "get", "web"],
       ["app", "actions", "list"],
+      ["context"],
     ]);
 
     const home = makeHome();
@@ -1244,7 +1265,7 @@ describe("apps", () => {
       "--context",
       "staging",
     ]);
-    expect(result.stdout).toContain("target: on");
+    expect(result.stdout).toContain("policy: on");
     expect(result.stdout).toContain("No changes made");
     expect(
       result.calls.some((call) => call[0] === "app" && call[1] === "set"),

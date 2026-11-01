@@ -155,14 +155,14 @@ argocd-axi apps [--problems --project --selector --repo --cluster --sync --healt
 argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
-argocd-axi apps sync <app> [--confirm] [--prune] [--timeout <s>] --context <c>
-argocd-axi apps auto-sync <app> <on|off> [--confirm] --context <c>
+argocd-axi apps sync <app> [--confirm] [--prune] [--timeout <s>] [--context <c>]
+argocd-axi apps auto-sync <app> <on|off> [--confirm] [--context <c>]
 argocd-axi apps history <app> [--limit <n>]
 argocd-axi apps manifests <app> [--source git|live] [--revision <rev>] [--kind <k>] [--full]
 argocd-axi apps logs <app> [--kind <k> --name <n>] [--tail 100] [--since 15m] [--filter <s>] [--full] [-p]
 argocd-axi apps wait <app> [--sync --health --operation] [--timeout 120]
 argocd-axi apps actions <app> [--kind <k>]
-argocd-axi apps actions run <app> <action> --kind <k> --name <resource> [--confirm] --context <c>
+argocd-axi apps actions run <app> <action> --kind <k> --name <resource> [--confirm] [--context <c>]
 argocd-axi projects | projects view <p> | projects windows <p>
 argocd-axi appsets | appsets view <name> | appsets generate <file>
 argocd-axi repos | clusters
@@ -171,8 +171,7 @@ argocd-axi setup hooks | status | uninstall
 argocd-axi update [--check]
 ```
 
-Every command takes `--context <name>` to target another Argo CD context, and
-`--help` for its flags and examples. Flags always come after the command.
+Commands take `--context <name>` to target another Argo CD context; write commands use the sole writable context when omitted. `--help` lists flags and examples. Flags always come after the command.
 Apps in other namespaces are addressed as `namespace/name`.
 
 ### What "needs attention" means
@@ -232,7 +231,7 @@ specific app.
   local-file and delete flags whatever a command passes, gives argocd no
   stdin, and enforces a timeout and an output cap. Tests fail if a new
   operation becomes reachable without updating the registry.
-- **Opt-in Application writes.** Sync, rollback, refresh, terminate-op, resource actions and automated-sync changes require an explicit context, preview and `--confirm`; execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
+- **Opt-in Application writes.** Sync, rollback, refresh, terminate-op, resource actions and automated-sync changes preview by default and require `--confirm` to execute; when `--context` is omitted, exactly one configured `writable-contexts` entry is selected. With zero or multiple entries, pass `--context` explicitly. Execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
 - **Redaction.** Kubernetes Secret `data`, `stringData` and their
   last-applied annotation, values under sensitive-looking keys, and env-var or
   Helm-parameter pairs with sensitive-looking names are replaced with
