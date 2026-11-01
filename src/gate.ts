@@ -3,12 +3,11 @@ import { validateContextName } from "./context.js";
 import { CODES, axiError, validationError } from "./errors.js";
 
 /**
- * Shared write gate: commands require an explicit context, preview by default,
- * and the local writable-contexts allowlist before execution.
+ * Shared write gate: writes use the sole writable context when unambiguous,
+ * preview by default, and enforce the local writable-contexts allowlist.
  *
  * Rules:
- * - A write always names its target with an explicit `--context`; the
- *   current context is never used implicitly.
+ * - An omitted context resolves only when writable-contexts has one entry.
  * - Without the command's execute flag, a write is a preview: nothing is
  *   sent. Previews work against any context.
  * - Executing needs the context in the local writable-contexts allowlist in
@@ -39,8 +38,8 @@ export interface WriteRequest {
 }
 
 export type GateDecision =
-  | { mode: "preview"; context: string; writable: boolean; help: string[] }
-  | { mode: "execute"; context: string };
+  | { mode: "preview"; context: string; writable: boolean; defaulted: boolean; help: string[] }
+  | { mode: "execute"; context: string; defaulted: boolean };
 
 export function isWritableContext(
   config: ToolConfig,
@@ -59,13 +58,15 @@ export function evaluateWriteGate(
   request: WriteRequest,
   config: ToolConfig,
 ): GateDecision {
-  if (request.context === undefined) {
+  const defaulted = request.context === undefined;
+  const writableContexts = config.writableContexts;
+  if (defaulted && writableContexts.length !== 1) {
     throw validationError(
-      `\`${request.command}\` needs an explicit --context <name>; writes never target the current context implicitly`,
-      ["Run `argocd-axi ctx` to list configured contexts"],
+      `\`${request.command}\` needs --context <name>; writable contexts: ${writableContextsSummary(config)}`,
+      [`Pass --context <name> (writable contexts: ${writableContextsSummary(config)})`],
     );
   }
-  const context = validateContextName(request.context);
+  const context = validateContextName(request.context ?? writableContexts[0]!);
   const writable = isWritableContext(config, context);
   const allowHint = `A human can allow writes by running \`argocd-axi ctx writable add ${context}\` in a terminal`;
 
@@ -74,6 +75,7 @@ export function evaluateWriteGate(
       mode: "preview",
       context,
       writable,
+      defaulted,
       help: writable
         ? [`Re-run with ${request.executeFlag} to execute against ${context}`]
         : [
@@ -93,5 +95,5 @@ export function evaluateWriteGate(
       ],
     );
   }
-  return { mode: "execute", context };
+  return { mode: "execute", context, defaulted };
 }

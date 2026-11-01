@@ -84,13 +84,18 @@ describe("write gate (decisions S3, S8, A7)", () => {
   const staging = { writableContexts: ["staging"] };
   const request = { command: "apps sync", executeFlag: "--now" };
 
-  it("requires an explicit context", () => {
-    expect(() =>
-      evaluateWriteGate(
-        { ...request, context: undefined, execute: false },
-        staging,
-      ),
-    ).toThrow(/needs an explicit --context/);
+  it("requires an explicit context unless exactly one writable context exists", () => {
+    for (const config of [none, { writableContexts: ["staging", "prod"] }]) {
+      expect(() => evaluateWriteGate({ ...request, context: undefined, execute: false }, config))
+        .toThrow(/needs --context.*writable contexts/);
+    }
+    expect(evaluateWriteGate({ ...request, context: undefined, execute: false }, staging))
+      .toMatchObject({ mode: "preview", context: "staging", defaulted: true });
+  });
+
+  it("lets an explicit context override the sole writable default", () => {
+    expect(evaluateWriteGate({ ...request, context: "prod", execute: false }, staging))
+      .toMatchObject({ mode: "preview", context: "prod", defaulted: false });
   });
 
   it("previews by default, against any context", () => {
@@ -122,6 +127,7 @@ describe("write gate (decisions S3, S8, A7)", () => {
     ).toEqual({
       mode: "execute",
       context: "staging",
+      defaulted: false,
     });
     expect(() =>
       evaluateWriteGate(

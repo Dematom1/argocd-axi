@@ -232,7 +232,7 @@ specific app.
   local-file and delete flags whatever a command passes, gives argocd no
   stdin, and enforces a timeout and an output cap. Tests fail if a new
   operation becomes reachable without updating the registry.
-- **Opt-in Application writes.** Sync, rollback, refresh, terminate-op, resource actions and automated-sync changes require an explicit context, preview and `--confirm`; execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
+- **Opt-in Application writes.** Sync, rollback, refresh, terminate-op, resource actions and automated-sync changes preview by default and require `--confirm` to execute; when `--context` is omitted, exactly one configured `writable-contexts` entry is selected. With zero or multiple entries, pass `--context` explicitly. Execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
 - **Redaction.** Kubernetes Secret `data`, `stringData` and their
   last-applied annotation, values under sensitive-looking keys, and env-var or
   Helm-parameter pairs with sensitive-looking names are replaced with
