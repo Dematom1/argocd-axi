@@ -43,7 +43,7 @@ export const CONTEXT_FLAG: FlagDef = {
   kind: "value",
   valueName: "name",
   description:
-    "Argo CD context to use (as listed by `argocd-axi ctx`); write commands default to the sole writable context, if configured", 
+    "Argo CD context to use (as listed by `argocd-axi ctx`); write commands default to the sole writable context, if configured",
 };
 
 /** Hints shared by every command for flags people reach for by habit. */
