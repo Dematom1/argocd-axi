@@ -190,7 +190,7 @@ describe("apps", () => {
     expect(stdout).toContain("status: no operation running");
   });
 
-  it("sync preview is explicit-context and never invokes a write", async () => {
+  it("sync preview names its context and server and never invokes a write", async () => {
     const { stdout, calls } = await runCli([
       "apps",
       "sync",
@@ -199,6 +199,8 @@ describe("apps", () => {
       "prod",
     ]);
     expect(stdout).toContain("No changes made; add --confirm to sync");
+    expect(stdout).toContain("context: prod");
+    expect(stdout).toContain("server: argocd.example.com");
     expect(calls).toContainEqual([
       "app",
       "get",
@@ -1111,6 +1113,7 @@ describe("apps", () => {
     expect(preview.calls.map((call) => call.slice(0, 3))).toEqual([
       ["app", "get", "web"],
       ["app", "actions", "list"],
+      ["context"],
     ]);
 
     const home = makeHome();

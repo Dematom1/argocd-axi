@@ -46,7 +46,7 @@ import {
   type Application,
   type ResourceStatus,
 } from "../model.js";
-import { parseTable } from "../context.js";
+import { describeTarget, parseTable, resolveTarget } from "../context.js";
 import { Redactor } from "../redact.js";
 import { encodeObject, renderTextBlock } from "../toon.js";
 import {
@@ -68,6 +68,27 @@ const NOT_FOUND_HELP = ["Run `argocd-axi apps` to list applications"];
 const MESSAGE_CHARS = 300;
 const LOG_CHAR_CAP = 20_000;
 const FULL_LOG_CHAR_CAP = 1_000_000;
+
+async function finishWrite(
+  gate: Awaited<ReturnType<typeof evaluateWriteGate>>,
+  blocks: Array<string | undefined | false>,
+  help: string[] = [],
+): Promise<string> {
+  const { target, listing } = await resolveTarget(gate.context);
+  return finish(
+    [
+      encodeObject({
+        target: {
+          ...describeTarget(target, listing),
+          defaulted: gate.defaulted,
+        },
+      }),
+      ...blocks,
+    ],
+    undefined,
+    help,
+  );
+}
 
 async function getApp(
   name: string,
@@ -1372,7 +1393,7 @@ export async function appsSync(args: string[]): Promise<string> {
     )) ?? [];
   const preview = [diff, encodeObject({ syncWindows: windows })];
   if (!confirm)
-    return finish(preview, undefined, [
+    return finishWrite(gate, preview, [
       "No changes made; add --confirm to sync",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
@@ -1429,7 +1450,8 @@ export async function appsSync(args: string[]): Promise<string> {
         : phase === "Running" && waitTimedOut
           ? "timeout"
           : "error";
-  return finish(
+  return finishWrite(
+    gate,
     [
       ...preview,
       encodeObject({
@@ -1652,7 +1674,7 @@ async function appsActionRun(args: string[]): Promise<string> {
     encodeObject({ action, app: appNameArg, kind, resource: resourceName }),
   ];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to run the action",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);

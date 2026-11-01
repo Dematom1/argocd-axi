@@ -38,7 +38,13 @@ export interface WriteRequest {
 }
 
 export type GateDecision =
-  | { mode: "preview"; context: string; writable: boolean; defaulted: boolean; help: string[] }
+  | {
+      mode: "preview";
+      context: string;
+      writable: boolean;
+      defaulted: boolean;
+      help: string[];
+    }
   | { mode: "execute"; context: string; defaulted: boolean };
 
 export function isWritableContext(
@@ -63,7 +69,9 @@ export function evaluateWriteGate(
   if (defaulted && writableContexts.length !== 1) {
     throw validationError(
       `\`${request.command}\` needs --context <name>; writable contexts: ${writableContextsSummary(config)}`,
-      [`Pass --context <name> (writable contexts: ${writableContextsSummary(config)})`],
+      [
+        `Pass --context <name> (writable contexts: ${writableContextsSummary(config)})`,
+      ],
     );
   }
   const context = validateContextName(request.context ?? writableContexts[0]!);
