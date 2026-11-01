@@ -15,7 +15,7 @@ argocd-axi wraps the `argocd` CLI, which must be on PATH and already logged in (
 It uses that session as is and adds no auth of its own; it never logs in, never prompts, and never reads the argocd config file.
 Run `npx -y argocd-axi auth guide` for setup instructions; the README is the authority for credential setup. The tool never logs in. If a command answers `AUTH_EXPIRED`, show the exact operator login command when the server is known; otherwise show the fallback login syntax and ask for the server address. An unreachable server is a separate error.
 
-It supports opt-in writes on contexts listed in `writable-contexts`: `apps sync`, `apps rollback`, `apps refresh`, and `apps terminate-op` preview first and require `--confirm` to act. Sync pruning also requires `--prune`. Other writes answer `REFUSED`.
+It supports opt-in writes on contexts listed in `writable-contexts`: `apps sync`, `apps rollback`, `apps refresh`, and `apps terminate-op` preview first and require `--confirm` to act. If `--context` is omitted and exactly one writable context is configured, that context is used; with zero or multiple writable contexts, specify `--context`. Previews and results identify the target context and server. Sync pruning also requires `--prune`. Other writes answer `REFUSED`.
 For anything argocd-axi does not cover, the raw `argocd` CLI is the fallback.
 
 ## Setup
@@ -29,7 +29,7 @@ Run `npx -y argocd-axi auth guide` for offline instructions. A human operator lo
 3. Find out why it is out of sync: `apps diff <app>` lists the resources that differ (`--full` adds the line diff); `apps history <app>` shows what was deployed when and by whom.
 4. Read the workload: `apps resources <app> --problems`, then `apps logs <app> --kind Deployment --name <name> --since 15m`.
 5. Before asking a human to sync: `projects windows <project>` says whether a sync is allowed right now, and `can-i sync applications '<project>/<app>'` checks permissions.
-6. Pass `--context <name>` after the command to target another Argo CD context; `ctx` lists them.
+6. Write commands use the sole `writable-contexts` entry when `--context` is omitted. If there are zero or multiple writable contexts, pass `--context <name>`; an explicit value overrides the default. `ctx` lists contexts.
 
 ## Commands
 

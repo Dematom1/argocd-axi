@@ -1722,10 +1722,10 @@ async function appsActionRun(args: string[]): Promise<string> {
         r.namespace === resource.namespace &&
         r.name === resource.name,
     )?.health?.status ?? "unknown";
-  return finish(
-    [...blocks, encodeObject({ result: "submitted", state })],
-    undefined,
-  );
+  return finishWrite(gate, [
+    ...blocks,
+    encodeObject({ result: "submitted", state }),
+  ]);
 }
 
 // ---------------------------------------------------------------- app writes
@@ -1917,7 +1917,7 @@ export async function appsRollback(args: string[]): Promise<string> {
     }),
   ];
   if (!confirm)
-    return finish(previewBlocks, undefined, [
+    return finishWrite(gate, previewBlocks, [
       "No changes made; add --confirm to roll back",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
@@ -1934,7 +1934,8 @@ export async function appsRollback(args: string[]): Promise<string> {
     current.timedOut,
     "submitted",
   );
-  return finish(
+  return finishWrite(
+    gate,
     [
       ...previewBlocks,
       encodeObject({
@@ -1979,7 +1980,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
     }),
   ];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to refresh",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
@@ -1990,7 +1991,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
     options,
     name,
   );
-  return finish([...blocks, encodeObject({ refresh: "submitted" })], undefined);
+  return finishWrite(gate, [...blocks, encodeObject({ refresh: "submitted" })]);
 }
 
 const APPS_TERMINATE_SPEC = writeSpec(
@@ -2017,7 +2018,8 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     app = await getApp(name, options),
     phase = app.status?.operationState?.phase;
   if (!isOperationRunning(app))
-    return finish(
+    return finishWrite(
+      gate,
       [
         encodeObject({
           terminateOperation: name,
@@ -2035,7 +2037,7 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     }),
   ];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to terminate the operation",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
@@ -2047,7 +2049,8 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     current.timedOut,
     "submitted",
   );
-  return finish(
+  return finishWrite(
+    gate,
     [
       ...blocks,
       encodeObject({
@@ -2121,7 +2124,7 @@ async function appsAutoSync(args: string[]): Promise<string> {
   const current = autoSyncSummary(app),
     blocks = [encodeObject({ autoSync: name, current, target: mode })];
   if (!confirm)
-    return finish(blocks, undefined, [
+    return finishWrite(gate, blocks, [
       "No changes made; add --confirm to change automated sync",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
@@ -2142,13 +2145,10 @@ async function appsAutoSync(args: string[]): Promise<string> {
       ? autoSyncSummary(fresh).startsWith("automated")
       : autoSyncSummary(fresh) === "manual",
   );
-  return finish(
-    [
-      ...blocks,
-      encodeObject({ result: "submitted", state: autoSyncSummary(observed) }),
-    ],
-    undefined,
-  );
+  return finishWrite(gate, [
+    ...blocks,
+    encodeObject({ result: "submitted", state: autoSyncSummary(observed) }),
+  ]);
 }
 
 SUBCOMMANDS["auto-sync"] = { spec: APPS_AUTO_SYNC_SPEC, run: appsAutoSync };
