@@ -1247,7 +1247,7 @@ describe("apps", () => {
       "--context",
       "staging",
     ]);
-    expect(result.stdout).toContain("target: on");
+    expect(result.stdout).toContain("policy: on");
     expect(result.stdout).toContain("No changes made");
     expect(
       result.calls.some((call) => call[0] === "app" && call[1] === "set"),

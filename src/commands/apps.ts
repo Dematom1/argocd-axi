@@ -1945,7 +1945,6 @@ export async function appsRollback(args: string[]): Promise<string> {
         operation: current.app.status?.operationState,
       }),
     ],
-    undefined,
     outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
   );
 }
@@ -2059,7 +2058,6 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
         operation: current.app.status?.operationState,
       }),
     ],
-    undefined,
     outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
   );
 }
@@ -2122,7 +2120,7 @@ async function appsAutoSync(args: string[]): Promise<string> {
   const options = { context: gate.context },
     app = await getApp(name, options);
   const current = autoSyncSummary(app),
-    blocks = [encodeObject({ autoSync: name, current, target: mode })];
+    blocks = [encodeObject({ autoSync: name, current, policy: mode })];
   if (!confirm)
     return finishWrite(gate, blocks, [
       "No changes made; add --confirm to change automated sync",
