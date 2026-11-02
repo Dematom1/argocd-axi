@@ -1784,7 +1784,9 @@ async function runApplicationWrite(
 }
 
 function viewHelp(name: string, context: string): string[] {
-  return [`Run \`argocd-axi apps view ${name} --context ${context}\` to inspect progress and revision`];
+  return [
+    `Run \`argocd-axi apps view ${name} --context ${context}\` to inspect progress and revision`,
+  ];
 }
 
 function operationHelp(name: string, context: string): string[] {
