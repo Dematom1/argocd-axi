@@ -208,9 +208,8 @@ to inspect or wait. Acceptance is not deployment success. An operation already
 running returns `sync: already running` with exit 0, without submitting another sync.
 A race rejected by the server has the same result.
 
-For callers that previously assumed sync blocked (including infrastructure docs
-`docs/recipes/upgrade-argocd.md`, section 3), add a separate wait before dependent
-steps:
+For callers that previously assumed sync blocked, add a separate wait before
+dependent steps:
 
 ```sh
 argocd-axi apps sync <app> --context <context> --confirm
