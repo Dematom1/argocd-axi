@@ -1308,10 +1308,28 @@ describe("apps", () => {
         scenario: scenario([
           { argv: ["app", "get", "web"], stdoutFile: "app-web.json" },
           {
-            argv: ["app", "actions", "list", "web", "--kind", "Rollout", "-o", "json"],
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Rollout",
+              "-o",
+              "json",
+            ],
             stdoutFile: "actions-web.json",
           },
-          { argv: ["account", "can-i", "action/argoproj.io/Rollout/restart", "applications", "shop/web"], stdout: "yes\n" },
+          {
+            argv: [
+              "account",
+              "can-i",
+              "action/argoproj.io/Rollout/restart",
+              "applications",
+              "shop/web",
+            ],
+            stdout: "yes\n",
+          },
           { argv: ["app", "actions", "run", "web"], stdout: "" },
         ]),
       },
@@ -1330,19 +1348,46 @@ describe("apps", () => {
 
     const failedPermission = await runCli(
       [
-        "apps", "actions", "run", "web", "restart", "--kind", "Rollout",
-        "--name", "web", "--confirm", "--timeout", "1", "--context", "staging",
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Rollout",
+        "--name",
+        "web",
+        "--confirm",
+        "--timeout",
+        "1",
+        "--context",
+        "staging",
       ],
       {
         home,
         scenario: scenario([
           { argv: ["app", "get", "web"], stdoutFile: "app-web.json" },
           {
-            argv: ["app", "actions", "list", "web", "--kind", "Rollout", "-o", "json"],
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Rollout",
+              "-o",
+              "json",
+            ],
             stdoutFile: "actions-web.json",
           },
           {
-            argv: ["account", "can-i", "action/argoproj.io/Rollout/restart", "applications", "shop/web"],
+            argv: [
+              "account",
+              "can-i",
+              "action/argoproj.io/Rollout/restart",
+              "applications",
+              "shop/web",
+            ],
             stderr: "permission service unavailable",
             exit: 20,
           },
@@ -1352,6 +1397,61 @@ describe("apps", () => {
     expect(failedPermission.stdout).toContain("code: UPSTREAM_ERROR");
     expect(failedPermission.stdout).toContain("permission service unavailable");
     expect(failedPermission.stdout).not.toContain("code: REFUSED");
+
+    const denied = await runCli(
+      [
+        "apps",
+        "actions",
+        "run",
+        "web",
+        "restart",
+        "--kind",
+        "Rollout",
+        "--name",
+        "web",
+        "--confirm",
+        "--timeout",
+        "1",
+        "--context",
+        "staging",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "web"], stdoutFile: "app-web.json" },
+          {
+            argv: [
+              "app",
+              "actions",
+              "list",
+              "web",
+              "--kind",
+              "Rollout",
+              "-o",
+              "json",
+            ],
+            stdoutFile: "actions-web.json",
+          },
+          {
+            argv: [
+              "account",
+              "can-i",
+              "action/argoproj.io/Rollout/restart",
+              "applications",
+              "shop/web",
+            ],
+            stdout: "no\n",
+          },
+        ]),
+      },
+    );
+    expect(denied.stdout).toContain("code: REFUSED");
+    expect(denied.stdout).toContain(
+      "Argo CD RBAC denies action/argoproj.io/Rollout/restart",
+    );
+    expect(
+      denied.calls.some((call) => call[1] === "actions" && call[2] === "run"),
+    ).toBe(false);
   });
 
   it("does not poll resource health after submitting an action", async () => {
