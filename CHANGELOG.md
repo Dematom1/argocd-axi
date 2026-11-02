@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.9](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.8...argocd-axi-v0.1.9) (2026-11-02)
+
+
+### Features
+
+* **apps:** use a consistent four-column default ([#37](https://github.com/Dematom1/argocd-axi/issues/37)) ([0e02a8b](https://github.com/Dematom1/argocd-axi/commit/0e02a8b0fdb5b0108915685e876fd7b556a24326))
+
+
+### Bug Fixes
+
+* **setup:** report hook installation failures truthfully ([#39](https://github.com/Dematom1/argocd-axi/issues/39)) ([477d076](https://github.com/Dematom1/argocd-axi/commit/477d076e0cf43e1978e934cf718ce3a87e6af2d3))
+
 ## [0.1.8](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.7...argocd-axi-v0.1.8) (2026-11-01)
 
 
