@@ -179,6 +179,7 @@ argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
 argocd-axi apps sync <app> [--confirm] [--prune] [--timeout <s>] [--context <c>]
+# --confirm starts the operation and returns; --timeout bounds the request, not deployment
 argocd-axi apps auto-sync <app> <on|off> [--confirm] [--context <c>]
 argocd-axi apps history <app> [--limit <n>]
 argocd-axi apps manifests <app> [--source git|live] [--revision <rev>] [--kind <k>] [--full]
@@ -198,6 +199,50 @@ Commands take `--context <name>` to target another Argo CD context; write comman
 Apps in other namespaces are addressed as `namespace/name`.
 
 ### What "needs attention" means
+
+### Write completion and migration
+
+`apps sync --confirm` returns `sync: started` when the server accepts the async
+operation. It prints the target revision, the last observed revision, and commands
+to inspect or wait. Acceptance is not deployment success. An operation already
+running returns `sync: already running` with exit 0, without submitting another sync.
+A race rejected by the server has the same result.
+
+For callers that previously assumed sync blocked (including infrastructure docs
+`docs/recipes/upgrade-argocd.md`, section 3), add a separate wait before dependent
+steps:
+
+```sh
+argocd-axi apps sync <app> --context <context> --confirm
+argocd-axi apps wait <app> --context <context> --timeout 300
+argocd-axi apps view <app> --context <context>
+```
+
+Inspect the structured wait result before proceeding: timeout returns exit 0 with
+`condition not met`, not deployment success. `apps view` shows operation failures
+and the resolved operation revision. A requested branch or tag may move after
+submission; the sync response does not claim that the last observed commit is the
+new operation's commit.
+
+Long-running Application writes:
+
+- `apps sync`: submits with `--async`; no completion wait.
+- `apps actions run`: submits the action; no resource-health polling.
+- `apps terminate-op`: requests termination; no completion wait. No running
+  operation is a successful no-op.
+- `apps auto-sync`: submits the policy update; no convergence polling.
+- `apps rollback`: the native CLI blocks until rollback finishes. There is no
+  native async flag. `--timeout` bounds the native wait, with a 10-second hard
+  subprocess grace. No additional wrapper wait runs.
+- `apps refresh` (including `--hard`): the native CLI blocks for reconciliation.
+  `--timeout` bounds the subprocess (default 120 seconds).
+
+`apps wait`, rollback, and refresh print elapsed-time progress to stderr immediately
+and every 5 seconds. Structured final output stays on stdout. For sync, actions,
+termination, and policy updates, `--timeout` bounds submission only (default 120
+seconds). A request timeout does not prove the server rejected the write. Inspect
+`apps view` before retrying. Local configuration, context, and setup writes do not
+wait for deployment.
 
 An app needs attention when its sync status is OutOfSync or Unknown; its
 health is Degraded, Missing or Unknown; it has been Progressing for more than
