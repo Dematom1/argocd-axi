@@ -135,8 +135,8 @@ Pick one; you do not need both.
   working directory; it does not save arguments or other values. The session
   log is limited to 100 directories and stored with `0600` permissions. Run
   `argocd-axi context` to view the current directory's last session, or
-  `argocd-axi setup status` / `argocd-axi setup uninstall` to inspect or remove
-  the Claude Code SessionEnd hook. Hooks need a persistent install
+  `argocd-axi setup status` to verify installed hooks across the integrations,
+  or `argocd-axi setup uninstall` to remove them. Hooks need a persistent install
   (`npm install -g argocd-axi`); run from an npx cache, installation is refused
   because hooks would point at a temporary path.
 - **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi`
