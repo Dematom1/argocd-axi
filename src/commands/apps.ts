@@ -1280,6 +1280,7 @@ export async function appsWait(args: string[]): Promise<string> {
       {
         ...options,
         timeoutMs: timeout * 1000 + WAIT_GRACE_MS,
+        progressTimeoutMs: timeout * 1000,
         allowFailure: true,
         failure: { notFoundHelp: NOT_FOUND_HELP },
       },
