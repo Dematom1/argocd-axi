@@ -1,0 +1,26 @@
+name: Weekly release merge
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Monday 08:00 UTC; GitHub may delay scheduled runs.
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Inspect eligibility without merging
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+jobs:
+  release:
+    uses: ./.github/workflows/merge-release.yml
+    with:
+      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+    secrets:
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
