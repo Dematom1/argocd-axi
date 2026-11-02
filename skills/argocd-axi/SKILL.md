@@ -11,7 +11,9 @@ Argo CD for agents: read operations plus opt-in writes on writable contexts.
 You do not need argocd-axi installed globally - invoke it with `npx -y argocd-axi <command>`.
 If argocd-axi output suggests a command starting with `argocd-axi`, run it as `npx -y argocd-axi ...` instead.
 
-argocd-axi wraps the `argocd` CLI, which must be on PATH and already logged in or have `ARGOCD_AUTH_TOKEN` set. It never logs in, prompts, or reads the argocd config file. Run `npx -y argocd-axi auth guide` for setup; the README is the authority for credential and error guidance. An unreachable server is a separate error.
+argocd-axi wraps the `argocd` CLI, which must be on PATH and already logged in (or have `ARGOCD_AUTH_TOKEN` set).
+It uses that session as is and adds no auth of its own; it never logs in, never prompts, and never reads the argocd config file.
+Run `npx -y argocd-axi auth guide` for setup instructions; the README is the authority for credential setup. The tool never logs in. If a command answers `AUTH_EXPIRED`, show the exact operator login command when the server is known; otherwise show the fallback login syntax and ask for the server address. An unreachable server is a separate error.
 
 It supports opt-in writes on contexts listed in `writable-contexts`: `apps sync`, `apps rollback`, `apps refresh`, and `apps terminate-op` preview first and require `--confirm` to act. If `--context` is omitted and exactly one writable context is configured, that context is used; with zero or multiple writable contexts, specify `--context`. Previews and results identify the target context and server. Sync pruning also requires `--prune`. Other writes answer `REFUSED`.
 For anything argocd-axi does not cover, the raw `argocd` CLI is the fallback.
