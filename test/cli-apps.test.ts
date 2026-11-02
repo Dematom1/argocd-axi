@@ -822,7 +822,7 @@ describe("apps", () => {
       "logs: 0 log lines returned for guestbook",
     );
     expect((await runCli(["apps", "logs", "x", "--follow"])).stdout).toContain(
-      "argocd-axi never streams",
+      "argocd-axi does not stream command output",
     );
   });
 
