@@ -1782,9 +1782,13 @@ async function runApplicationWrite(
   }
 }
 
+function viewHelp(name: string, context: string): string[] {
+  return [`Run \`argocd-axi apps view ${name} --context ${context}\` to inspect progress and revision`];
+}
+
 function operationHelp(name: string, context: string): string[] {
   return [
-    `Run \`argocd-axi apps view ${name} --context ${context}\` to inspect progress and revision`,
+    ...viewHelp(name, context),
     `Run \`argocd-axi apps wait ${name} --context ${context}\` to wait for completion`,
   ];
 }
@@ -1866,7 +1870,7 @@ export async function appsRollback(args: string[]): Promise<string> {
         historyId: id,
       }),
     ],
-    operationHelp(name, gate.context),
+    viewHelp(name, gate.context),
     writeTarget,
   );
 }
@@ -2075,7 +2079,7 @@ async function appsAutoSync(args: string[]): Promise<string> {
   return finishWrite(
     gate,
     [...blocks, encodeObject({ result: "submitted" })],
-    operationHelp(name, gate.context),
+    viewHelp(name, gate.context),
     writeTarget,
   );
 }
