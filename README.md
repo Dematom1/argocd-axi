@@ -105,7 +105,7 @@ malformed JWT/expiry metadata, or `not configured`. JWT metadata is decoded
 locally and **unverified**: it is scheduling information, not proof of identity,
 validity or revocation status. Non-expiring tokens remain supported; prefer a
 short lifetime and rotate before expiry. Live requests still rely on Argo CD to
-validate the credential. `auth guide` is offline and does not validate it.
+validate the credential. `auth guide` is offline and does not validate it. Validation against a real Argo CD server awaits a separately provisioned dedicated credential and explicit action approval.
 
 ### Scoped agent credentials
 
