@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.11...argocd-axi-v0.1.12) (2026-11-02)
+
+
+### Bug Fixes
+
+* **apps:** distinguish RBAC denials from CLI failures ([#45](https://github.com/Dematom1/argocd-axi/issues/45)) ([74c3679](https://github.com/Dematom1/argocd-axi/commit/74c3679b0fbedb8cd508b508f2533f317a2fdb0d))
+
 ## [0.1.11](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.10...argocd-axi-v0.1.11) (2026-11-02)
 
 
