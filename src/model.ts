@@ -215,10 +215,22 @@ export function attentionReasonPreview(
   max: number,
   now: number = Date.now(),
   redactor: Redactor = new Redactor(),
+  omitBareStatuses = false,
 ): { text: string; totalChars: number } {
   let text = "";
   let totalChars = 0;
   for (const reason of attentionReasonTexts(app, now, redactor)) {
+    if (
+      omitBareStatuses &&
+      [
+        "OutOfSync",
+        "Degraded",
+        "Missing",
+        "health Unknown",
+        "sync Unknown",
+      ].includes(reason)
+    )
+      continue;
     if (totalChars > 0) {
       if (text.length < max) text += "; ".slice(0, max - text.length);
       totalChars += 2;

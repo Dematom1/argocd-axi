@@ -306,6 +306,8 @@ describe("apps", () => {
   it("lists problems first with the reason and a total", async () => {
     const { stdout, calls } = await runCli(["apps"]);
     expect(stdout).toContain("count: 5 of 5 total (3 need attention)");
+    expect(stdout).toContain("apps[5]{app,sync,health,why}:");
+    expect(stdout).toContain("none");
     const table = stdout.slice(
       stdout.indexOf("apps[5]"),
       stdout.indexOf("help["),
@@ -335,10 +337,15 @@ describe("apps", () => {
     expect(stdout).toContain(
       'count: "1 of 3 matching (5 total, 3 need attention)"',
     );
-    expect(stdout).toContain("apps[1]{app,project,sync,health,why,revision}:");
+    expect(stdout).toContain("apps[1]{app,sync,health,why,revision}:");
     expect(stdout).toContain(
       "Run `argocd-axi apps --limit 3 --problems --fields revision --context prod` to see all 3",
     );
+    const withProject = await runCli(["apps", "--fields", "project"]);
+    expect(withProject.stdout).toContain(
+      "apps[5]{app,sync,health,why,project}:",
+    );
+    expect(withProject.stdout).toContain("payments-api,OutOfSync,Degraded,");
     const project = await runCli(["apps", "-p", "payments"]);
     expect(project.calls).toContainEqual([
       "app",

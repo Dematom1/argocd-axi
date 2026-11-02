@@ -152,6 +152,7 @@ argocd-axi ctx use <context>                 switch the argocd CLI's current con
 argocd-axi whoami                            user, issuer and groups
 argocd-axi can-i <action> <resource> <obj>   ask Argo CD RBAC, e.g. can-i sync applications 'payments/payments-api'
 argocd-axi apps [--problems --project --selector --repo --cluster --sync --health --limit --fields]
+# Default columns: app, sync, health, why; add project with --fields project
 argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]

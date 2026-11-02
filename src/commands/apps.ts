@@ -25,8 +25,8 @@ import {
 import {
   appName,
   appSources,
-  attentionReasonPreview,
   attentionReasons,
+  attentionReasonPreview,
   autoSyncSummary,
   destinationSummary,
   displayNames,
@@ -112,6 +112,7 @@ async function getApp(
 const LOCAL_FILTERS = ["--sync", "--health", "--problems", "--limit"];
 
 const LIST_FIELDS = [
+  "project",
   "namespace",
   "repo",
   "path",
@@ -216,6 +217,8 @@ export const APPS_LIST_SPEC: CommandSpec = {
 function fieldValue(app: Application, field: ListField): string {
   const source = appSources(app)[0];
   switch (field) {
+    case "project":
+      return app.spec?.project ?? "";
     case "namespace":
       return app.metadata?.namespace ?? "";
     case "repo":
@@ -322,19 +325,15 @@ export async function appsList(args: string[]): Promise<string> {
   }
 
   const name = displayNames(matching);
-  const showWhy = matching.some((app) => needsAttention(app, now));
   const redactor = new Redactor();
   const rows = matching.slice(0, limit).map((app) => {
     const row: Record<string, string> = {
       app: name(app),
-      project: app.spec?.project ?? "",
       sync: syncStatus(app),
       health: healthStatus(app),
     };
-    if (showWhy) {
-      const why = attentionReasonPreview(app, 160, now, redactor);
-      row.why = preview(why.text, 160, false, why.totalChars).text;
-    }
+    const why = attentionReasonPreview(app, 160, now, redactor, true);
+    row.why = preview(why.text, 160, false, why.totalChars).text || "none";
     for (const field of fields) row[field] = fieldValue(app, field);
     return row;
   });
