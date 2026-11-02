@@ -64,13 +64,16 @@ setTimeout(() => {}, 8000);
       "ignore-term",
       "escaped-pipes",
       "windows-fallback",
-    ])("returns TIMEOUT at the deadline with %s", async (mode) => {
+      "SIGINT",
+      "SIGTERM",
+    ])("terminates promptly with %s", async (mode) => {
       const pids = join(dir, `${mode}.pids`);
       const ready = join(dir, `${mode}.ready`);
       const survived = join(dir, `${mode}.survived`);
       const moduleUrl = pathToFileURL(
         join(dir, "package/dist/src/argocd.js"),
       ).href;
+      const signal = mode === "SIGINT" || mode === "SIGTERM" ? mode : undefined;
       const started = performance.now();
       const child = spawn(
         process.execPath,
@@ -82,7 +85,7 @@ setTimeout(() => {}, 8000);
         // Exercise the Windows direct-child fallback with real subprocesses on POSIX.
         if (process.env.MODE === 'windows-fallback') Object.defineProperty(process, 'platform', { value: 'win32' });
         try {
-          await runArgocd('version client', [], { timeoutMs: 1000 });
+          await runArgocd('version client', [], { timeoutMs: ${signal ? 10000 : 1000} });
           process.exitCode = 1;
         } catch (error) {
           console.log(error.code);
@@ -105,19 +108,69 @@ setTimeout(() => {}, 8000);
       let stderr = "";
       child.stdout.on("data", (chunk) => (stdout += chunk));
       child.stderr.on("data", (chunk) => (stderr += chunk));
+      const completion = new Promise<number | null>((resolve, reject) => {
+        child.on("error", reject);
+        child.on("close", resolve);
+      });
+      const descendantsExited = async () => {
+        const recorded = readFileSync(pids, "utf8").trim().split("\n");
+        expect(recorded).toHaveLength(2);
+        for (const pid of recorded) {
+          await expect
+            .poll(
+              () => {
+                try {
+                  const state = execFileSync("ps", ["-o", "stat=", "-p", pid], {
+                    encoding: "utf8",
+                  }).trim();
+                  return state === "" || state.startsWith("Z");
+                } catch (error) {
+                  if (
+                    error &&
+                    typeof error === "object" &&
+                    "status" in error &&
+                    error.status === 1
+                  )
+                    return true;
+                  throw error;
+                }
+              },
+              { timeout: 1000 },
+            )
+            .toBe(true);
+        }
+      };
       try {
-        const code = await new Promise<number | null>((resolve, reject) => {
-          child.on("error", reject);
-          child.on("close", resolve);
-        });
+        if (signal) {
+          await expect
+            .poll(
+              () =>
+                existsSync(ready) &&
+                existsSync(pids) &&
+                readFileSync(pids, "utf8").trim().split("\n").length === 2,
+              { timeout: 3000 },
+            )
+            .toBe(true);
+          child.kill(signal);
+        }
+        const code = await completion;
         const elapsed = performance.now() - started;
         expect(existsSync(ready), stdout + stderr).toBe(true);
-        expect(code).toBe(0);
-        expect(stdout.trim()).toBe("TIMEOUT");
-        expect(elapsed).toBeGreaterThanOrEqual(1000);
-        expect(elapsed).toBeLessThan(2500);
+        if (signal) {
+          expect(code).toBe(signal === "SIGINT" ? 130 : 143);
+          expect(stdout).toBe("");
+          await descendantsExited();
+        } else {
+          expect(code).toBe(0);
+          expect(stdout.trim()).toBe("TIMEOUT");
+          expect(elapsed).toBeGreaterThanOrEqual(1000);
+          expect(elapsed).toBeLessThan(2500);
+        }
         if (mode === "grandchild-pipes") {
-          await new Promise((resolve) => setTimeout(resolve, 2600 - elapsed));
+          await descendantsExited();
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.max(0, 2600 - elapsed)),
+          );
           expect(existsSync(survived)).toBe(false);
         }
       } finally {

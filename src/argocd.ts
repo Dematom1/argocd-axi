@@ -195,6 +195,20 @@ function spawnCollect(
       child.stderr.destroy();
       child.unref();
     };
+    const interrupt = (exitCode: number) => {
+      kill();
+      // Let every active subprocess's listener run before terminating the CLI.
+      queueMicrotask(() => process.exit(exitCode));
+    };
+    const onSigint = () => interrupt(130);
+    const onSigterm = () => interrupt(143);
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
+    const cleanup = () => {
+      clearTimeout(timer);
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       kill();
@@ -215,7 +229,7 @@ function spawnCollect(
     child.stderr.on("data", collect(stderr));
 
     child.on("error", (error: NodeJS.ErrnoException) => {
-      clearTimeout(timer);
+      cleanup();
       if (settled) return;
       settled = true;
       if (error.code === "ENOENT") {
@@ -239,7 +253,7 @@ function spawnCollect(
     });
 
     function finish(code: number | null) {
-      clearTimeout(timer);
+      cleanup();
       if (settled) return;
       settled = true;
       if (overflow) {
