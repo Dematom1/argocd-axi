@@ -36,15 +36,21 @@ async function execute({
   refreshed = current,
   checks = [{ name: "CI", status: "completed", conclusion: "success" }],
   statuses = [],
+  totalCount = statuses.length,
   dryRun = "false",
   refusal,
 } = {}) {
-  const merge = vi.fn(async () => {
-    if (refusal) throw refusal;
-    return {
-      data: { merged: true, message: "Pull Request successfully merged" },
-    };
-  });
+  const merge = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify(
+          refusal
+            ? { message: refusal.message }
+            : { merged: true, message: "Pull Request successfully merged" },
+        ),
+        { status: refusal?.status ?? 200 },
+      ),
+  );
   const summary = [];
   const failed = vi.fn();
   const github = {
@@ -55,14 +61,19 @@ async function execute({
           .fn()
           .mockResolvedValueOnce({ data: current })
           .mockResolvedValue({ data: refreshed }),
-        merge,
       },
       checks: { listForRef: "checks" },
-      repos: { getCombinedStatusForRef: "statuses" },
+      repos: {
+        getCombinedStatusForRef: vi.fn(async () => ({
+          data: { statuses, total_count: totalCount },
+        })),
+      },
     },
-    paginate: vi.fn(
-      async (endpoint) => ({ pulls: prs, checks, statuses })[endpoint],
-    ),
+    paginate: vi.fn(async (endpoint) => {
+      if (endpoint !== "pulls" && endpoint !== "checks")
+        throw new Error("Unsupported pagination endpoint");
+      return { pulls: prs, checks }[endpoint];
+    }),
   };
   const core = {
     info() {},
@@ -82,8 +93,10 @@ async function execute({
     github,
     core,
     context: { repo },
+    fetch: merge,
     process: {
       env: {
+        GITHUB_API_URL: "https://api.github.com",
         RELEASE_AUTHOR: "release-app[bot]",
         RELEASE_TOKEN: "app-token",
         DRY_RUN: dryRun,
@@ -95,12 +108,25 @@ async function execute({
 
 test("squashes only the exact reviewed release head using the release App", async () => {
   const result = await execute();
-  expect(result.merge).toHaveBeenCalledExactlyOnceWith({
+  expect(result.merge).toHaveBeenCalledExactlyOnceWith(
+    "https://api.github.com/repos/example/project/pulls/7/merge",
+    {
+      method: "PUT",
+      headers: {
+        authorization: "Bearer app-token",
+        accept: "application/vnd.github+json",
+        "content-type": "application/json",
+        "x-github-api-version": "2022-11-28",
+      },
+      body: JSON.stringify({ sha: release.head.sha, merge_method: "squash" }),
+    },
+  );
+  expect(
+    result.github.rest.repos.getCombinedStatusForRef,
+  ).toHaveBeenCalledExactlyOnceWith({
     ...repo,
-    pull_number: 7,
-    sha: release.head.sha,
-    merge_method: "squash",
-    headers: { authorization: "token app-token" },
+    ref: release.head.sha,
+    per_page: 100,
   });
   expect(result.github.paginate).toHaveBeenCalledWith(
     "checks",
@@ -127,6 +153,7 @@ test.each([
   { refreshed: { ...release, head: { ...release.head, sha: "new-head" } } },
   { refreshed: { ...release, title: "not a release" } },
   { checks: [] },
+  { totalCount: 101, statuses: [] },
   { checks: [{ name: "CI", status: "in_progress", conclusion: null }] },
   { checks: [{ name: "CI", status: "completed", conclusion: "failure" }] },
   { statuses: [{ context: "external", state: "pending" }] },
@@ -158,7 +185,7 @@ test("reports the exact App ruleset refusal without retrying or bypassing", asyn
   });
   expect(result.merge).toHaveBeenCalledOnce();
   expect(result.summary).toContain(
-    "GitHub refusal (405): Repository rule violations found: required approval",
+    "GitHub HTTP 405; merged=undefined; Repository rule violations found: required approval",
   );
   expect(result.failed).toHaveBeenCalledOnce();
 });

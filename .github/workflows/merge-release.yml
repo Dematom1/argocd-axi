@@ -75,9 +75,14 @@ jobs:
               const checks = await github.paginate(github.rest.checks.listForRef, {
                 ...repo, ref: sha, filter: 'latest', per_page: 100,
               });
-              const statuses = await github.paginate(github.rest.repos.getCombinedStatusForRef, {
+              const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
                 ...repo, ref: sha, per_page: 100,
               });
+              const statuses = combined.statuses;
+              if (combined.total_count > statuses.length) {
+                await report(`No merge for ${pr.html_url} at ${sha}: commit status results are incomplete (${statuses.length}/${combined.total_count}).`);
+                return;
+              }
               // GitHub treats neutral/skipped checks as passing (the release
               // App's no-mistakes attestation check is intentionally skipped).
               const badChecks = checks.filter(check => check.status !== 'completed' ||
@@ -104,12 +109,21 @@ jobs:
                 await report(`Dry run: would squash ${pr.html_url} at ${sha}. No merge requested; App authorization is only proven by an actual merge request.`);
                 return;
               }
-              const result = await github.rest.pulls.merge({
-                ...repo, pull_number: number, sha, merge_method: 'squash',
-                headers: { authorization: `token ${process.env.RELEASE_TOKEN}` },
+              // Native fetch avoids Octokit's default-token auth hook overriding
+              // an App token supplied as a per-request header.
+              const response = await fetch(`${process.env.GITHUB_API_URL}/repos/${repo.owner}/${repo.repo}/pulls/${number}/merge`, {
+                method: 'PUT',
+                headers: {
+                  authorization: `Bearer ${process.env.RELEASE_TOKEN}`,
+                  accept: 'application/vnd.github+json',
+                  'content-type': 'application/json',
+                  'x-github-api-version': '2022-11-28',
+                },
+                body: JSON.stringify({ sha, merge_method: 'squash' }),
               });
-              await report(`${pr.html_url} at ${sha}: merged=${result.data.merged}; ${result.data.message}`);
-              if (!result.data.merged) core.setFailed(result.data.message);
+              const result = await response.json();
+              await report(`${pr.html_url} at ${sha}: GitHub HTTP ${response.status}; merged=${result.merged}; ${result.message}`);
+              if (!response.ok || !result.merged) core.setFailed(result.message);
             } catch (error) {
               await report(`GitHub refusal (${error.status ?? 'unknown'}): ${error.message}`);
               core.setFailed(error.message);
