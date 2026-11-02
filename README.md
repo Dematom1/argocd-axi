@@ -25,9 +25,9 @@ auth: argocd CLI session for this context
 user: alice
 apps: "142 total, 3 need attention, 1 operation running"
 writableContexts: none
-attention[3]{app,project,sync,health,why}:
-  payments-api,payments,OutOfSync,Degraded,"OutOfSync; Degraded: Deployment \"payments-api\" exceeded its progress deadline; last sync Failed: ..."
-  legacy,default,Unknown,Unknown,"sync Unknown; health Unknown; ComparisonError: ..."
+attention[3]{app,sync,health,why}:
+  payments-api,OutOfSync,Degraded,"Degraded: Deployment \"payments-api\" exceeded its progress deadline; last sync Failed: ..."
+  legacy,Unknown,Unknown,"ComparisonError: ..."
   checkout,shop,Synced,Progressing,Progressing for 25m
 operations[1]{app,phase,started}:
   checkout,Running,25m ago
@@ -152,6 +152,7 @@ argocd-axi ctx use <context>                 switch the argocd CLI's current con
 argocd-axi whoami                            user, issuer and groups
 argocd-axi can-i <action> <resource> <obj>   ask Argo CD RBAC, e.g. can-i sync applications 'payments/payments-api'
 argocd-axi apps [--problems --project --selector --repo --cluster --sync --health --limit --fields]
+# Default columns: app, sync, health, why; add project with --fields project
 argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
