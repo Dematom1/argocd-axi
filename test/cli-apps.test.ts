@@ -1205,7 +1205,7 @@ describe("apps", () => {
       "--timeout",
       "30",
     ]);
-    expect(met.stderr).toContain("Waiting for wait (0s elapsed; limit 45s)");
+    expect(met.stderr).toContain("Waiting for wait (0s elapsed; limit 30s)");
     expect(met.stdout).not.toContain("Waiting for");
     expect(met.calls[0]).toEqual([
       "app",
