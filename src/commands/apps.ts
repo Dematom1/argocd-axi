@@ -1991,7 +1991,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
       "No changes made; add --confirm to refresh",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
-  await checkWritePermission("update", app, name, options);
+  await checkWritePermission("get", app, name, options);
   const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite(
     "app refresh",
@@ -2043,8 +2043,8 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     );
   const blocks = [
     encodeObject({
-      terminateOperation: name,
-      phase,
+      app: name,
+      phaseBefore: phase,
       startedAt: app.status?.operationState?.startedAt,
       message: app.status?.operationState?.message,
     }),
@@ -2054,7 +2054,7 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
       "No changes made; add --confirm to terminate the operation",
       ...(gate.mode === "preview" ? gate.help : []),
     ]);
-  await checkWritePermission("update", app, name, options);
+  await checkWritePermission("sync", app, name, options);
   const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite("app terminate-op", [name], options, name);
   const current = await waitForWrite(name, timeout, options);

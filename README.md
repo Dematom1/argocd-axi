@@ -86,12 +86,26 @@ has: the current context's session, or `ARGOCD_SERVER` and
 prompts, and never reads the argocd config file (`~/.config/argocd/config`,
 which holds clear-text tokens). A missing session answers `AUTH_REQUIRED`; an
 expired or rejected login answers `AUTH_EXPIRED`. When the target server is
-known, help includes the exact operator login command; otherwise it shows the
-login syntax and asks for the server address. Run
+known, CLI-session help includes the exact operator login command; otherwise it
+shows the login syntax and asks for the server address. With `ARGOCD_AUTH_TOKEN`
+set, failures instead request a replacement token: there is no SSO or stored
+CLI-session fallback. Run
 `argocd-axi auth guide` for offline setup instructions. Human operators run
 `argocd login <server> --sso --grpc-web` interactively themselves. Agents and
 CI should set `ARGOCD_SERVER` and `ARGOCD_AUTH_TOKEN` from a scoped account
-token. Verify the selected context with `argocd-axi ctx`. The tool never logs in.
+token. Verify the selected context with `argocd-axi ctx` and live identity with
+`argocd-axi whoami`. If `ARGOCD_SERVER` is set and a context is selected, it must
+exactly match that context's configured server; a mismatch is rejected before
+network requests, including writes. Unset the override or select the matching
+context. The tool never logs in.
+
+`whoami` and `auth guide` show `tokenExpiry` without printing the token:
+`expires <timestamp>`, `expired <timestamp>`, `non-expiring`, `unknown` for
+malformed JWT/expiry metadata, or `not configured`. JWT metadata is decoded
+locally and **unverified**: it is scheduling information, not proof of identity,
+validity or revocation status. Non-expiring tokens remain supported; prefer a
+short lifetime and rotate before expiry. Live requests still rely on Argo CD to
+validate the credential. `auth guide` is offline and does not validate it.
 
 ### Scoped agent credentials
 
@@ -120,6 +134,13 @@ concrete apps instead, e.g. `argocd-axi can-i get applications
 
 argocd-axi itself refuses `proj role create-token`, `account generate-token`
 and every other command that prints or changes a credential.
+
+Normal and hard `apps refresh` require `applications,get`, not `update`.
+`apps terminate-op` requires `applications,sync`, not `update`; that permission
+also permits sync and rollback. Both retain the writable-context and `--confirm`
+gates. Do not broaden token grants to work around a wrapper preflight.
+These checks follow [Argo CD v3.4.12's application server](https://github.com/argoproj/argo-cd/blob/v3.4.12/server/application/application.go)
+(`Get` and `TerminateOperation`); server RBAC remains authoritative.
 
 ## Agent integration
 

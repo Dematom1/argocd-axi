@@ -101,7 +101,7 @@ describe("argocd error translation", () => {
     ).toContain("ARGOCD_AUTH_TOKEN");
   });
 
-  it("includes the login command for expired agent tokens", () => {
+  it("omits the login command for expired agent tokens", () => {
     const error = mapArgocdFailure(
       fatal("rpc error: code = Unauthenticated desc = token is expired"),
       {
@@ -110,9 +110,8 @@ describe("argocd error translation", () => {
       },
     );
     expect(error.code).toBe("AUTH_EXPIRED");
-    expect(error.suggestions.join(" ")).toContain(
-      "argocd login 'cd.example.com' --sso --grpc-web",
-    );
+    expect(error.suggestions.join(" ")).not.toContain("--sso");
+    expect(error.suggestions.join(" ")).toContain("replace the token");
   });
 
   it("redacts secrets that leak into error text", () => {

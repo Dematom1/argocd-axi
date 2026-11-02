@@ -150,17 +150,13 @@ describe("home view", () => {
     );
   });
 
-  it("caches a check made against ARGOCD_SERVER under that server", async () => {
-    // It neither shows for nor replaces the context's own server.
-    const env = { ARGOCD_SERVER: "other.example.com" };
-    const envHome = makeHome();
-    await runCli([], { home: envHome, scenario: skewed, env });
-    expect(
-      (await runCli(["ctx"], { home: envHome, scenario: skewed, env })).stdout,
-    ).toContain("serverVersion: v2.13.1");
-    expect(
-      (await runCli(["ctx"], { home: envHome, scenario: skewed })).stdout,
-    ).not.toContain("serverVersion:");
+  it("rejects a server override that disagrees with the context", async () => {
+    const result = await runCli([], {
+      scenario: skewed,
+      env: { ARGOCD_SERVER: "other.example.com" },
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("ARGOCD_SERVER does not match");
   });
 
   it("degrades each read to unavailable instead of failing", async () => {
@@ -299,10 +295,10 @@ describe("ctx and the session hook (S17)", () => {
     const { stdout } = await runCli(["ctx"], {
       env: {
         ARGOCD_AUTH_TOKEN: "eyJ.secret.value",
-        ARGOCD_SERVER: "cd.example.com",
+        ARGOCD_SERVER: "argocd.example.com",
       },
     });
-    expect(stdout).toContain("server: cd.example.com (from ARGOCD_SERVER)");
+    expect(stdout).toContain("server: argocd.example.com (from ARGOCD_SERVER)");
     expect(stdout).toContain("auth: ARGOCD_AUTH_TOKEN is set");
     expect(stdout).not.toContain("eyJ.secret.value");
   });

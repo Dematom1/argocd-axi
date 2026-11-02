@@ -5,7 +5,7 @@ import {
   parseArgs,
   type CommandSpec,
 } from "../args.js";
-import { describeTarget, resolveTarget } from "../context.js";
+import { describeTarget, resolveTarget, tokenExpiry } from "../context.js";
 import { CODES, LOGIN_HELP, axiError, validationError } from "../errors.js";
 import { encodeObject } from "../toon.js";
 import { contextOption, contextSuffix, finish } from "./common.js";
@@ -37,12 +37,19 @@ export async function whoamiCommand(args: string[]): Promise<string> {
       contextOption(parsed),
     ),
   ]);
-  const where = describeTarget(target, listing);
+  const where = {
+    ...describeTarget(target, listing),
+    tokenExpiry: tokenExpiry(),
+  };
   if (!info.loggedIn) {
     return finish(
       [encodeObject({ ...where, loggedIn: "no" })],
       undefined,
-      LOGIN_HELP,
+      target.envToken
+        ? [
+            "Replace ARGOCD_AUTH_TOKEN with a valid scoped token; no CLI-session fallback is used",
+          ]
+        : LOGIN_HELP,
     );
   }
   return finish(

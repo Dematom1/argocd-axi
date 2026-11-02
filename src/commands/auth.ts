@@ -1,5 +1,10 @@
 import { parseArgs, CONTEXT_FLAG, type CommandSpec } from "../args.js";
-import { describeTarget, listContexts, resolveTarget } from "../context.js";
+import {
+  describeTarget,
+  listContexts,
+  resolveTarget,
+  tokenExpiry,
+} from "../context.js";
 import { validationError } from "../errors.js";
 import { encodeObject } from "../toon.js";
 import { contextOption, finish } from "./common.js";
@@ -37,9 +42,11 @@ export async function authCommand(args: string[]): Promise<string> {
         contexts: listing.unavailable
           ? `unavailable - ${listing.unavailable}`
           : undefined,
-        operator:
-          "Run the interactive command yourself; argocd-axi never logs in",
-        login,
+        tokenExpiry: tokenExpiry(),
+        operator: target.envToken
+          ? "Replace ARGOCD_AUTH_TOKEN to rotate credentials; no SSO or CLI-session fallback"
+          : "Run the interactive command yourself; argocd-axi never logs in",
+        login: target.envToken ? undefined : login,
         agent:
           "Set ARGOCD_SERVER and ARGOCD_AUTH_TOKEN using a scoped Argo CD account token",
         verify: "Run `argocd-axi ctx`",
