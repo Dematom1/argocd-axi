@@ -55,10 +55,10 @@ const COMMON_HINTS: Record<string, string> = {
   "-o": "output is always TOON; there is no -o (use the raw `argocd` CLI for other formats)",
   "--argocd-context": "use --context <name> to pick the Argo CD context",
   "--follow":
-    "argocd-axi never streams; re-run the command for newer output (logs take --tail and --since)",
-  "-f": "argocd-axi never streams; re-run the command for newer output (logs take --tail and --since)",
+    "argocd-axi does not stream command output; apps wait prints bounded progress (logs take --tail and --since)",
+  "-f": "argocd-axi does not stream command output; apps wait prints bounded progress (logs take --tail and --since)",
   "--watch":
-    "argocd-axi never streams; use `apps wait <app>` for a bounded wait",
+    "argocd-axi does not stream command output; use `apps wait <app>` for a bounded wait with progress",
   "--refresh":
     "refreshing an app triggers a reconcile, which is a write; it is planned for the write tier (see ROADMAP.md)",
   "--hard-refresh":

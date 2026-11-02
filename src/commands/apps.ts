@@ -1,5 +1,4 @@
 import { AxiError } from "axi-sdk-js";
-import { setTimeout as delay } from "node:timers/promises";
 import { parseAllDocuments, stringify } from "yaml";
 import { argocdJson, runArgocd } from "../argocd.js";
 import { loadConfig } from "../config.js";
@@ -456,6 +455,8 @@ export async function appsView(args: string[]): Promise<string> {
   const operation = op
     ? {
         phase: op.phase,
+        revision:
+          op.syncResult?.revisions?.join(", ") ?? op.syncResult?.revision,
         message: cut(op.message),
         started: op.startedAt ? formatAge(op.startedAt, now) : undefined,
         finished: op.finishedAt ? formatAge(op.finishedAt, now) : undefined,
@@ -1249,6 +1250,7 @@ export const APPS_WAIT_SPEC: CommandSpec = {
     "argocd-axi apps wait guestbook --health --timeout 300",
   ],
   notes: [
+    "Prints elapsed-time progress to stderr immediately and every 5 seconds; stdout remains structured final output",
     "With no condition flags it waits for sync, health and operation together, like argocd",
     "A timeout is not an error: the current state is returned with a hint to wait again",
   ],
@@ -1278,6 +1280,7 @@ export async function appsWait(args: string[]): Promise<string> {
       {
         ...options,
         timeoutMs: timeout * 1000 + WAIT_GRACE_MS,
+        progressTimeoutMs: timeout * 1000,
         allowFailure: true,
         failure: { notFoundHelp: NOT_FOUND_HELP },
       },
@@ -1332,13 +1335,14 @@ export async function appsWait(args: string[]): Promise<string> {
 
 export const APPS_SYNC_SPEC: CommandSpec = {
   path: "apps sync",
-  summary: "Preview and optionally sync one Application",
+  summary:
+    "Preview or start a sync without waiting; follow with apps view or apps wait",
   positionals: [APP_ARG],
   flags: [
     {
       name: "--confirm",
       kind: "bool",
-      description: "Execute the sync after preview",
+      description: "Start the sync and return immediately after acceptance",
     },
     {
       name: "--prune",
@@ -1349,7 +1353,8 @@ export const APPS_SYNC_SPEC: CommandSpec = {
       name: "--timeout",
       kind: "value",
       valueName: "s",
-      description: "Maximum wait in seconds (default 120)",
+      description:
+        "Request timeout in seconds (default 120); does not wait for completion",
     },
     CONTEXT_FLAG,
   ],
@@ -1358,6 +1363,8 @@ export const APPS_SYNC_SPEC: CommandSpec = {
     "argocd-axi apps sync guestbook --context staging --confirm",
   ],
   notes: [
+    "Returns after the server accepts the operation, not after deployment; use apps view or apps wait to follow it",
+    "An existing operation is reported as already running (exit 0), including a concurrent submission race",
     "Never prunes unless --prune is given; requires the context in writable-contexts to execute",
   ],
 };
@@ -1383,8 +1390,17 @@ export async function appsSync(args: string[]): Promise<string> {
     loadConfig().config,
   );
   const options = { context: gate.context };
-  const diff = await appsDiff([name, "--context", gate.context], false);
   const app = await getApp(name, options);
+  const follow = operationHelp(name, gate.context);
+  if (confirm && isOperationRunning(app))
+    return finishWrite(
+      gate,
+      [encodeObject({ sync: "already running", revision: syncRevision(app) })],
+      follow,
+    );
+  const diff = confirm
+    ? undefined
+    : await appsDiff([name, "--context", gate.context], false);
   const project = validateName("project", app.spec?.project ?? "default");
   const windows =
     (await argocdJson<SyncWindow[] | null>(
@@ -1412,74 +1428,47 @@ export async function appsSync(args: string[]): Promise<string> {
   const syncArgs = [name, "--async", "--info", "initiated-by=argocd-axi"];
   if (prune) syncArgs.push("--prune");
   try {
-    await runArgocd("app sync", syncArgs, options);
+    await runArgocd("app sync", syncArgs, {
+      ...options,
+      timeoutMs: timeout * 1000,
+    });
   } catch (error) {
     if (
       error instanceof AxiError &&
-      /sync.?window|operation.*(?:running|progress|active)|(?:running|progress).*operation/i.test(
+      /operation.*(?:running|progress|active)|(?:running|progress).*operation/i.test(
         error.message,
       )
     )
+      return finishWrite(
+        gate,
+        [
+          encodeObject({
+            sync: "already running",
+            revision: syncRevision(app),
+          }),
+        ],
+        follow,
+        writeTarget,
+      );
+    if (error instanceof AxiError && /sync.?window/i.test(error.message))
       throw axiError(`REFUSED: ${error.message}`, CODES.REFUSED);
     throw error;
   }
-  let waitTimedOut = false;
-  let waitError: string | undefined;
-  try {
-    const wait = await runArgocd(
-      "app wait",
-      [name, "--operation", "--timeout", String(timeout)],
-      { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
-    );
-    if (wait.exitCode !== 0) {
-      const message =
-        wait.stderr.trim() || wait.stdout.trim() || "app wait failed";
-      if (/timed out|deadline exceeded/i.test(message)) waitTimedOut = true;
-      else waitError = message;
-    }
-  } catch (error) {
-    if (!(error instanceof AxiError && error.code === CODES.TIMEOUT))
-      throw error;
-    waitTimedOut = true;
-  }
-  const result = await getApp(name, options);
-  const phase = result.status?.operationState?.phase;
-  const syncResult =
-    phase === "Succeeded"
-      ? "complete"
-      : phase === "Failed" || phase === "Error"
-        ? "failed"
-        : phase === "Running" && waitTimedOut
-          ? "timeout"
-          : "error";
   return finishWrite(
     gate,
     [
-      ...preview,
       encodeObject({
-        sync: syncResult,
-        ...(syncResult === "error"
-          ? {
-              error:
-                waitError ??
-                result.status?.operationState?.message ??
-                `app wait ended with operation phase ${phase ?? "unknown"}`,
-            }
-          : {}),
-        revision: syncRevision(result),
-        health: healthStatus(result),
-        failedResources: (result.status?.resources ?? [])
-          .filter(
-            (r) => r.status === "SyncFailed" || r.health?.status === "Degraded",
-          )
-          .map((r) => ({
-            kind: r.kind ?? "",
-            name: r.name ?? "",
-            message: r.health?.message ?? r.status ?? "failed",
-          })),
+        sync: "started",
+        revision:
+          appSources(app)
+            .map((source) => source.targetRevision ?? "HEAD")
+            .join(", ") || "HEAD",
+        observedRevision: syncRevision(app) || "unknown",
+        revisionNote:
+          "target revision; inspect apps view for the resolved operation revision",
       }),
     ],
-    undefined,
+    follow,
     writeTarget,
   );
 }
@@ -1552,7 +1541,8 @@ export async function appsActions(args: string[]): Promise<string> {
 
 const APPS_ACTION_RUN_SPEC: CommandSpec = {
   path: "apps actions run",
-  summary: "Preview and optionally run one action on one resource",
+  summary:
+    "Preview or submit one resource action without waiting; inspect with apps view",
   positionals: [
     APP_ARG,
     { name: "action", required: true, description: "Listed resource action" },
@@ -1587,7 +1577,8 @@ const APPS_ACTION_RUN_SPEC: CommandSpec = {
       name: "--timeout",
       kind: "value",
       valueName: "s",
-      description: "Maximum wait in seconds (default 120)",
+      description:
+        "Request timeout in seconds (default 120); does not wait for resource health",
     },
     CONTEXT_FLAG,
   ],
@@ -1701,35 +1692,13 @@ async function appsActionRun(args: string[]): Promise<string> {
       ...(resource.namespace ? ["--namespace", resource.namespace] : []),
       ...attributionArgs(),
     ],
-    options,
+    { ...options, timeoutMs: timeout * 1000 },
     appNameArg,
   );
-  const current = await waitForAppState(
-    appNameArg,
-    timeout,
-    options,
-    (fresh) =>
-      fresh.status?.resources?.some(
-        (r) =>
-          r.group === resource.group &&
-          r.kind === resource.kind &&
-          r.namespace === resource.namespace &&
-          r.name === resource.name &&
-          r.health?.status === "Healthy",
-      ) ?? false,
-  );
-  const state =
-    current.status?.resources?.find(
-      (r) =>
-        r.group === resource.group &&
-        r.kind === resource.kind &&
-        r.namespace === resource.namespace &&
-        r.name === resource.name,
-    )?.health?.status ?? "unknown";
   return finishWrite(
     gate,
-    [...blocks, encodeObject({ result: "submitted", state })],
-    [],
+    [...blocks, encodeObject({ result: "submitted" })],
+    operationHelp(appNameArg, gate.context),
     writeTarget,
   );
 }
@@ -1747,16 +1716,13 @@ function writeSpec(
     positionals,
     flags: [
       { name: "--confirm", kind: "bool", description: "Execute after preview" },
-      ...(path === "apps refresh"
-        ? []
-        : [
-            {
-              name: "--timeout",
-              kind: "value" as const,
-              valueName: "s",
-              description: "Maximum wait in seconds (default 120)",
-            },
-          ]),
+      {
+        name: "--timeout",
+        kind: "value",
+        valueName: "s",
+        description:
+          "Request timeout in seconds (default 120); rollback/refresh block natively with progress",
+      },
       ...(path === "apps refresh"
         ? [
             {
@@ -1802,7 +1768,7 @@ async function runApplicationWrite(
     | "app actions run"
     | "app set",
   args: string[],
-  options: { context?: string },
+  options: { context?: string; timeoutMs?: number },
   name: string,
 ): Promise<void> {
   try {
@@ -1817,59 +1783,22 @@ async function runApplicationWrite(
   }
 }
 
-function writeOutcome(
-  phase: string | undefined,
-  timedOut: boolean,
-  completed: string,
-): string {
-  if (phase === "Failed" || phase === "Error") return "failed";
-  if (phase === "Succeeded") return completed;
-  if (timedOut) return "waiting";
-  return phase ?? "unknown";
+function viewHelp(name: string, context: string): string[] {
+  return [
+    `Run \`argocd-axi apps view ${name} --context ${context}\` to inspect progress and revision`,
+  ];
 }
 
-async function waitForAppState(
-  name: string,
-  timeout: number,
-  options: { context?: string },
-  settled: (app: Application) => boolean,
-): Promise<Application> {
-  const deadline = Date.now() + timeout * 1000;
-  let app = await getApp(name, options);
-  while (!settled(app) && Date.now() < deadline) {
-    await delay(Math.min(1000, Math.max(0, deadline - Date.now())));
-    app = await getApp(name, options);
-  }
-  return app;
-}
-
-async function waitForWrite(
-  name: string,
-  timeout: number,
-  options: { context?: string },
-): Promise<{ app: Application; timedOut: boolean }> {
-  try {
-    const result = await runArgocd(
-      "app wait",
-      [name, "--operation", "--timeout", String(timeout)],
-      { ...options, allowFailure: true, timeoutMs: (timeout + 10) * 1000 },
-    );
-    if (result.exitCode !== 0) {
-      const failure = mapArgocdFailure(result.stderr || result.stdout);
-      if (!/timed? out|timeout/i.test(failure.message)) throw failure;
-      return { app: await getApp(name, options), timedOut: true };
-    }
-    return { app: await getApp(name, options), timedOut: false };
-  } catch (error) {
-    if (!(error instanceof AxiError) || error.code !== CODES.TIMEOUT)
-      throw error;
-    return { app: await getApp(name, options), timedOut: true };
-  }
+function operationHelp(name: string, context: string): string[] {
+  return [
+    ...viewHelp(name, context),
+    `Run \`argocd-axi apps wait ${name} --context ${context}\` to wait for completion`,
+  ];
 }
 
 const APPS_ROLLBACK_SPEC = writeSpec(
   "apps rollback",
-  "Preview and optionally roll back one Application",
+  "Preview or roll back one Application; blocks natively with stderr progress and a timeout",
   [
     APP_ARG,
     {
@@ -1931,35 +1860,30 @@ export async function appsRollback(args: string[]): Promise<string> {
   const writeTarget = await resolveWriteTarget(gate);
   await runApplicationWrite(
     "app rollback",
-    [name, String(id), "--info", "initiated-by=argocd-axi"],
-    options,
+    [name, String(id), "--timeout", String(timeout)],
+    { ...options, timeoutMs: (timeout + 10) * 1000 },
     name,
-  );
-  const current = await waitForWrite(name, timeout, options);
-  const outcome = writeOutcome(
-    current.app.status?.operationState?.phase,
-    current.timedOut,
-    "submitted",
   );
   return finishWrite(
     gate,
     [
-      ...previewBlocks,
       encodeObject({
-        rollback: outcome,
+        rollback: name,
+        currentRevision: syncRevision(app),
+        targetHistoryId: id,
+        targetRevision: target,
+        status: "completed",
         historyId: id,
-        phase: current.app.status?.operationState?.phase,
-        operation: current.app.status?.operationState,
       }),
     ],
-    outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
+    viewHelp(name, gate.context),
     writeTarget,
   );
 }
 
 const APPS_REFRESH_SPEC = writeSpec(
   "apps refresh",
-  "Preview and optionally refresh one Application",
+  "Preview or refresh one Application; blocks natively with stderr progress and a timeout",
   [APP_ARG],
 );
 export async function appsRefresh(args: string[]): Promise<string> {
@@ -1968,6 +1892,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
   const context = getString(parsed, "--context"),
     confirm = getBool(parsed, "--confirm"),
     hard = getBool(parsed, "--hard");
+  const timeout = getInt(parsed, "--timeout", WRITE_TIMEOUT);
   const gate = evaluateWriteGate(
     {
       command: "apps refresh",
@@ -1996,7 +1921,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
   await runApplicationWrite(
     "app refresh",
     [name, hard ? "--hard-refresh" : "--refresh"],
-    options,
+    { ...options, timeoutMs: timeout * 1000 },
     name,
   );
   return finishWrite(
@@ -2009,7 +1934,7 @@ export async function appsRefresh(args: string[]): Promise<string> {
 
 const APPS_TERMINATE_SPEC = writeSpec(
   "apps terminate-op",
-  "Preview and optionally terminate one running operation",
+  "Preview or request operation termination without waiting; follow with apps wait",
   [APP_ARG],
 );
 export async function appsTerminateOp(args: string[]): Promise<string> {
@@ -2056,24 +1981,21 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     ]);
   await checkWritePermission("sync", app, name, options);
   const writeTarget = await resolveWriteTarget(gate);
-  await runApplicationWrite("app terminate-op", [name], options, name);
-  const current = await waitForWrite(name, timeout, options);
-  const outcome = writeOutcome(
-    current.app.status?.operationState?.phase,
-    current.timedOut,
-    "submitted",
+  await runApplicationWrite(
+    "app terminate-op",
+    [name],
+    { ...options, timeoutMs: timeout * 1000 },
+    name,
   );
   return finishWrite(
     gate,
     [
       ...blocks,
       encodeObject({
-        terminateOperation: outcome,
-        phase: current.app.status?.operationState?.phase,
-        operation: current.app.status?.operationState,
+        terminateOperation: "submitted",
       }),
     ],
-    outcome === "waiting" ? ["Wait again with `apps wait`"] : [],
+    operationHelp(name, gate.context),
     writeTarget,
   );
 }
@@ -2097,7 +2019,8 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
 
 const APPS_AUTO_SYNC_SPEC: CommandSpec = {
   path: "apps auto-sync",
-  summary: "Preview and optionally enable or disable automated sync",
+  summary:
+    "Preview or submit automated-sync policy changes without waiting; inspect with apps view",
   positionals: [
     APP_ARG,
     { name: "mode", required: true, description: "on or off" },
@@ -2108,11 +2031,15 @@ const APPS_AUTO_SYNC_SPEC: CommandSpec = {
       name: "--timeout",
       kind: "value",
       valueName: "s",
-      description: "Maximum wait in seconds (default 120)",
+      description:
+        "Request timeout in seconds (default 120); does not wait for policy convergence",
     },
     CONTEXT_FLAG,
   ],
   examples: ["argocd-axi apps auto-sync guestbook on --context staging"],
+  notes: [
+    "--timeout bounds the request, not policy convergence; use apps view to inspect the policy",
+  ],
 };
 
 async function appsAutoSync(args: string[]): Promise<string> {
@@ -2152,21 +2079,13 @@ async function appsAutoSync(args: string[]): Promise<string> {
       mode === "on" ? "automated" : "none",
       ...attributionArgs(),
     ],
-    options,
+    { ...options, timeoutMs: timeout * 1000 },
     name,
-  );
-  const observed = await waitForAppState(name, timeout, options, (fresh) =>
-    mode === "on"
-      ? autoSyncSummary(fresh).startsWith("automated")
-      : autoSyncSummary(fresh) === "manual",
   );
   return finishWrite(
     gate,
-    [
-      ...blocks,
-      encodeObject({ result: "submitted", state: autoSyncSummary(observed) }),
-    ],
-    [],
+    [...blocks, encodeObject({ result: "submitted" })],
+    viewHelp(name, gate.context),
     writeTarget,
   );
 }

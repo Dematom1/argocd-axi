@@ -26,6 +26,7 @@ export const DEFAULT_SCENARIO = join(
 
 export interface RunResult {
   stdout: string;
+  stderr: string;
   exitCode: number;
   /** argv of every argocd invocation, in order. */
   calls: string[][];
@@ -62,7 +63,7 @@ export async function runCli(
     `${options.bin ?? "argocd-axi"}.js`,
   );
   const child = spawn(process.execPath, [entry, ...args], {
-    stdio: ["pipe", "pipe", "ignore"],
+    stdio: ["pipe", "pipe", "pipe"],
     timeout: 30_000,
     env: {
       PATH: FAKE_BIN,
@@ -79,6 +80,9 @@ export async function runCli(
   if (options.stdin !== undefined) child.stdin.end(options.stdin);
   else child.stdin.end();
   let stdout = "";
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => (stderr += chunk));
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string) => (stdout += chunk));
   const exitCode = await new Promise<number>((resolve, reject) => {
@@ -92,7 +96,7 @@ export async function runCli(
         .map((line) => JSON.parse(line) as string[])
     : [];
   expect(() => decode(stdout), args.join(" ") || "home").not.toThrow();
-  return { stdout, exitCode, calls, home };
+  return { stdout, stderr, exitCode, calls, home };
 }
 
 /** Write a one-off scenario next to the default fixtures. */

@@ -23,6 +23,8 @@ export interface RunOptions {
   context?: string;
   /** Override the operation's hard timeout (used by bounded waits). */
   timeoutMs?: number;
+  /** User-facing limit shown in blocking progress. */
+  progressTimeoutMs?: number;
   /** Return non-zero exits to the caller instead of throwing. */
   allowFailure?: boolean;
   failure?: FailureContext;
@@ -77,10 +79,25 @@ export async function runArgocd(
   }
   const argv = buildArgv(op, args, options.context);
   const timeoutMs = options.timeoutMs ?? OPERATIONS[op].timeoutMs;
+  const progressTimeoutMs = options.progressTimeoutMs ?? timeoutMs;
   if (OPERATIONS[op].network && process.env.ARGOCD_SERVER?.trim()) {
     await resolveTarget(options.context);
   }
-  const result = await spawnCollect("argocd", argv, timeoutMs);
+  const blocking =
+    op === "app wait" || op === "app rollback" || op === "app refresh";
+  const started = Date.now();
+  const progress = () =>
+    process.stderr.write(
+      `Waiting for ${op.slice(4)} (${Math.floor((Date.now() - started) / 1000)}s elapsed; limit ${Math.ceil(progressTimeoutMs / 1000)}s)\n`,
+    );
+  if (blocking) progress();
+  const ticker = blocking ? setInterval(progress, 5000) : undefined;
+  let result: RunResult;
+  try {
+    result = await spawnCollect("argocd", argv, timeoutMs);
+  } finally {
+    clearInterval(ticker);
+  }
   const token = process.env.ARGOCD_AUTH_TOKEN;
   if (token) {
     result.stdout = result.stdout.replaceAll(token, "[redacted]");

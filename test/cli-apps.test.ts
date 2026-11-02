@@ -45,6 +45,53 @@ describe("apps", () => {
     expect(targetLookup).toBeLessThan(refresh);
   });
 
+  it("bounds native rollback, reports progress, and adds no second wait", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [prod]",
+    );
+    const { stdout, stderr, exitCode, calls } = await runCli(
+      [
+        "apps",
+        "rollback",
+        "payments-api",
+        "7",
+        "--confirm",
+        "--context",
+        "prod",
+        "--timeout",
+        "2",
+      ],
+      {
+        home,
+        scenario: scenario([
+          {
+            argv: ["app", "get", "payments-api"],
+            stdoutFile: "app-payments-api.json",
+          },
+          { argv: ["account", "can-i"], stdout: "yes\n" },
+          { argv: ["app", "rollback"], stdout: "" },
+        ]),
+      },
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("status: completed");
+    expect(stderr).toContain("Waiting for rollback");
+    expect(calls.at(-1)).toEqual([
+      "app",
+      "rollback",
+      "payments-api",
+      "7",
+      "--timeout",
+      "2",
+      "--argocd-context",
+      "prod",
+    ]);
+    expect(calls.some((call) => call[1] === "wait")).toBe(false);
+  });
+
   it("checks action-specific RBAC before running a resource action", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
@@ -266,7 +313,7 @@ describe("apps", () => {
     expect(calls.some((call) => call[1] === "wait")).toBe(false);
   });
 
-  it("reports a successful server sync as complete", async () => {
+  it("starts a sync without waiting or reading the app after submission", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
     writeFileSync(
@@ -299,8 +346,94 @@ describe("apps", () => {
         ]),
       },
     );
-    expect(stdout).toContain("sync: complete");
-    expect(calls.some((call) => call[1] === "sync")).toBe(true);
+    expect(stdout).toContain("sync: started");
+    expect(stdout).toContain("revision: HEAD");
+    expect(stdout).toContain("apps view demo --context prod");
+    expect(stdout).toContain("apps wait demo --context prod");
+    expect(calls.at(-1)).toEqual([
+      "app",
+      "sync",
+      "demo",
+      "--async",
+      "--info",
+      "initiated-by=argocd-axi",
+      "--argocd-context",
+      "prod",
+    ]);
+    expect(calls.some((call) => call[1] === "wait")).toBe(false);
+  });
+
+  it.each([false, true])(
+    "reports an existing sync clearly, including a submission race (%s)",
+    async (race) => {
+      const home = makeHome();
+      mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+      writeFileSync(
+        join(home, ".config", "argocd-axi", "config"),
+        "writable-contexts: [prod]",
+      );
+      const { stdout, exitCode, calls } = await runCli(
+        ["apps", "sync", "demo", "--context", "prod", "--confirm"],
+        {
+          home,
+          scenario: scenario([
+            {
+              argv: ["app", "get", "demo"],
+              stdout: JSON.stringify({
+                metadata: { name: "demo" },
+                spec: { project: "default" },
+                status: {
+                  sync: { revision: "abc123" },
+                  operationState: { phase: race ? "Succeeded" : "Running" },
+                },
+              }),
+            },
+            { argv: ["proj", "windows", "list"], stdout: "[]" },
+            { argv: ["account", "can-i"], stdout: "yes\n" },
+            {
+              argv: ["app", "sync"],
+              exit: 20,
+              stderr:
+                "rpc error: code = FailedPrecondition desc = another operation is already in progress",
+            },
+          ]),
+        },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("sync: already running");
+      expect(stdout).toContain("apps wait demo --context prod");
+      expect(calls.some((call) => call[1] === "wait")).toBe(false);
+      expect(calls.some((call) => call[1] === "sync")).toBe(race);
+    },
+  );
+
+  it("submits termination without waiting for the operation to finish", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [prod]",
+    );
+    const { stdout, calls, exitCode } = await runCli(
+      ["apps", "terminate-op", "demo", "--context", "prod", "--confirm"],
+      {
+        home,
+        scenario: scenario([
+          {
+            argv: ["app", "get", "demo"],
+            stdout: JSON.stringify({
+              spec: { project: "default" },
+              status: { operationState: { phase: "Running" } },
+            }),
+          },
+          { argv: ["account", "can-i"], stdout: "yes\n" },
+          { argv: ["app", "terminate-op"], stdout: "" },
+        ]),
+      },
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("terminateOperation: submitted");
+    expect(calls.at(-1)?.slice(0, 3)).toEqual(["app", "terminate-op", "demo"]);
   });
 
   it("lists problems first with the reason and a total", async () => {
@@ -689,7 +822,7 @@ describe("apps", () => {
       "logs: 0 log lines returned for guestbook",
     );
     expect((await runCli(["apps", "logs", "x", "--follow"])).stdout).toContain(
-      "argocd-axi never streams",
+      "argocd-axi does not stream command output",
     );
   });
 
@@ -1072,6 +1205,8 @@ describe("apps", () => {
       "--timeout",
       "30",
     ]);
+    expect(met.stderr).toContain("Waiting for wait (0s elapsed; limit 30s)");
+    expect(met.stdout).not.toContain("Waiting for");
     expect(met.calls[0]).toEqual([
       "app",
       "wait",
@@ -1170,8 +1305,11 @@ describe("apps", () => {
       ],
       { home },
     );
-    expect(executed.stdout).toContain("state:");
-    expect(executed.stdout).toContain("Suspended");
+    expect(executed.stdout).toContain("result: submitted");
+    expect(executed.stdout).toContain("apps view web --context staging");
+    expect(
+      executed.calls.filter((call) => call[0] === "app" && call[1] === "get"),
+    ).toHaveLength(1);
     const actionCall = executed.calls.find(
       (call) => call[1] === "actions" && call[2] === "run",
     );
@@ -1180,7 +1318,7 @@ describe("apps", () => {
     expect(actionCall?.slice(0, 4)).toEqual(["app", "actions", "run", "web"]);
   });
 
-  it("observes resource health after an action even when initially healthy", async () => {
+  it("does not poll resource health after submitting an action", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
     writeFileSync(
@@ -1261,10 +1399,10 @@ describe("apps", () => {
         ]),
       },
     );
-    expect(stdout).toContain("state:");
+    expect(stdout).toContain("result: submitted");
     expect(
       calls.filter((call) => call[0] === "app" && call[1] === "get"),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   it("previews auto-sync changes and requires explicit confirmation", async () => {
@@ -1301,7 +1439,10 @@ describe("apps", () => {
       ],
       { home: result.home },
     );
-    expect(executed.stdout).toContain("state:");
+    expect(executed.stdout).toContain("result: submitted");
+    expect(
+      executed.calls.filter((call) => call[0] === "app" && call[1] === "get"),
+    ).toHaveLength(1);
     expect(
       executed.calls.some((call) => call[0] === "app" && call[1] === "get"),
     ).toBe(true);
