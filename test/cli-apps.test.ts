@@ -77,7 +77,7 @@ describe("apps", () => {
       },
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("rollback: completed");
+    expect(stdout).toContain("status: completed");
     expect(stderr).toContain("Waiting for rollback");
     expect(calls.at(-1)).toEqual([
       "app",

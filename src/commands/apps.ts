@@ -1865,9 +1865,12 @@ export async function appsRollback(args: string[]): Promise<string> {
   return finishWrite(
     gate,
     [
-      ...previewBlocks,
       encodeObject({
-        rollback: "completed",
+        rollback: name,
+        currentRevision: syncRevision(app),
+        targetHistoryId: id,
+        targetRevision: target,
+        status: "completed",
         historyId: id,
       }),
     ],
