@@ -1,0 +1,293 @@
+// Synthetic protocol lab: actual argocd binary, loopback gRPC-web server only.
+// Wire fields follow Argo CD v3.4.12 protobuf schemas.
+import { createServer } from "node:http";
+import { spawn } from "node:child_process";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import assert from "node:assert/strict";
+const root = resolve(process.argv[2] ?? ".");
+const home = mkdtempSync(join(tmpdir(), "argocd-native-lab-"));
+const calls = [];
+let terminated = false,
+  syncAllowed = false,
+  rejection = false;
+function vi(n) {
+  const a = [];
+  do {
+    const b = n & 127;
+    n = Math.floor(n / 128);
+    a.push(b | (n ? 128 : 0));
+  } while (n);
+  return Buffer.from(a);
+}
+function field(n, v) {
+  const b = Buffer.isBuffer(v) ? v : Buffer.from(v);
+  return Buffer.concat([vi(n * 8 + 2), vi(b.length), b]);
+}
+function frame(p, trailer = false) {
+  const b = Buffer.alloc(5);
+  b[0] = trailer ? 128 : 0;
+  b.writeUInt32BE(p.length, 1);
+  return Buffer.concat([b, p]);
+}
+function fields(b) {
+  let i = 0;
+  const out = {};
+  const read = () => {
+    let n = 0,
+      s = 0,
+      v;
+    do {
+      v = b[i++];
+      n += (v & 127) * 2 ** s;
+      s += 7;
+    } while (v & 128);
+    return n;
+  };
+  while (i < b.length) {
+    const tag = read(),
+      n = read();
+    out[tag >> 3] = b.subarray(i, i + n).toString();
+    i += n;
+  }
+  return out;
+}
+function app() {
+  return Buffer.concat([
+    field(1, field(1, "proof")),
+    field(2, field(3, "default")),
+    field(3, field(7, field(2, terminated ? "Succeeded" : "Running"))),
+    ...(terminated ? [] : [field(4, Buffer.alloc(0))]),
+  ]);
+}
+const server = createServer(async (req, res) => {
+  let body = Buffer.alloc(0);
+  for await (const b of req) body = Buffer.concat([body, b]);
+  const args = fields(body.subarray(5)),
+    route = req.url;
+  calls.push({ route, args });
+  const reply = (payload = Buffer.alloc(0), code = 0, message = "") => {
+    res.writeHead(200, { "content-type": "application/grpc-web+proto" });
+    res.end(
+      Buffer.concat([
+        ...(code ? [] : [frame(payload)]),
+        frame(
+          Buffer.from(
+            `grpc-status: ${code}\r\n${message ? `grpc-message: ${message}\r\n` : ""}`,
+          ),
+          true,
+        ),
+      ]),
+    );
+  };
+  if (rejection) {
+    reply(Buffer.alloc(0), 16, "token has expired");
+    return;
+  }
+  if (route === "/account.AccountService/CanI") {
+    const allow =
+      args[1] === "applications" &&
+      args[3] === "default/proof" &&
+      (args[2] === "get" || (args[2] === "sync" && syncAllowed));
+    reply(field(1, allow ? "yes" : "no"));
+    return;
+  }
+  if (route === "/session.SessionService/GetUserInfo") {
+    reply(
+      Buffer.concat([
+        Buffer.from([8, 1]),
+        field(2, "synthetic-operations"),
+        field(3, "argocd"),
+      ]),
+    );
+    return;
+  }
+  if (route === "/application.ApplicationService/Get") {
+    reply(app());
+    return;
+  }
+  if (route === "/project.ProjectService/Get") {
+    reply();
+    return;
+  }
+  if (route === "/cluster.SettingsService/Get") {
+    reply();
+    return;
+  }
+  if (route === "/application.ApplicationService/TerminateOperation") {
+    if (!syncAllowed) {
+      reply(Buffer.alloc(0), 7, "permission denied");
+      return;
+    }
+    terminated = true;
+    reply();
+    return;
+  }
+  if (route === "/application.ApplicationService/Watch") {
+    reply(Buffer.concat([field(1, "MODIFIED"), field(2, app())]));
+    return;
+  }
+  reply(Buffer.alloc(0), 12, "unsupported synthetic lab RPC");
+});
+await new Promise((r) => server.listen(0, "127.0.0.1", r));
+const target = `127.0.0.1:${server.address().port}`;
+mkdirSync(join(home, ".config", "argocd"), { recursive: true });
+mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+writeFileSync(
+  join(home, ".config", "argocd", "config"),
+  JSON.stringify({
+    "current-context": "proof",
+    contexts: [{ name: "proof", server: target, user: "synthetic" }],
+    servers: [{ server: target, plaintext: true, "grpc-web": true }],
+    users: [{ name: "synthetic" }],
+  }),
+  { mode: 0o600 },
+);
+writeFileSync(
+  join(home, ".config", "argocd-axi", "config"),
+  "writable-contexts: [proof]\n",
+);
+function jwt(claims) {
+  return `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.synthetic-signature`;
+}
+async function run(args, token = jwt({ exp: 4102444800 }), address = target) {
+  return new Promise((done, reject) => {
+    const child = spawn(
+      process.execPath,
+      [join(root, "dist/bin/argocd-axi.js"), ...args],
+      {
+        env: {
+          PATH: process.env.PATH,
+          HOME: home,
+          XDG_CONFIG_HOME: join(home, ".config"),
+          XDG_CACHE_HOME: join(home, ".cache"),
+          ARGOCD_SERVER: address,
+          ARGOCD_AUTH_TOKEN: token,
+          ARGOCD_OPTS: "--plaintext --grpc-web",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let text = "";
+    child.stdout.on("data", (b) => (text += b));
+    child.stderr.on("data", (b) => (text += b));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (token) assert(!text.includes(token), "token leaked");
+      done({ code, text });
+    });
+  });
+}
+try {
+  for (const [action, answer] of [
+    ["get", "yes"],
+    ["update", "no"],
+    ["sync", "no"],
+  ]) {
+    const r = await run([
+      "can-i",
+      action,
+      "applications",
+      "default/proof",
+      "--context",
+      "proof",
+    ]);
+    assert.equal(
+      r.code,
+      0,
+      `${action}: ${r.text}; calls=${JSON.stringify(calls)}`,
+    );
+    assert(r.text.includes(`answer: ${answer}`), r.text);
+  }
+  for (const hard of [false, true]) {
+    const start = calls.length,
+      r = await run([
+        "apps",
+        "refresh",
+        "proof",
+        "--context",
+        "proof",
+        "--confirm",
+        ...(hard ? ["--hard"] : []),
+      ]);
+    assert.equal(
+      r.code,
+      0,
+      `${r.text}; calls=${JSON.stringify(calls.slice(start))}`,
+    );
+    const seen = calls.slice(start);
+    assert(seen.some((c) => c.route.endsWith("/CanI") && c.args[2] === "get"));
+    assert(!seen.some((c) => c.args[2] === "update"));
+  }
+  let start = calls.length,
+    r = await run([
+      "apps",
+      "terminate-op",
+      "proof",
+      "--context",
+      "proof",
+      "--confirm",
+      "--timeout",
+      "1",
+    ]);
+  assert.notEqual(r.code, 0, r.text);
+  assert(
+    !calls.slice(start).some((c) => c.route.endsWith("/TerminateOperation")),
+  );
+  syncAllowed = true;
+  start = calls.length;
+  r = await run([
+    "apps",
+    "terminate-op",
+    "proof",
+    "--context",
+    "proof",
+    "--confirm",
+    "--timeout",
+    "1",
+  ]);
+  assert.equal(r.code, 0, r.text);
+  assert(
+    calls
+      .slice(start)
+      .some((c) => c.route.endsWith("/CanI") && c.args[2] === "sync"),
+  );
+  assert(terminated);
+  start = calls.length;
+  r = await run(["whoami", "--context", "proof"], jwt({}), "127.0.0.1:1");
+  assert.notEqual(r.code, 0);
+  assert(r.text.includes("ARGOCD_SERVER does not match"));
+  assert.equal(calls.length, start);
+  for (const [claims, status] of [
+    [{ exp: 4102444800 }, "expires"],
+    [{ exp: 1 }, "expired"],
+    [{}, "non-expiring"],
+  ])
+    for (const args of [["whoami"], ["auth", "guide"]]) {
+      r = await run([...args, "--context", "proof"], jwt(claims));
+      assert.equal(r.code, 0, r.text);
+      assert(
+        r.text.includes("tokenExpiry:") && r.text.includes(status),
+        r.text,
+      );
+      assert(!r.text.includes("--sso"));
+    }
+  for (const args of [["whoami"], ["auth", "guide"]]) {
+    r = await run([...args, "--context", "proof"], "");
+    assert.equal(r.code, 0, r.text);
+    assert(r.text.includes("not configured"), r.text);
+  }
+  rejection = true;
+  start = calls.length;
+  r = await run(["whoami", "--context", "proof"]);
+  assert.notEqual(r.code, 0, r.text);
+  assert(!r.text.includes("--sso"), r.text);
+  assert.equal(calls.length - start, 1);
+  console.log(
+    "PASS: real argocd-axi + native argocd + synthetic loopback gRPC-web server. Not real-server acceptance.",
+  );
+} finally {
+  await new Promise((r) => server.close(r));
+  rmSync(home, { recursive: true, force: true });
+}

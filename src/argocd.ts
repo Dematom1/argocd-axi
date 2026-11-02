@@ -77,7 +77,15 @@ export async function runArgocd(
   }
   const argv = buildArgv(op, args, options.context);
   const timeoutMs = options.timeoutMs ?? OPERATIONS[op].timeoutMs;
+  if (OPERATIONS[op].network && process.env.ARGOCD_SERVER?.trim()) {
+    await resolveTarget(options.context);
+  }
   const result = await spawnCollect("argocd", argv, timeoutMs);
+  const token = process.env.ARGOCD_AUTH_TOKEN;
+  if (token) {
+    result.stdout = result.stdout.replaceAll(token, "[redacted]");
+    result.stderr = result.stderr.replaceAll(token, "[redacted]");
+  }
 
   if (result.timedOut) {
     throw axiError(
@@ -94,15 +102,16 @@ export async function runArgocd(
     const cleaned = result.stderr || result.stdout;
     if (!failure.loginCommand && isAuthenticationFailure(cleaned)) {
       failure.agentCredentials = Boolean(process.env.ARGOCD_AUTH_TOKEN?.trim());
-      try {
-        const { target } = await resolveTarget(options.context);
-        const server = target.envServer ?? target.server;
-        failure.loginCommand = server
-          ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
-          : undefined;
-      } catch {
-        failure.loginCommand = undefined;
-      }
+      if (!failure.agentCredentials)
+        try {
+          const { target } = await resolveTarget(options.context);
+          const server = target.envServer ?? target.server;
+          failure.loginCommand = server
+            ? `argocd login '${server.replaceAll("'", "'\\''")}' --sso --grpc-web`
+            : undefined;
+        } catch {
+          failure.loginCommand = undefined;
+        }
     }
     throw mapArgocdFailure(cleaned, failure);
   }

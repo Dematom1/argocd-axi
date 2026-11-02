@@ -35,7 +35,7 @@ export interface Target {
   source: "flag" | "current" | "none";
   /** ARGOCD_SERVER is set and overrides the context's server. */
   envServer?: string;
-  /** ARGOCD_AUTH_TOKEN is set (its value is never read beyond presence). */
+  /** ARGOCD_AUTH_TOKEN is set; its value is never displayed. */
   envToken: boolean;
 }
 
@@ -113,6 +113,32 @@ export function effectiveServer(target: Target): string | undefined {
   return target.envServer ?? target.server;
 }
 
+/** Unverified JWT scheduling metadata, not proof of authentication. */
+export function tokenExpiry(): string {
+  const token = process.env.ARGOCD_AUTH_TOKEN?.trim();
+  if (!token) return "not configured";
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3 || !parts[1]) return "unknown (invalid JWT)";
+    const claims: unknown = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf8"),
+    );
+    if (typeof claims !== "object" || claims === null || Array.isArray(claims))
+      return "unknown (invalid JWT)";
+    if (!("exp" in claims)) return "non-expiring (unverified)";
+    const exp = claims.exp;
+    if (
+      typeof exp !== "number" ||
+      !Number.isFinite(exp) ||
+      !Number.isFinite(new Date(exp * 1000).getTime())
+    )
+      return "unknown (invalid exp)";
+    return `${exp * 1000 <= Date.now() ? "expired" : "expires"} ${new Date(exp * 1000).toISOString()} (unverified)`;
+  } catch {
+    return "unknown (invalid JWT)";
+  }
+}
+
 export function describeTarget(target: Target, listing: ContextListing) {
   return {
     context: target.context ?? "none configured",
@@ -137,6 +163,16 @@ export async function resolveTarget(
 ): Promise<{ target: Target; listing: ContextListing }> {
   const contexts = listing ?? (await listContexts());
   const base = { envServer: envServer(), envToken: envToken() };
+  const selected =
+    explicit !== undefined
+      ? contexts.contexts.find((c) => c.name === explicit)
+      : contexts.contexts.find((c) => c.current);
+  if (base.envServer && selected && base.envServer !== selected.server) {
+    throw validationError(
+      "ARGOCD_SERVER does not match the selected context's server",
+      ["Unset ARGOCD_SERVER or select a context configured for that server"],
+    );
+  }
 
   if (explicit !== undefined) {
     validateContextName(explicit);

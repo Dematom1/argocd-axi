@@ -55,7 +55,12 @@ export async function runCli(
   const home = options.home ?? makeHome();
   const log = join(home, "argocd-calls.log");
   writeFileSync(log, "");
-  const entry = join(ROOT, "dist", "bin", `${options.bin ?? "argocd-axi"}.js`);
+  const entry = join(
+    process.env.ARGOCD_AXI_TEST_PACKAGE ?? ROOT,
+    "dist",
+    "bin",
+    `${options.bin ?? "argocd-axi"}.js`,
+  );
   const child = spawn(process.execPath, [entry, ...args], {
     stdio: ["pipe", "pipe", "ignore"],
     timeout: 30_000,
