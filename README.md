@@ -228,21 +228,21 @@ specific app.
   Unknown flags are rejected before any argocd call, with the valid flags
   listed.
 
-| Code                              | Meaning                                                                                       |
-| --------------------------------- | --------------------------------------------------------------------------------------------- |
-| `VALIDATION_ERROR`                | Bad flag or argument (exit 2)                                                                 |
-| `AUTH_REQUIRED`                   | No session is configured                                                                      |
-| `AUTH_EXPIRED`                    | Argo CD rejected or expired the login; help prints the exact command when the server is known |
-| `FORBIDDEN`                       | Argo CD RBAC denied it (Argo CD also says this for objects in projects you cannot see)        |
-| `NOT_FOUND`                       | No such app, project or ApplicationSet                                                        |
-| `RATE_LIMITED`                    | The server asked to slow down                                                                 |
-| `SERVER_UNREACHABLE`              | Network or TLS failure reaching the server                                                    |
-| `REFUSED`                         | A verb argocd-axi does not run, with the reason and the human route                           |
-| `NO_CONTEXT`, `CONTEXT_NOT_FOUND` | No current context, or `--context` names one that is not configured                           |
-| `TIMEOUT`                         | argocd did not answer in time                                                                 |
-| `ARGOCD_NOT_INSTALLED`            | No `argocd` on `PATH`                                                                         |
-| `CONFIG_INVALID`                  | argocd-axi's own config file is malformed                                                     |
-| `UPSTREAM_ERROR`                  | Any other argocd failure, with its cleaned message                                            |
+| Code                              | Meaning                                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`                | Bad flag or argument (exit 2)                                                                            |
+| `AUTH_REQUIRED`                   | No session is configured                                                                                 |
+| `AUTH_EXPIRED`                    | Argo CD rejected the credential; token users must replace it, while CLI-session users get login guidance |
+| `FORBIDDEN`                       | Argo CD RBAC denied it (Argo CD also says this for objects in projects you cannot see)                   |
+| `NOT_FOUND`                       | No such app, project or ApplicationSet                                                                   |
+| `RATE_LIMITED`                    | The server asked to slow down                                                                            |
+| `SERVER_UNREACHABLE`              | Network or TLS failure reaching the server                                                               |
+| `REFUSED`                         | A verb argocd-axi does not run, with the reason and the human route                                      |
+| `NO_CONTEXT`, `CONTEXT_NOT_FOUND` | No current context, or `--context` names one that is not configured                                      |
+| `TIMEOUT`                         | argocd did not answer in time                                                                            |
+| `ARGOCD_NOT_INSTALLED`            | No `argocd` on `PATH`                                                                                    |
+| `CONFIG_INVALID`                  | argocd-axi's own config file is malformed                                                                |
+| `UPSTREAM_ERROR`                  | Any other argocd failure, with its cleaned message                                                       |
 
 ## Safety model
 
