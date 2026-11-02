@@ -1394,6 +1394,7 @@ describe("apps", () => {
         ]),
       },
     );
+    expect(failedPermission.exitCode).toBe(1);
     expect(failedPermission.stdout).toContain("code: UPSTREAM_ERROR");
     expect(failedPermission.stdout).toContain("permission service unavailable");
     expect(failedPermission.stdout).not.toContain("code: REFUSED");
@@ -1445,6 +1446,7 @@ describe("apps", () => {
         ]),
       },
     );
+    expect(denied.exitCode).toBe(1);
     expect(denied.stdout).toContain("code: REFUSED");
     expect(denied.stdout).toContain(
       "Argo CD RBAC denies action/argoproj.io/Rollout/restart",

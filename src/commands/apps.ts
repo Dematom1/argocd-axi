@@ -46,7 +46,7 @@ import {
   type ResourceStatus,
 } from "../model.js";
 import { describeTarget, parseTable, resolveTarget } from "../context.js";
-import { Redactor } from "../redact.js";
+import { redactText, Redactor } from "../redact.js";
 import { encodeObject, renderTextBlock } from "../toon.js";
 import {
   carriedFlags,
@@ -1755,7 +1755,7 @@ async function checkWritePermission(
   );
   if (permission.exitCode !== 0)
     throw axiError(
-      `argocd account can-i failed for ${name}: ${permission.stderr.trim() || permission.stdout.trim() || `exit code ${permission.exitCode}`}`,
+      `argocd account can-i failed for ${name}: ${truncate(redactText(permission.stderr.trim() || permission.stdout.trim() || `exit code ${permission.exitCode}`).text, MESSAGE_CHARS)}`,
       CODES.UPSTREAM_ERROR,
     );
   const answer = permission.stdout.trim().toLowerCase();
@@ -1766,7 +1766,7 @@ async function checkWritePermission(
     );
   if (answer !== "yes")
     throw axiError(
-      `argocd account can-i returned unexpected output for ${name}: ${permission.stdout.trim() || permission.stderr.trim() || "<empty>"}`,
+      `argocd account can-i returned unexpected output for ${name}: ${truncate(redactText(permission.stdout.trim() || permission.stderr.trim() || "<empty>").text, MESSAGE_CHARS)}`,
       CODES.UPSTREAM_ERROR,
     );
 }
