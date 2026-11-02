@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.10...argocd-axi-v0.1.11) (2026-11-02)
+
+
+### Bug Fixes
+
+* **argocd:** enforce subprocess deadlines ([#43](https://github.com/Dematom1/argocd-axi/issues/43)) ([e7fa594](https://github.com/Dematom1/argocd-axi/commit/e7fa594f3faf63c041b38217015653a09b7fc81e))
+
 ## [0.1.10](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.9...argocd-axi-v0.1.10) (2026-11-02)
 
 
