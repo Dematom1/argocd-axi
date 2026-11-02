@@ -1,7 +1,11 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { detectInstallMethod, installSessionStartHooks } from "axi-sdk-js";
+import {
+  detectInstallMethod,
+  installSessionStartHooks,
+  sessionStartHookStatus,
+} from "axi-sdk-js";
 import { parseArgs, renderCommandHelp, type CommandSpec } from "../args.js";
 import { CODES, axiError, validationError } from "../errors.js";
 import { encodeObject } from "../toon.js";
@@ -37,6 +41,37 @@ function ctxEntrypoint(): string {
     : join(here, "..", "..", "bin", "argocd-axi-ctx.ts");
 }
 
+function hookStatus() {
+  const observed = sessionStartHookStatus({ marker: "argocd-axi" });
+  // The SDK treats read errors as absence. Check its destinations before reporting.
+  for (const [file, json] of [
+    [observed.claude.path, true],
+    [observed.codex.path, true],
+    [observed.codex.userFeaturePath, false],
+    [observed.opencode.path, false],
+  ] as const) {
+    try {
+      const text = readFileSync(file, "utf8");
+      if (json) JSON.parse(text);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        continue;
+      throw axiError(
+        `Cannot read hook destination ${file}: ${String(error)}`,
+        CODES.CONFIG_INVALID,
+        [`Check read permissions and file syntax for ${file}`],
+      );
+    }
+  }
+  return {
+    claude: observed.claude.installed,
+    codex: observed.codex.installed,
+    codexFeature: observed.codex.userFeatureEnabled,
+    opencode: observed.opencode.installed,
+    sessionEnd: sessionEndHookStatus() ? "installed" : "not installed",
+  };
+}
+
 export async function setupCommand(args: string[]): Promise<string> {
   const action = args[0];
   if (action !== "hooks" && action !== "status" && action !== "uninstall") {
@@ -48,14 +83,7 @@ export async function setupCommand(args: string[]): Promise<string> {
   if (args.includes("--help")) return renderCommandHelp(SETUP_HOOKS_SPEC);
   parseArgs(SETUP_HOOKS_SPEC, args.slice(1));
   if (action === "status")
-    return finish(
-      [
-        encodeObject({
-          sessionEnd: sessionEndHookStatus() ? "installed" : "not installed",
-        }),
-      ],
-      undefined,
-    );
+    return finish([encodeObject(hookStatus())], undefined);
   if (action === "uninstall")
     return finish(
       [
@@ -91,7 +119,9 @@ export async function setupCommand(args: string[]): Promise<string> {
     onError: (message) => errors.push(message),
   });
   try {
-    installSessionEndHook();
+    installSessionEndHook(
+      realpathSync(join(dirname(entrypoint), "argocd-axi.js")),
+    );
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
   }
@@ -102,16 +132,23 @@ export async function setupCommand(args: string[]): Promise<string> {
       ["Re-run `argocd-axi setup hooks` after fixing the paths above"],
     );
   }
-  return finish(
-    [
-      encodeObject({
-        hooks: "installed or already up to date",
-        integrations: "Claude Code, Codex, OpenCode",
-        command:
-          "argocd-axi-ctx (local only: no network, no SSO refresh, no credential read)",
-      }),
-    ],
-    undefined,
-    ["Restart the agent session to receive argocd-axi ambient context"],
-  );
+  const observed = hookStatus();
+  if (
+    !observed.claude ||
+    !observed.codex ||
+    !observed.codexFeature ||
+    !observed.opencode ||
+    observed.sessionEnd !== "installed"
+  ) {
+    throw axiError(
+      `Hook installation is incomplete: ${encodeObject(observed)}`,
+      CODES.UPSTREAM_ERROR,
+      [
+        "Check hook destinations with `argocd-axi setup status` and re-run setup hooks",
+      ],
+    );
+  }
+  return finish([encodeObject(observed)], undefined, [
+    "Restart the agent session to receive argocd-axi ambient context",
+  ]);
 }
