@@ -16,7 +16,6 @@ import { FORBIDDEN_ARGS, OPERATIONS, type OperationId } from "./registry.js";
  */
 
 const MAX_OUTPUT_BYTES = 50 * 1024 * 1024;
-const KILL_GRACE_MS = 2_000;
 
 export interface RunOptions {
   /** Argo CD context, passed as `--argocd-context`. */
@@ -171,6 +170,7 @@ function spawnCollect(
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
       windowsHide: true,
+      detached: process.platform !== "win32",
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
@@ -180,12 +180,25 @@ function spawnCollect(
     let settled = false;
 
     const kill = () => {
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS).unref();
+      if (process.platform !== "win32" && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          // The group may already have exited; still try the direct child.
+          child.kill("SIGKILL");
+        }
+      } else {
+        child.kill("SIGKILL");
+      }
+      // A descendant can escape the group while retaining these pipes.
+      child.stdout.destroy();
+      child.stderr.destroy();
+      child.unref();
     };
     const timer = setTimeout(() => {
       timedOut = true;
       kill();
+      finish(1);
     }, timeoutMs);
 
     const collect = (sink: Buffer[]) => (chunk: Buffer) => {
@@ -193,6 +206,7 @@ function spawnCollect(
       if (bytes > MAX_OUTPUT_BYTES) {
         overflow = true;
         kill();
+        finish(1);
         return;
       }
       sink.push(chunk);
@@ -224,7 +238,7 @@ function spawnCollect(
       );
     });
 
-    child.on("close", (code) => {
+    function finish(code: number | null) {
       clearTimeout(timer);
       if (settled) return;
       settled = true;
@@ -244,6 +258,7 @@ function spawnCollect(
         exitCode: code ?? 1,
         timedOut,
       });
-    });
+    }
+    child.on("close", finish);
   });
 }
