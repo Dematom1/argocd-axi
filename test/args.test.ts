@@ -51,7 +51,7 @@ describe("flag parsing (AXI principle 6)", () => {
       };
       expect(e.code).toBe("VALIDATION_ERROR");
       expect(e.message).toBe("unknown flag --follow for `apps logs`");
-      expect(e.suggestions[0]).toMatch(/never streams/);
+      expect(e.suggestions[0]).toMatch(/does not stream command output/);
       expect(e.suggestions[1]).toMatch(
         /valid flags for `apps logs`: --tail <value>, -p, --previous/,
       );
