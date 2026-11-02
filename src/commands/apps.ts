@@ -1750,13 +1750,24 @@ async function checkWritePermission(
 ): Promise<void> {
   const permission = await runArgocd(
     "account can-i",
-    [action, "applications", `${app.spec?.project ?? "default"}/${name}`],
+    [action.startsWith("action/") ? "action" : action, "applications", `${app.spec?.project ?? "default"}/${name}`],
     { ...options, allowFailure: true },
   );
-  if (permission.exitCode !== 0 || !/^yes\s*$/i.test(permission.stdout.trim()))
+  if (permission.exitCode !== 0)
+    throw axiError(
+      `argocd account can-i failed for ${name}: ${permission.stderr.trim() || permission.stdout.trim() || `exit code ${permission.exitCode}`}`,
+      CODES.UPSTREAM_ERROR,
+    );
+  const answer = permission.stdout.trim().toLowerCase();
+  if (answer === "no")
     throw axiError(
       `REFUSED: Argo CD RBAC denies ${action} for ${name}`,
       CODES.REFUSED,
+    );
+  if (answer !== "yes")
+    throw axiError(
+      `argocd account can-i returned unexpected output for ${name}: ${permission.stdout.trim() || permission.stderr.trim() || "<empty>"}`,
+      CODES.UPSTREAM_ERROR,
     );
 }
 
