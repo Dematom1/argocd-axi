@@ -105,27 +105,26 @@ export function parseConfig(path: string, text: string): ToolConfig {
 // ponytail: concurrent CLI writers can lose updates; serialize if concurrent config mutations become supported.
 function updateWritableContext(name: string, add: boolean): boolean {
   const path = configPath();
-  mkdirSync(join(path, ".."), { recursive: true });
-  const loaded = loadConfig();
-  const contexts = loaded.config.writableContexts;
-  const updated = add
-    ? [...new Set([...contexts, name])]
-    : contexts.filter((item) => item !== name);
-  if (
-    updated.length === contexts.length &&
-    updated.every((item, index) => item === contexts[index])
-  )
-    return false;
-  mkdirSync(join(loaded.path, ".."), { recursive: true });
-  const source = loaded.exists ? readFileSync(loaded.path, "utf8") : "";
-  const doc = parseDocument(source || "{}");
-  if (doc.toJS() === null) doc.contents = null;
-  const root = doc.contents;
-  if (root !== null && (root === undefined || !("set" in root)))
-    throw invalid(loaded.path, "the top level must be a mapping");
-  doc.set("writable-contexts", updated);
-  const temp = `${loaded.path}.${randomUUID()}.tmp`;
+  const temp = `${path}.${randomUUID()}.tmp`;
   try {
+    const loaded = loadConfig();
+    const contexts = loaded.config.writableContexts;
+    const updated = add
+      ? [...new Set([...contexts, name])]
+      : contexts.filter((item) => item !== name);
+    if (
+      updated.length === contexts.length &&
+      updated.every((item, index) => item === contexts[index])
+    )
+      return false;
+    mkdirSync(join(loaded.path, ".."), { recursive: true });
+    const source = loaded.exists ? readFileSync(loaded.path, "utf8") : "";
+    const doc = parseDocument(source || "{}");
+    if (doc.toJS() === null) doc.contents = null;
+    const root = doc.contents;
+    if (root !== null && (root === undefined || !("set" in root)))
+      throw invalid(loaded.path, "the top level must be a mapping");
+    doc.set("writable-contexts", updated);
     writeFileSync(temp, doc.toString(), {
       mode: loaded.exists ? statSync(loaded.path).mode & 0o777 : 0o600,
     });
@@ -138,7 +137,17 @@ function updateWritableContext(name: string, add: boolean): boolean {
     } catch {
       /* no temporary file */
     }
-    throw error;
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === CODES.CONFIG_INVALID
+    )
+      throw error;
+    throw axiError(
+      `Cannot update argocd-axi config ${path}: ${String(error)}`,
+      CODES.CONFIG_INVALID,
+      [`Check read/write permissions for ${path} and its parent directory`],
+    );
   }
 }
 

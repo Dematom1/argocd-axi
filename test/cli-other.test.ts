@@ -403,7 +403,11 @@ describe("help, version and setup", () => {
       home,
     });
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("hooks: installed or already up to date");
+    expect(stdout).toContain("claude: true");
+    expect(stdout).toContain("codex: true");
+    expect(stdout).toContain("codexFeature: true");
+    expect(stdout).toContain("opencode: true");
+    expect(stdout).toContain("sessionEnd: installed");
     expect(calls).toEqual([]);
     const settings = readFileSync(
       join(home, ".claude", "settings.json"),
