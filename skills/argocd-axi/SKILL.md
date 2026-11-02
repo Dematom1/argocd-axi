@@ -49,7 +49,7 @@ commands[27]:
   apps diff <app> [--revision <rev>] [--full]: what differs from Git, per resource; raw diff with --full
   apps sync <app> [--confirm] [--prune] [--timeout <s>]: preview, then start sync asynchronously; follow with apps view or apps wait
   apps rollback <app> <history-id> [--confirm] [--timeout <s>]: preview revision, then optionally roll back
-  apps refresh <app> [--hard] [--confirm]: preview, then optionally refresh one app
+  apps refresh <app> [--hard] [--confirm] [--timeout <s>]: preview, then refresh one app
   apps terminate-op <app> [--confirm] [--timeout <s>]: preview, then optionally stop a running operation
   apps auto-sync <app> <on|off> [--confirm]: preview, then optionally change automated sync
   apps actions run <app> <action> --kind <kind> --name <resource> [--confirm]: preview, then optionally run one listed resource action
