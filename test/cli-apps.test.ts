@@ -139,7 +139,7 @@ describe("apps", () => {
             argv: [
               "account",
               "can-i",
-              "action",
+              "action/argoproj.io/Rollout/restart",
               "applications",
               "shop/web",
             ],
@@ -152,7 +152,7 @@ describe("apps", () => {
     expect(calls).toContainEqual([
       "account",
       "can-i",
-      "action",
+      "action/argoproj.io/Rollout/restart",
       "applications",
       "shop/web",
       "--argocd-context",
@@ -1311,7 +1311,7 @@ describe("apps", () => {
             argv: ["app", "actions", "list", "web", "--kind", "Rollout", "-o", "json"],
             stdoutFile: "actions-web.json",
           },
-          { argv: ["account", "can-i", "action", "applications", "shop/web"], stdout: "yes\n" },
+          { argv: ["account", "can-i", "action/argoproj.io/Rollout/restart", "applications", "shop/web"], stdout: "yes\n" },
           { argv: ["app", "actions", "run", "web"], stdout: "" },
         ]),
       },
@@ -1396,7 +1396,7 @@ describe("apps", () => {
             argv: [
               "account",
               "can-i",
-              "action",
+              "action/apps/Deployment/restart",
               "applications",
               "shop/web",
             ],

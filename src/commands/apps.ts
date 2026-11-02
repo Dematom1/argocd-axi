@@ -1750,7 +1750,7 @@ async function checkWritePermission(
 ): Promise<void> {
   const permission = await runArgocd(
     "account can-i",
-    [action.startsWith("action/") ? "action" : action, "applications", `${app.spec?.project ?? "default"}/${name}`],
+    [action, "applications", `${app.spec?.project ?? "default"}/${name}`],
     { ...options, allowFailure: true },
   );
   if (permission.exitCode !== 0)
