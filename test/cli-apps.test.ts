@@ -345,7 +345,11 @@ describe("apps", () => {
     expect(withProject.stdout).toContain(
       "apps[5]{app,sync,health,why,project}:",
     );
-    expect(withProject.stdout).toContain("payments-api,OutOfSync,Degraded,");
+    expect(decode(withProject.stdout)).toMatchObject({
+      apps: expect.arrayContaining([
+        expect.objectContaining({ app: "payments-api", project: "payments" }),
+      ]),
+    });
     const project = await runCli(["apps", "-p", "payments"]);
     expect(project.calls).toContainEqual([
       "app",

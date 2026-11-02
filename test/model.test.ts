@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PROGRESSING_ATTENTION_MINUTES,
+  attentionReasonPreview,
   attentionReasons,
   autoSyncSummary,
   displayNames,
@@ -27,6 +28,21 @@ function app(
 }
 
 describe("needs attention (decision A6)", () => {
+  it("omits bare status reasons but preserves matching condition text", () => {
+    const preview = attentionReasonPreview(
+      app({
+        sync: { status: "Synced" },
+        health: { status: "Healthy" },
+        conditions: [{ type: "OutOfSync" }],
+      }),
+      160,
+      now,
+      undefined,
+      true,
+    );
+    expect(preview.text).toBe("OutOfSync");
+  });
+
   it("is empty for a synced, healthy app", () => {
     expect(
       attentionReasons(

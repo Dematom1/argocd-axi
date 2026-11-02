@@ -167,20 +167,23 @@ function* attentionReasonTexts(
   now: number,
   redactor: Redactor,
   clipMessages = false,
+  omitBareStatuses = false,
 ): Generator<string> {
   const redact = (text: string) => {
     const redacted = redactor.text(text);
     return clipMessages ? truncate(redacted, REASON_CHARS) : redacted;
   };
   const sync = syncStatus(app);
-  if (sync === "OutOfSync") yield "OutOfSync";
-  else if (sync !== "Synced") yield `sync ${sync}`;
+  if (sync === "OutOfSync") {
+    if (!omitBareStatuses) yield "OutOfSync";
+  } else if (sync !== "Synced" && !omitBareStatuses) yield `sync ${sync}`;
 
   const health = healthStatus(app);
   const healthMessage = app.status?.health?.message;
   if (health === "Degraded" || health === "Missing" || health === "Unknown") {
     const label = health === "Unknown" ? "health Unknown" : health;
-    yield healthMessage ? `${label}: ${redact(healthMessage)}` : label;
+    if (healthMessage) yield `${label}: ${redact(healthMessage)}`;
+    else if (!omitBareStatuses) yield label;
   } else if (health === "Progressing") {
     const minutes = minutesSince(app.status?.health?.lastTransitionTime, now);
     if (minutes !== undefined && minutes > PROGRESSING_ATTENTION_MINUTES) {
@@ -219,18 +222,13 @@ export function attentionReasonPreview(
 ): { text: string; totalChars: number } {
   let text = "";
   let totalChars = 0;
-  for (const reason of attentionReasonTexts(app, now, redactor)) {
-    if (
-      omitBareStatuses &&
-      [
-        "OutOfSync",
-        "Degraded",
-        "Missing",
-        "health Unknown",
-        "sync Unknown",
-      ].includes(reason)
-    )
-      continue;
+  for (const reason of attentionReasonTexts(
+    app,
+    now,
+    redactor,
+    false,
+    omitBareStatuses,
+  )) {
     if (totalChars > 0) {
       if (text.length < max) text += "; ".slice(0, max - text.length);
       totalChars += 2;

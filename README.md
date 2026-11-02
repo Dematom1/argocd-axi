@@ -25,8 +25,8 @@ auth: argocd CLI session for this context
 user: alice
 apps: "142 total, 3 need attention, 1 operation running"
 writableContexts: none
-attention[3]{app,sync,health,why}:
-  payments-api,OutOfSync,Degraded,"Deployment \"payments-api\" exceeded its progress deadline; last sync Failed: ..."
+attention[3]{app,project,sync,health,why}:
+  payments-api,payments,OutOfSync,Degraded,"OutOfSync; Degraded: Deployment \"payments-api\" exceeded its progress deadline; last sync Failed: ..."
   legacy,default,Unknown,Unknown,"sync Unknown; health Unknown; ComparisonError: ..."
   checkout,shop,Synced,Progressing,Progressing for 25m
 operations[1]{app,phase,started}:
