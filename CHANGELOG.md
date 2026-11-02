@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.10](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.9...argocd-axi-v0.1.10) (2026-11-02)
+
+
+### Features
+
+* **apps:** make sync submission asynchronous ([#42](https://github.com/Dematom1/argocd-axi/issues/42)) ([98685ac](https://github.com/Dematom1/argocd-axi/commit/98685acb83922292ba367836b2b42d3ba6d4813d))
+
+
+### Bug Fixes
+
+* **argocd:** support dedicated token credentials ([#40](https://github.com/Dematom1/argocd-axi/issues/40)) ([bc094c3](https://github.com/Dematom1/argocd-axi/commit/bc094c35f579504fc714f78d1d7942b590157b30))
+
 ## [0.1.9](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.8...argocd-axi-v0.1.9) (2026-11-02)
 
 
