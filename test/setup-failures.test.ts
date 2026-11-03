@@ -12,6 +12,40 @@ import { describe, expect, it } from "vitest";
 import { makeHome, runCli } from "./helpers.js";
 
 describe("truthful setup", () => {
+  it("repairs duplicate legacy SessionStart entries without changing other hooks", async () => {
+    const home = makeHome();
+    expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);
+    const files = [
+      join(home, ".claude", "settings.json"),
+      join(home, ".codex", "hooks.json"),
+    ];
+    const unrelated = { type: "command", command: "echo keep" };
+    for (const file of files) {
+      const value = JSON.parse(readFileSync(file, "utf8"));
+      value.other = true;
+      value.hooks.SessionStart[0].hooks[0].command =
+        "/old/location/argocd-axi-ctx";
+      value.hooks.SessionStart.push(
+        { matcher: "keep", hooks: [unrelated, { command: "argocd-axi-ctx" }] },
+        { hooks: [{ command: "/another/argocd-axi-ctx" }] },
+        { matcher: "empty", hooks: [] },
+      );
+      writeFileSync(file, JSON.stringify(value));
+    }
+    for (let i = 0; i < 2; i++)
+      expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);
+    for (const file of files) {
+      const value = JSON.parse(readFileSync(file, "utf8"));
+      expect(value.other).toBe(true);
+      const groups = value.hooks.SessionStart;
+      expect(groups).toHaveLength(3);
+      expect(groups[0].hooks).toHaveLength(1);
+      expect(groups[0].hooks[0].command).not.toContain("/old/location/");
+      expect(groups[1]).toEqual({ matcher: "keep", hooks: [unrelated] });
+      expect(groups[2]).toEqual({ matcher: "empty", hooks: [] });
+    }
+  });
+
   it.skipIf(process.platform === "win32")(
     "repairs legacy hooks, remains idempotent and executes SessionEnd without the CLI on PATH",
     async () => {
