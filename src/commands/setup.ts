@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   detectInstallMethod,
@@ -77,7 +77,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function dedupeSessionStartHooks(): void {
+function repairSessionStartHooks(): void {
   const targets = sessionStartHookStatus({ marker: "argocd-axi" });
   for (const file of [targets.claude.path, targets.codex.path]) {
     const value: unknown = JSON.parse(readFileSync(file, "utf8"));
@@ -102,6 +102,12 @@ function dedupeSessionStartHooks(): void {
           return true;
         if (!seen) {
           seen = true;
+          // The SDK also stores raw paths in shell hooks; quote absolute paths
+          // here without changing the OpenCode plugin's shell-free executable.
+          if (isAbsolute(hook.command)) {
+            hook.command = `'${hook.command.replaceAll("'", "'\\''")}'`;
+            changed = true;
+          }
           return true;
         }
         changed = true;
@@ -179,7 +185,7 @@ export async function setupCommand(args: string[]): Promise<string> {
   });
   try {
     // Run only after successful SDK installation, so the retained entry is current.
-    if (errors.length === 0) dedupeSessionStartHooks();
+    if (errors.length === 0) repairSessionStartHooks();
     installSessionEndHook(
       realpathSync(join(dirname(entrypoint), "argocd-axi.js")),
     );

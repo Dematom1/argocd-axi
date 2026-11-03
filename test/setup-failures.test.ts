@@ -1,17 +1,75 @@
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { makeHome, runCli } from "./helpers.js";
+import { makeHome, ROOT, runCli } from "./helpers.js";
 
 describe("truthful setup", () => {
+  it.skipIf(process.platform === "win32")(
+    "executes relocated SessionStart shell hooks through spaces and quotes",
+    () => {
+      const home = makeHome();
+      const relocated = join(home, "relocated path ' with quote");
+      cpSync(join(ROOT, "dist"), join(relocated, "dist"), { recursive: true });
+      symlinkSync(
+        join(ROOT, "node_modules"),
+        join(relocated, "node_modules"),
+        "dir",
+      );
+      cpSync(join(ROOT, "package.json"), join(relocated, "package.json"));
+      // npm marks installed bin targets executable; reproduce that on this copy.
+      chmodSync(join(relocated, "dist", "bin", "argocd-axi-ctx.js"), 0o755);
+      const bin = join(home, "node-only");
+      mkdirSync(bin);
+      symlinkSync(process.execPath, join(bin, "node"));
+      const env = {
+        HOME: home,
+        XDG_CONFIG_HOME: join(home, ".config"),
+        PATH: bin,
+      };
+      for (let i = 0; i < 2; i++) {
+        const setup = spawnSync(
+          process.execPath,
+          [join(relocated, "dist", "bin", "argocd-axi.js"), "setup", "hooks"],
+          { env, encoding: "utf8" },
+        );
+        expect(setup.status, setup.stdout + setup.stderr).toBe(0);
+      }
+      for (const file of [
+        join(home, ".claude", "settings.json"),
+        join(home, ".codex", "hooks.json"),
+      ]) {
+        const value = JSON.parse(readFileSync(file, "utf8"));
+        const entries = value.hooks.SessionStart.flatMap(
+          (group: { hooks: unknown[] }) => group.hooks,
+        );
+        expect(entries).toHaveLength(1);
+        const result = spawnSync("/bin/sh", ["-c", entries[0].command], {
+          cwd: home,
+          env,
+          encoding: "utf8",
+        });
+        expect(result.status, result.stderr).toBe(0);
+      }
+      const plugin = readFileSync(
+        join(home, ".config", "opencode", "plugins", "axi-argocd-axi.js"),
+        "utf8",
+      );
+      expect(plugin).toContain(
+        `const command = ${JSON.stringify(realpathSync(join(relocated, "dist", "bin", "argocd-axi-ctx.js")))};`,
+      );
+    },
+  );
+
   it("repairs duplicate legacy SessionStart entries without changing other hooks", async () => {
     const home = makeHome();
     expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);
