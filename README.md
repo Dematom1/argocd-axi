@@ -186,7 +186,7 @@ argocd-axi apps auto-sync <app> <on|off> [--confirm] [--context <c>]
 argocd-axi apps history <app> [--limit <n>]
 argocd-axi apps manifests <app> [--source git|live] [--revision <rev>] [--kind <k>] [--full]
 argocd-axi apps logs <app> [--kind <k> --name <n>] [--tail 100] [--since 15m] [--filter <s>] [--full] [-p]
-argocd-axi apps wait <app> [--sync --health --operation] [--timeout 120]
+argocd-axi apps wait <app> [--sync --health --operation] [--timeout 120] [--fail-on-degraded]
 argocd-axi apps actions <app> [--kind <k>]
 argocd-axi apps actions run <app> <action> --kind <k> --name <resource> [--confirm] [--context <c>]
 argocd-axi projects | projects view <p> | projects windows <p>
@@ -221,7 +221,7 @@ argocd-axi apps wait <app> --context <context> --timeout 300
 argocd-axi apps view <app> --context <context>
 ```
 
-Inspect the structured wait result before proceeding: timeout returns exit 0 with
+Inspect the structured wait result before proceeding: timeout returns exit 1 with
 `condition not met`, not deployment success. `apps view` shows operation failures
 and the resolved operation revision. A requested branch or tag may move after
 submission; the sync response does not claim that the last observed commit is the
@@ -246,6 +246,30 @@ termination, and policy updates, `--timeout` bounds submission only (default 120
 seconds). A request timeout does not prove the server rejected the write. Inspect
 `apps view` before retrying. Local configuration, context, and setup writes do not
 wait for deployment.
+
+`apps sync` returns on acceptance, not deployment completion. For app-of-apps,
+run `argocd-axi apps wait <parent>` before acting on children. A child may not
+exist yet even when Argo CD answers permission denied. For a named app denied
+by RBAC, the tool checks the visible app list and explains this possibility
+when the app is absent. Absence can also mean RBAC hides the app.
+An already-synced app with no running operation or resource drift is a clean
+sync no-op: nothing is submitted. With `--resource`, only selected resources
+that are not Synced or need pruning are submitted. If every selected resource
+is Synced and none needs pruning, the command is a no-op even if other
+resources in the app are out of sync. No-op decisions use the last Argo CD
+comparison, which can lag recent Git changes. The no-op result suggests
+`apps refresh <app> --confirm` before retrying sync; refresh requires write approval.
+
+`apps wait` checks whether all requested conditions hold now; it does not wait
+for a future operation. Synced and Healthy with no running or pending operation
+satisfies `--operation`, even without historical `operationState`. Missing,
+Degraded and not-yet-existing apps keep polling until the timeout. Use
+`--fail-on-degraded` to stop immediately on Degraded. Timeout exits 1 and reports
+each unmet condition, the last state, and up to 20 blocking resources with their
+messages and total count. Re-running wait only observes state and never submits
+work. Rate-limited polls retry with increasing delays from 1 to 10 seconds,
+bounded by the same timeout. A timeout retains the last observed state and
+identifies a rate-limited final poll.
 
 An app needs attention when its sync status is OutOfSync or Unknown; its
 health is Degraded, Missing or Unknown; it has been Progressing for more than
@@ -343,8 +367,9 @@ specific app.
   summary is followed by redacted plain-text diff lines. There is no `--json`;
   the raw `argocd` CLI is the fallback for anything argocd-axi does not cover.
 - Exit 0 means the command did what was asked. An OutOfSync or Degraded app,
-  drift found by `apps diff`, a `can-i` answer of no, and an `apps wait` that
-  timed out are all data with exit 0.
+  drift found by `apps diff`, and a `can-i` answer of no are data with exit 0.
+  `apps wait` exits 1 if its conditions are not met before timeout or if
+  `--fail-on-degraded` stops the wait.
 - Exit 1 is an error, exit 2 a usage error (unknown flag, missing argument).
   Unknown flags are rejected before any argocd call, with the valid flags
   listed.

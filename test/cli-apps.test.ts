@@ -1,11 +1,417 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { decode } from "@toon-format/toon";
 import { renderTextBlock } from "../src/toon.js";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { makeHome, runCli, scenario } from "./helpers.js";
+import { makeHome, runCli, scenario, ROOT } from "./helpers.js";
 
 describe("apps", () => {
+  const rollout = (state: string) =>
+    readFileSync(
+      join(ROOT, "test", "fixtures", "default", `app-rollouts-${state}.json`),
+      "utf8",
+    );
+  const denied = {
+    exit: 20,
+    stderr: "rpc error: code = PermissionDenied desc = permission denied",
+  };
+
+  it("waits for a child absent from the visible list, and can be repeated", async () => {
+    const child = scenario([
+      {
+        argv: ["app", "get", "argo-rollouts"],
+        sequence: [denied, { stdout: rollout("healthy") }],
+      },
+      { argv: ["app", "list"], stdout: "[]" },
+    ]);
+    const args = [
+      "apps",
+      "wait",
+      "argo-rollouts",
+      "--timeout",
+      "5",
+      "--context",
+      "staging",
+    ];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await runCli(args, { scenario: child });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        "condition met (sync, health, operation)",
+      );
+      expect(result.stdout).toContain("health: Healthy");
+      expect(result.calls).toContainEqual([
+        "app",
+        "list",
+        "-o",
+        "json",
+        "--argocd-context",
+        "staging",
+      ]);
+      expect(result.calls.filter((call) => call[1] === "get")).toHaveLength(2);
+    }
+  });
+
+  it("retries a rate-limited poll before observing a healthy app", async () => {
+    const result = await runCli(
+      ["apps", "wait", "argo-rollouts", "--timeout", "5"],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "argo-rollouts"],
+            sequence: [
+              {
+                exit: 20,
+                stderr:
+                  "rpc error: code = ResourceExhausted desc = too many requests",
+              },
+              { stdout: rollout("healthy") },
+            ],
+          },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("condition met");
+    expect(result.stdout).toContain("health: Healthy");
+    expect(result.calls).toHaveLength(2);
+  });
+
+  it.each([false, true])(
+    "keeps bounded timeout diagnostics during rate limits (last state=%s)",
+    async (observed) => {
+      const limited = {
+        exit: 20,
+        stderr: "rpc error: code = ResourceExhausted desc = too many requests",
+      };
+      const result = await runCli(
+        ["apps", "wait", "argo-rollouts", "--timeout", "4"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "argo-rollouts"],
+              sequence: [
+                ...(observed ? [{ stdout: rollout("degraded") }] : []),
+                limited,
+              ],
+            },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("timed out after 4s");
+      expect(result.stdout).toContain("latest poll rate limited");
+      expect(result.stdout).not.toContain("condition met (");
+      expect(result.calls.length).toBeLessThanOrEqual(3);
+      if (observed) {
+        expect(result.stdout).toContain("health: Degraded (expected Healthy)");
+        expect(result.stdout).toContain("blockingResources: 4 of 4 total");
+        expect(result.stdout).toContain(
+          "CustomResourceDefinition is not established",
+        );
+      } else {
+        expect(result.stdout).toContain(
+          "unknown (no response before deadline)",
+        );
+        expect(result.stdout).toContain("health: no response before deadline");
+      }
+    },
+  );
+
+  it("polls Missing then Degraded CRDs until Healthy, without native wait", async () => {
+    const result = await runCli(
+      [
+        "apps",
+        "wait",
+        "argo-rollouts",
+        "--sync",
+        "--health",
+        "--operation",
+        "--timeout",
+        "5",
+      ],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "argo-rollouts"],
+            sequence: ["missing", "degraded", "healthy"].map((state) => ({
+              stdout: rollout(state),
+            })),
+          },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("health: Healthy");
+    expect(result.calls).toHaveLength(3);
+    expect(result.calls.every((call) => call[1] === "get")).toBe(true);
+  });
+
+  it.each([false, true])(
+    "reports blocking CRDs on permanent Degraded (fail-fast=%s)",
+    async (failFast) => {
+      const result = await runCli(
+        [
+          "apps",
+          "wait",
+          "argo-rollouts",
+          "--timeout",
+          "2",
+          ...(failFast ? ["--fail-on-degraded"] : []),
+        ],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "argo-rollouts"],
+              stdout: rollout("degraded"),
+            },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain(
+        failFast ? "stopped on Degraded" : "timed out after 2s",
+      );
+      expect(result.stdout).toContain("health: Degraded (expected Healthy)");
+      expect(result.stdout).toContain("blockingResources: 4 of 4 total");
+      expect(result.stdout).toContain(
+        "CustomResourceDefinition is not established",
+      );
+      expect(result.stdout).toContain("rollouts.argoproj.io configured");
+      if (failFast) expect(result.calls).toHaveLength(1);
+    },
+  );
+
+  it.each(["forbidden", "not-found"])(
+    "times out on an absent child (%s)",
+    async (kind) => {
+      const result = await runCli(
+        ["apps", "wait", "argo-rollouts", "--timeout", "1"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "argo-rollouts"],
+              ...(kind === "forbidden"
+                ? denied
+                : {
+                    exit: 20,
+                    stderr:
+                      "rpc error: code = NotFound desc = application not found",
+                  }),
+            },
+            { argv: ["app", "list"], stdout: "[]" },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("existence: not yet visible");
+      for (const condition of ["sync", "health", "operation"])
+        expect(result.stdout).toContain(`${condition}: app not yet visible`);
+      expect(result.stdout).toContain("argocd-axi apps wait <parent>");
+    },
+  );
+
+  it.each([false, true])(
+    "distinguishes an invisible app from visible RBAC denial (%s)",
+    async (visible) => {
+      for (const command of ["sync", "wait"]) {
+        const result = await runCli(
+          [
+            "apps",
+            command,
+            "argo-rollouts",
+            "--context",
+            "staging",
+            ...(command === "wait" ? ["--timeout", "1"] : []),
+          ],
+          {
+            scenario: scenario([
+              { argv: ["app", "get", "argo-rollouts"], ...denied },
+              {
+                argv: ["app", "list"],
+                stdout: visible ? `[${rollout("healthy")}]` : "[]",
+              },
+            ]),
+          },
+        );
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toContain(
+          visible || command === "sync" ? "code: FORBIDDEN" : "timed out",
+        );
+        expect(result.stdout.includes("may not exist yet")).toBe(!visible);
+        if (visible) expect(result.calls).toHaveLength(2);
+      }
+    },
+  );
+
+  it("bounds timeout resources, redacts messages and names every unmet condition", async () => {
+    const result = await runCli(["apps", "wait", "broken", "--timeout", "1"], {
+      scenario: scenario([
+        {
+          argv: ["app", "get", "broken"],
+          stdout: JSON.stringify({
+            metadata: { name: "broken" },
+            status: {
+              sync: { status: "OutOfSync" },
+              health: { status: "Degraded" },
+              operationState: { phase: "Running" },
+              resources: Array.from({ length: 23 }, (_, i) => ({
+                kind: "Deployment",
+                name: `api-${i}`,
+                status: "OutOfSync",
+                health: {
+                  status: "Degraded",
+                  message: "not ready; token=supersecretvalue123",
+                },
+              })),
+            },
+          }),
+        },
+      ]),
+    });
+    expect(result.exitCode).toBe(1);
+    for (const value of [
+      "sync: OutOfSync (expected Synced)",
+      "health: Degraded (expected Healthy)",
+      "operation: Running (expected finished)",
+    ])
+      expect(result.stdout).toContain(value);
+    expect(result.stdout).toContain("blockingResources: 20 of 23 total");
+    expect(result.stdout).toContain("api-19");
+    expect(result.stdout).not.toContain("api-20");
+    expect(result.stdout).toContain("token=[redacted]");
+    expect(result.stdout).not.toContain("supersecretvalue123");
+  });
+
+  it.each([
+    ["Synced", false, false, "Synced"],
+    ["Synced", false, false, "OutOfSync"],
+    ["OutOfSync", false, true, "Synced"],
+    ["Synced", true, true, "Synced"],
+  ])(
+    "selective sync uses selected resource state (%s, prune=%s)",
+    async (status, requiresPruning, submits, appStatus) => {
+      const home = makeHome();
+      mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+      writeFileSync(
+        join(home, ".config", "argocd-axi", "config"),
+        "writable-contexts: [staging]",
+      );
+      const app = JSON.stringify({
+        metadata: { name: "demo" },
+        spec: { project: "default" },
+        status: {
+          sync: { status: appStatus },
+          resources: [
+            {
+              group: "apps",
+              kind: "Deployment",
+              namespace: "shop",
+              name: "current",
+              status: "Synced",
+            },
+            {
+              group: "apps",
+              kind: "Deployment",
+              namespace: "shop",
+              name: "selected",
+              status,
+              requiresPruning,
+            },
+            {
+              group: "apps",
+              kind: "Deployment",
+              namespace: "shop",
+              name: "unselected",
+              status: "OutOfSync",
+            },
+          ],
+        },
+      });
+      for (const preview of [true, false]) {
+        const result = await runCli(
+          [
+            "apps",
+            "sync",
+            "demo",
+            "--context",
+            "staging",
+            "--resource",
+            "apps:Deployment:current",
+            "--resource",
+            "apps:Deployment:selected",
+            ...(preview ? [] : ["--confirm"]),
+            ...(requiresPruning ? ["--prune"] : []),
+          ],
+          {
+            home,
+            scenario: scenario([
+              { argv: ["app", "get", "demo"], stdout: app },
+              { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
+              {
+                argv: ["account", "can-i", "sync", "applications"],
+                stdout: "yes\n",
+              },
+              { argv: ["app", "sync", "demo"], stdout: "" },
+            ]),
+          },
+        );
+        expect(result.exitCode).toBe(0);
+        const call = result.calls.find((args) => args[1] === "sync");
+        if (!submits) {
+          expect(result.stdout).toContain("sync: already synced");
+          expect(result.stdout).toContain("submitted: no");
+          expect(result.stdout).toContain("last Argo CD comparison");
+          expect(result.stdout).toContain(
+            "argocd-axi apps refresh demo --context staging --confirm",
+          );
+          expect(call).toBeUndefined();
+        } else if (preview) {
+          expect(result.stdout).toContain("apps:Deployment:shop/selected");
+          expect(result.stdout).not.toContain("apps:Deployment:shop/current");
+          expect(call).toBeUndefined();
+        } else {
+          expect(call?.filter((arg) => arg === "--resource")).toHaveLength(1);
+          expect(call).toContain("apps:Deployment:shop/selected");
+          expect(call).not.toContain("apps:Deployment:shop/current");
+          expect(call).not.toContain("apps:Deployment:shop/unselected");
+          expect(call?.includes("--prune")).toBe(requiresPruning);
+        }
+      }
+    },
+  );
+
+  it("makes already-synced submissions a repeatable no-op", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]",
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await runCli(
+        ["apps", "sync", "argo-rollouts", "--context", "staging", "--confirm"],
+        {
+          home,
+          scenario: scenario([
+            {
+              argv: ["app", "get", "argo-rollouts"],
+              stdout: rollout("healthy"),
+            },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("sync: already synced");
+      expect(result.stdout).toContain("submitted: no");
+      expect(result.stdout).toContain("last Argo CD comparison");
+      expect(result.stdout).toContain(
+        "argocd-axi apps refresh argo-rollouts --context staging --confirm",
+      );
+      expect(result.calls.some((call) => call[1] === "sync")).toBe(false);
+    }
+  });
+
   it.each([
     ["rollback", "payments-api", "7"],
     ["refresh", "payments-api"],
@@ -301,7 +707,7 @@ describe("apps", () => {
       { home: previewHome },
     );
     expect(preview.stdout).toContain("apps:Deployment:payments/payments-api");
-    expect(preview.stdout).toContain(":Service:payments/payments-api");
+    expect(preview.stdout).not.toContain(":Service:payments/payments-api");
     expect(preview.calls.some((call) => call[1] === "sync")).toBe(false);
 
     const home = makeHome();
@@ -345,8 +751,6 @@ describe("apps", () => {
               "initiated-by=argocd-axi",
               "--resource",
               "apps:Deployment:payments/payments-api",
-              "--resource",
-              ":Service:payments/payments-api",
             ],
             stdout: "",
           },
@@ -356,7 +760,7 @@ describe("apps", () => {
     const syncCall = calls.find((call) => call[1] === "sync");
     expect(syncCall).toContain("--resource");
     expect(syncCall).toContain("apps:Deployment:payments/payments-api");
-    expect(syncCall).toContain(":Service:payments/payments-api");
+    expect(syncCall).not.toContain(":Service:payments/payments-api");
   });
 
   it("qualifies unique namespaced selectors and refuses ambiguous ones", async () => {
@@ -783,7 +1187,7 @@ describe("apps", () => {
       "Run `argocd-axi apps` to list applications",
     );
     expect((await runCli(["apps", "view", "secret-app"])).stdout).toContain(
-      "error: Permission denied by Argo CD RBAC\ncode: FORBIDDEN",
+      "code: FORBIDDEN",
     );
     const jsonMissing = await runCli(["apps", "view", "gone"]);
     expect(jsonMissing.exitCode).toBe(1);
@@ -791,7 +1195,7 @@ describe("apps", () => {
       'error: "Not found: applications.argoproj.io \\"gone\\" not found"\ncode: NOT_FOUND',
     );
     expect((await runCli(["apps", "view", "locked-app"])).stdout).toContain(
-      "error: Permission denied by Argo CD RBAC\ncode: FORBIDDEN",
+      "code: FORBIDDEN",
     );
     const usage = await runCli(["apps", "view"]);
     expect(usage.exitCode).toBe(2);
@@ -1381,29 +1785,23 @@ describe("apps", () => {
     ]);
     expect(met.stderr).toContain("Waiting for wait (0s elapsed; limit 30s)");
     expect(met.stdout).not.toContain("Waiting for");
-    expect(met.calls[0]).toEqual([
-      "app",
-      "wait",
-      "guestbook",
-      "--health",
-      "--timeout",
-      "30",
-    ]);
+    expect(met.calls[0]).toEqual(["app", "get", "guestbook", "-o", "json"]);
+    expect(met.calls.some((call) => call[1] === "wait")).toBe(false);
     expect(met.stdout).toMatch(/wait: condition met \(health\) after \d+s\n/);
     const timedOut = await runCli([
       "apps",
       "wait",
       "checkout",
       "--timeout",
-      "5",
+      "1",
     ]);
-    expect(timedOut.exitCode).toBe(0);
+    expect(timedOut.exitCode).toBe(1);
     expect(timedOut.stdout).toContain(
-      'wait: "timed out after 5s; condition not met (sync, health, operation)"',
+      'wait: "timed out after 1s; condition not met (sync, health, operation)"',
     );
     expect(timedOut.stdout).toContain("health: Progressing");
     expect(timedOut.stdout).toContain(
-      "Run `argocd-axi apps wait checkout --timeout 5` to wait again",
+      "Run `argocd-axi apps wait checkout --timeout 1` to wait again",
     );
     expect(
       (await runCli(["apps", "wait", "x", "--timeout", "601"])).stdout,
