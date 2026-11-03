@@ -45,7 +45,7 @@ argocd-axi turns that into small, definitive answers:
 - **Problems first.** Every list sorts the apps that need attention to the
   top and says why, in one line, with `count: N of M total`.
 - **Summary first.** Diffs and manifests come back as a per-resource list;
-  the raw text is one `--full` away.
+  `apps diff --full` adds the redacted, line-oriented diff.
 - **Opt-in writes.** `apps sync <app>` previews the per-resource diff and
   makes no change unless `--confirm` is passed. It never prunes unless
   `--prune` is explicit. Resource actions and automated-sync changes also
@@ -264,8 +264,9 @@ specific app.
 ## Output and exit codes
 
 - Output is TOON on stdout, errors included: `error`, `code`, and `help` with
-  the next command to run. There is no `--json`; the raw `argocd` CLI is the
-  fallback for anything argocd-axi does not cover.
+  the next command to run. `apps diff --full` is the exception: its structured
+  summary is followed by redacted plain-text diff lines. There is no `--json`;
+  the raw `argocd` CLI is the fallback for anything argocd-axi does not cover.
 - Exit 0 means the command did what was asked. An OutOfSync or Degraded app,
   drift found by `apps diff`, a `can-i` answer of no, and an `apps wait` that
   timed out are all data with exit 0.

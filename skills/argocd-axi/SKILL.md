@@ -46,7 +46,7 @@ commands[27]:
   apps [--project --selector --repo --cluster --sync --health --problems --limit --fields]: applications, problems first
   apps view <app>: source, destination, sync, health, operation, conditions, auto-sync, problem resources
   apps resources <app> [--problems --orphaned]: managed resources with sync and health
-  apps diff <app> [--revision <rev>] [--full]: what differs from Git, per resource; raw diff with --full
+  apps diff <app> [--revision <rev>] [--full]: what differs from Git, per resource; redacted plain-line diff with --full
   apps sync <app> [--confirm] [--prune] [--timeout <s>]: preview, then start sync asynchronously; follow with apps view or apps wait
   apps rollback <app> <history-id> [--confirm] [--timeout <s>]: preview revision, then optionally roll back
   apps refresh <app> [--hard] [--confirm] [--timeout <s>]: preview, then refresh one app

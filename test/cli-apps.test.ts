@@ -668,14 +668,18 @@ describe("apps", () => {
     expect(summary.stdout).toContain("ConfigMap,payments-old,payments,prune");
     expect(summary.calls.some((c) => c[1] === "diff")).toBe(false);
 
-    const full = await runCli(["apps", "diff", "payments-api", "--full"]);
+    const full = await runCli(["apps", "diff", "payments-api", "--full"], {
+      plainText: true,
+    });
     expect(full.calls).toContainEqual([
       "app",
       "diff",
       "payments-api",
       "--exit-code=false",
     ]);
-    expect(full.stdout).toContain("diff[17]");
+    expect(full.stdout).toContain("count: 2 resources differ");
+    expect(full.stdout).toContain("diff:\n===== apps/Deployment");
+    expect(full.stdout).not.toContain("diff[");
     expect(full.stdout).toContain(
       "===== apps/Deployment payments/payments-api ======",
     );
@@ -685,6 +689,9 @@ describe("apps", () => {
     expect((await runCli(["apps", "diff", "guestbook"])).stdout).toContain(
       "drift: no",
     );
+    expect(
+      (await runCli(["apps", "diff", "guestbook", "--full"])).stdout,
+    ).toContain("drift: no");
     const revision = await runCli([
       "apps",
       "diff",
