@@ -225,6 +225,8 @@ Wait success exits 0; timeout exits 1 with `condition not met`, the unmet
 conditions and current values, and up to 20 blocking resources (with total count).
 When the last operation Succeeded and all OutOfSync resources require pruning,
 `--sync` returns promptly with `sync: prune-only drift` and exit 1, not Synced.
+This requires valid `reconciledAt` and `operationState.finishedAt` timestamps,
+with reconciliation at or after completion; stale or unknown snapshots keep waiting.
 It names the resources and suggests `argocd-axi apps sync <app> --prune --confirm`;
 wait never performs that write. This also applies to the default combined wait.
 Other requested conditions remain visible if unmet. `apps view` shows operation failures

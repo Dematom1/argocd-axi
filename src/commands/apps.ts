@@ -1278,11 +1278,16 @@ export async function appsWait(args: string[]): Promise<string> {
   const pruneOnly = (current: Application): boolean => {
     const resources = current.status?.resources ?? [];
     const drift = resources.filter((resource) => resource.status !== "Synced");
+    const finished = Date.parse(
+      current.status?.operationState?.finishedAt ?? "",
+    );
+    const reconciled = Date.parse(current.status?.reconciledAt ?? "");
     return (
       wantsSync &&
       syncStatus(current) === "OutOfSync" &&
       current.status?.operationState?.phase === "Succeeded" &&
       !current.operation &&
+      reconciled >= finished &&
       drift.length > 0 &&
       drift.every(
         (resource) =>

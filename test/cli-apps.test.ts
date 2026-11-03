@@ -1408,6 +1408,50 @@ describe("apps", () => {
     expectSafeCalls(result.calls);
   });
 
+  it.each([
+    ["2026-11-03T19:01:00Z", "2026-11-03T19:00:00Z"],
+    [undefined, "2026-11-03T19:02:00Z"],
+    ["2026-11-03T19:01:00Z", undefined],
+    ["invalid", "2026-11-03T19:02:00Z"],
+    ["2026-11-03T19:01:00Z", "invalid"],
+  ])(
+    "does not classify an unreconciled prune snapshot (%s, %s)",
+    async (finishedAt, reconciledAt) => {
+      const result = await runCli(
+        ["apps", "wait", "stale", "--sync", "--timeout", "1"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "stale"],
+              stdout: JSON.stringify({
+                status: {
+                  sync: { status: "OutOfSync" },
+                  health: { status: "Healthy" },
+                  operationState: { phase: "Succeeded", finishedAt },
+                  reconciledAt,
+                  resources: [
+                    {
+                      kind: "Job",
+                      namespace: "default",
+                      name: "post-sync",
+                      status: "OutOfSync",
+                      requiresPruning: true,
+                    },
+                  ],
+                },
+              }),
+            },
+            { argv: ["app", "wait", "stale"], exit: 20, stderr: "timed out" },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("timed out after 1s");
+      expect(result.stdout).not.toContain("prune-only drift");
+      expect(result.calls.filter((call) => call[1] === "wait")).toHaveLength(1);
+    },
+  );
+
   it("does not mistake ordinary or mixed drift for prune-only drift", async () => {
     for (const mixed of [false, true]) {
       const resources = [

@@ -3,7 +3,8 @@
   "status": {
     "sync": { "status": "OutOfSync" },
     "health": { "status": "Healthy" },
-    "operationState": { "phase": "Succeeded" },
+    "operationState": { "phase": "Succeeded", "finishedAt": "2026-11-03T19:00:00Z" },
+    "reconciledAt": "2026-11-03T19:00:00Z",
     "resources": [
       { "group": "batch", "kind": "Job", "namespace": "default", "name": "post-sync-job", "hook": true, "status": "OutOfSync", "requiresPruning": true }
     ]
