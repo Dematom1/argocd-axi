@@ -1276,16 +1276,18 @@ export async function appsWait(args: string[]): Promise<string> {
   const wantsSync = conditions.length === 0 || conditions.includes("--sync");
   let app = wantsSync ? await getApp(name, options) : undefined;
   const pruneOnly = (current: Application): boolean => {
-    const drift = (current.status?.resources ?? []).filter(
-      (resource) => resource.status === "OutOfSync",
-    );
+    const resources = current.status?.resources ?? [];
+    const drift = resources.filter((resource) => resource.status !== "Synced");
     return (
       wantsSync &&
       syncStatus(current) === "OutOfSync" &&
       current.status?.operationState?.phase === "Succeeded" &&
       !current.operation &&
       drift.length > 0 &&
-      drift.every((resource) => resource.requiresPruning === true)
+      drift.every(
+        (resource) =>
+          resource.status === "OutOfSync" && resource.requiresPruning === true,
+      )
     );
   };
   let met = false;
