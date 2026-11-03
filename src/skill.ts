@@ -64,7 +64,7 @@ Run \`npx -y argocd-axi --help\` for global flags, or \`npx -y argocd-axi <comma
 - An app needs attention when it is OutOfSync or sync Unknown; Degraded, Missing or health Unknown; Progressing for more than 10 minutes; its last sync Failed or Errored; or it has conditions.
 - Secret-looking values (Secret data, passwords, tokens, Helm parameters) are redacted and counted; no flag reveals them, and log redaction is best effort.
 - Nothing streams: \`apps logs\` returns recent lines (default 100). \`apps wait\` polls through Missing, Degraded and not-yet-existing apps (default timeout 120 s). Timeout exits 1 with unmet conditions, last state and blocking resource messages. \`--fail-on-degraded\` opts into fail-fast behavior. Re-running wait only observes state.
-- \`apps sync\` returns on acceptance, not deployment completion. For app-of-apps, run \`apps wait <parent>\` before acting on children. An absent child may be reported as permission denied; absence from the visible list can also mean RBAC hides it. Already-synced apps without running operations or resource drift are no-ops; nothing is submitted.
+- \`apps sync\` returns on acceptance, not deployment completion. For app-of-apps, run \`apps wait <parent>\` before acting on children. An absent child may be reported as permission denied; absence from the visible list can also mean RBAC hides it. Already-synced apps without running operations or resource drift are no-ops; nothing is submitted. With \`--resource\`, only selected resources that are not Synced or need pruning are submitted; if all selections are Synced and none needs pruning, nothing is submitted.
 - Apps in other namespaces are addressed as \`namespace/name\`.
 `;
 }

@@ -1514,6 +1514,7 @@ export const APPS_SYNC_SPEC: CommandSpec = {
     "Returns after the server accepts the operation, not after deployment; use apps view or apps wait to follow it",
     "For app-of-apps, run `argocd-axi apps wait <parent>` before acting on children that may not exist yet",
     "An already-synced app with no running operation or resource drift is a no-op; nothing is submitted",
+    "With --resource, synced selections that do not need pruning are skipped; if all selections are synced, nothing is submitted",
     "An existing operation is reported as already running (exit 0), including a concurrent submission race",
     "Never prunes unless --prune is given; requires the context in writable-contexts to execute",
   ],
@@ -1587,10 +1588,17 @@ export async function appsSync(args: string[]): Promise<string> {
         CODES.REFUSED,
       );
     const resource = matches[0];
-    return namespace === undefined && resource?.namespace
-      ? `${group}:${kind}:${resource.namespace}/${resourceName}`
-      : spec;
+    return {
+      spec:
+        namespace === undefined && resource?.namespace
+          ? `${group}:${kind}:${resource.namespace}/${resourceName}`
+          : spec,
+      synced: resource?.status === "Synced" && !resource.requiresPruning,
+    };
   });
+  const pending = selected
+    .filter((resource) => !resource.synced)
+    .map((resource) => resource.spec);
   if (confirm && selected.length === 0 && isOperationRunning(app))
     return finishWrite(
       gate,
@@ -1598,12 +1606,13 @@ export async function appsSync(args: string[]): Promise<string> {
       follow,
     );
   if (
-    syncStatus(app) === "Synced" &&
-    !isOperationRunning(app) &&
-    selected.length === 0 &&
-    !(app.status?.resources ?? []).some(
-      (r) => r.status === "OutOfSync" || r.requiresPruning,
-    )
+    selected.length > 0
+      ? pending.length === 0
+      : syncStatus(app) === "Synced" &&
+        !isOperationRunning(app) &&
+        !(app.status?.resources ?? []).some(
+          (r) => r.status === "OutOfSync" || r.requiresPruning,
+        )
   )
     return finishWrite(gate, [
       encodeObject({ sync: "already synced", submitted: "no" }),
@@ -1611,7 +1620,7 @@ export async function appsSync(args: string[]): Promise<string> {
   const diff = confirm
     ? undefined
     : selected.length
-      ? encodeObject({ resources: selected })
+      ? encodeObject({ resources: pending })
       : await appsDiff([name, "--context", gate.context], false);
   const project = validateName("project", app.spec?.project ?? "default");
   const windows =
@@ -1638,7 +1647,7 @@ export async function appsSync(args: string[]): Promise<string> {
     );
   const writeTarget = await resolveWriteTarget(gate);
   const syncArgs = [name, "--async", "--info", "initiated-by=argocd-axi"];
-  for (const resource of selected) syncArgs.push("--resource", resource);
+  for (const resource of pending) syncArgs.push("--resource", resource);
   if (prune) syncArgs.push("--prune");
   try {
     await runArgocd("app sync", syncArgs, {

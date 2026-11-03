@@ -253,7 +253,10 @@ exist yet even when Argo CD answers permission denied. For a named app denied
 by RBAC, the tool checks the visible app list and explains this possibility
 when the app is absent. Absence can also mean RBAC hides the app.
 An already-synced app with no running operation or resource drift is a clean
-sync no-op: nothing is submitted.
+sync no-op: nothing is submitted. With `--resource`, only selected resources
+that are not Synced or need pruning are submitted. If every selected resource
+is Synced and none needs pruning, the command is a no-op even if other
+resources in the app are out of sync.
 
 `apps wait` polls until all requested conditions hold. Missing, Degraded and
 not-yet-existing apps keep polling until the timeout. Use `--fail-on-degraded`

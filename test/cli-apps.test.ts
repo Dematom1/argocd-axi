@@ -217,53 +217,99 @@ describe("apps", () => {
     expect(result.stdout).not.toContain("supersecretvalue123");
   });
 
-  it("still submits an explicitly selected synced resource", async () => {
-    const home = makeHome();
-    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
-    writeFileSync(
-      join(home, ".config", "argocd-axi", "config"),
-      "writable-contexts: [staging]",
-    );
-    const result = await runCli(
-      [
-        "apps",
-        "sync",
-        "argo-rollouts",
-        "--context",
-        "staging",
-        "--confirm",
-        "--resource",
-        "apps:Deployment:argo-rollouts/argo-rollouts",
-      ],
-      {
-        home,
-        scenario: scenario([
-          { argv: ["app", "get", "argo-rollouts"], stdout: rollout("healthy") },
-          { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
+  it.each([
+    ["Synced", false, false, "Synced"],
+    ["Synced", false, false, "OutOfSync"],
+    ["OutOfSync", false, true, "Synced"],
+    ["Synced", true, true, "Synced"],
+  ])(
+    "selective sync uses selected resource state (%s, prune=%s)",
+    async (status, requiresPruning, submits, appStatus) => {
+      const home = makeHome();
+      mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+      writeFileSync(
+        join(home, ".config", "argocd-axi", "config"),
+        "writable-contexts: [staging]",
+      );
+      const app = JSON.stringify({
+        metadata: { name: "demo" },
+        spec: { project: "default" },
+        status: {
+          sync: { status: appStatus },
+          resources: [
+            {
+              group: "apps",
+              kind: "Deployment",
+              namespace: "shop",
+              name: "current",
+              status: "Synced",
+            },
+            {
+              group: "apps",
+              kind: "Deployment",
+              namespace: "shop",
+              name: "selected",
+              status,
+              requiresPruning,
+            },
+            {
+              group: "apps",
+              kind: "Deployment",
+              namespace: "shop",
+              name: "unselected",
+              status: "OutOfSync",
+            },
+          ],
+        },
+      });
+      for (const preview of [true, false]) {
+        const result = await runCli(
+          [
+            "apps",
+            "sync",
+            "demo",
+            "--context",
+            "staging",
+            "--resource",
+            "apps:Deployment:current",
+            "--resource",
+            "apps:Deployment:selected",
+            ...(preview ? [] : ["--confirm"]),
+            ...(requiresPruning ? ["--prune"] : []),
+          ],
           {
-            argv: ["account", "can-i", "sync", "applications"],
-            stdout: "yes\n",
+            home,
+            scenario: scenario([
+              { argv: ["app", "get", "demo"], stdout: app },
+              { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
+              {
+                argv: ["account", "can-i", "sync", "applications"],
+                stdout: "yes\n",
+              },
+              { argv: ["app", "sync", "demo"], stdout: "" },
+            ]),
           },
-          {
-            argv: [
-              "app",
-              "sync",
-              "argo-rollouts",
-              "--async",
-              "--info",
-              "initiated-by=argocd-axi",
-              "--resource",
-              "apps:Deployment:argo-rollouts/argo-rollouts",
-            ],
-            stdout: "",
-          },
-        ]),
-      },
-    );
-    expect(result.exitCode).toBe(0);
-    expect(result.calls.some((call) => call[1] === "sync")).toBe(true);
-    expect(result.stdout).not.toContain("submitted: no");
-  });
+        );
+        expect(result.exitCode).toBe(0);
+        const call = result.calls.find((args) => args[1] === "sync");
+        if (!submits) {
+          expect(result.stdout).toContain("sync: already synced");
+          expect(result.stdout).toContain("submitted: no");
+          expect(call).toBeUndefined();
+        } else if (preview) {
+          expect(result.stdout).toContain("apps:Deployment:shop/selected");
+          expect(result.stdout).not.toContain("apps:Deployment:shop/current");
+          expect(call).toBeUndefined();
+        } else {
+          expect(call?.filter((arg) => arg === "--resource")).toHaveLength(1);
+          expect(call).toContain("apps:Deployment:shop/selected");
+          expect(call).not.toContain("apps:Deployment:shop/current");
+          expect(call).not.toContain("apps:Deployment:shop/unselected");
+          expect(call?.includes("--prune")).toBe(requiresPruning);
+        }
+      }
+    },
+  );
 
   it("makes already-synced submissions a repeatable no-op", async () => {
     const home = makeHome();
@@ -587,7 +633,7 @@ describe("apps", () => {
       { home: previewHome },
     );
     expect(preview.stdout).toContain("apps:Deployment:payments/payments-api");
-    expect(preview.stdout).toContain(":Service:payments/payments-api");
+    expect(preview.stdout).not.toContain(":Service:payments/payments-api");
     expect(preview.calls.some((call) => call[1] === "sync")).toBe(false);
 
     const home = makeHome();
@@ -631,8 +677,6 @@ describe("apps", () => {
               "initiated-by=argocd-axi",
               "--resource",
               "apps:Deployment:payments/payments-api",
-              "--resource",
-              ":Service:payments/payments-api",
             ],
             stdout: "",
           },
@@ -642,7 +686,7 @@ describe("apps", () => {
     const syncCall = calls.find((call) => call[1] === "sync");
     expect(syncCall).toContain("--resource");
     expect(syncCall).toContain("apps:Deployment:payments/payments-api");
-    expect(syncCall).toContain(":Service:payments/payments-api");
+    expect(syncCall).not.toContain(":Service:payments/payments-api");
   });
 
   it("qualifies unique namespaced selectors and refuses ambiguous ones", async () => {
