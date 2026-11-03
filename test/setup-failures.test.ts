@@ -14,6 +14,52 @@ import { describe, expect, it } from "vitest";
 import { makeHome, ROOT, runCli } from "./helpers.js";
 
 describe("truthful setup", () => {
+  it("preserves foreign SessionEnd commands mentioning argocd-axi during setup and removal", async () => {
+    const home = makeHome();
+    const file = join(home, ".claude", "settings.json");
+    mkdirSync(join(home, ".claude"));
+    const foreign = [
+      "echo /usr/local/bin/argocd-axi context end",
+      "echo argocd-axi context end",
+      "sh -c /usr/local/bin/argocd-axi context end",
+      "argocd-axi context end --custom",
+      "node '/old/path/argocd-axi.js' context end --custom",
+      "echo keep # argocd-axi context end",
+    ].map((command) => ({ type: "command", command }));
+    const legacy = [
+      "argocd-axi context end",
+      "/usr/local/bin/argocd-axi context end",
+      "node '/old path/argocd-axi.js' context end",
+    ].map((command) => ({ type: "command", command }));
+    writeFileSync(
+      file,
+      JSON.stringify({
+        hooks: {
+          SessionEnd: [{ matcher: "", hooks: [...foreign, ...legacy] }],
+        },
+      }),
+    );
+    for (let i = 0; i < 2; i++) {
+      expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);
+      const value = JSON.parse(readFileSync(file, "utf8"));
+      const entries = value.hooks.SessionEnd.flatMap(
+        (group: { hooks: unknown[] }) => group.hooks,
+      );
+      expect(entries).toHaveLength(foreign.length + 1);
+      for (const entry of foreign) expect(entries).toContainEqual(entry);
+      for (const entry of legacy) expect(entries).not.toContainEqual(entry);
+    }
+    for (let i = 0; i < 2; i++) {
+      expect((await runCli(["setup", "uninstall"], { home })).exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(file, "utf8")).hooks.SessionEnd).toEqual([
+        { matcher: "", hooks: foreign },
+      ]);
+    }
+    expect((await runCli(["setup", "status"], { home })).stdout).toContain(
+      "sessionEnd: not installed",
+    );
+  });
+
   it.skipIf(process.platform === "win32")(
     "executes relocated SessionStart shell hooks through spaces and quotes",
     () => {
