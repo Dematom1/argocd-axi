@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { parseArgs, type CommandSpec } from "../args.js";
+import { parseArgs, renderCommandHelp, type CommandSpec } from "../args.js";
 import { CODES, axiError } from "../errors.js";
 import { encodeObject } from "../toon.js";
 import { finish } from "./common.js";
@@ -34,7 +34,25 @@ const CONTEXT_SPEC: CommandSpec = {
   examples: ["argocd-axi context", "argocd-axi context end"],
 };
 
+const CONTEXT_END_SPEC: CommandSpec = {
+  ...CONTEXT_SPEC,
+  path: "context end",
+  summary: "Record session memory from a SessionEnd hook payload",
+  positionals: [],
+  examples: [
+    "argocd-axi context end < session-end.json",
+    "argocd-axi context end --help",
+  ],
+  notes: [
+    "Reads a SessionEnd JSON payload with transcript_path and optional cwd from stdin; installed by `argocd-axi setup hooks`",
+  ],
+};
+
 export async function contextCommand(args: string[]): Promise<string> {
+  if (args.includes("--help"))
+    return renderCommandHelp(
+      args[0] === "end" ? CONTEXT_END_SPEC : CONTEXT_SPEC,
+    );
   const parsed = parseArgs(CONTEXT_SPEC, args);
   const sub = parsed.positionals[0];
   if (sub !== undefined && sub !== "end") {
