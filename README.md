@@ -159,9 +159,16 @@ Pick one; you do not need both.
   log is limited to 100 directories and stored with `0600` permissions. Run
   `argocd-axi context` to view the current directory's last session.
   `argocd-axi setup status` verifies installed hooks across integrations; use
-  `argocd-axi setup uninstall` to remove only the Claude Code SessionEnd hook.
-  SessionStart hooks and the OpenCode plugin are preserved. Hooks need a
-  persistent install (`npm install -g argocd-axi`); setup refuses an npx-cache
+  `argocd-axi setup uninstall` to remove all managed SessionStart and SessionEnd
+  hooks and the OpenCode plugin. The shared Codex hooks feature flag is
+  preserved. axi-sdk-js treats any SessionStart command containing `argocd-axi`
+  as managed, so uninstall may also remove an unrelated command containing that text.
+  With axi-sdk-js 0.1.13, SessionStart setup, status, and uninstall
+  use `~/.claude/settings.json`, ignoring `CLAUDE_CONFIG_DIR`;
+  SessionEnd honors that variable. Uninstall can leave SessionStart hooks in
+  a custom Claude directory. Custom Claude directories need an SDK fix.
+  Hooks need a persistent install (`npm install -g argocd-axi`); setup refuses
+  an npx-cache
   install because hooks would point at a temporary path.
 - **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi`
   installs [`skills/argocd-axi/SKILL.md`](skills/argocd-axi/SKILL.md), which
@@ -321,7 +328,7 @@ with `in-progress`. Native reads are allowed on a no-op.
 | `context end`                                                                                                                    | Local write | Same summary: already-done, no session-file rewrite. Partial atomic writes leave the prior summary intact. Previously rewrote an identical summary.                                                                                                                                                                 |
 | `setup hooks`                                                                                                                    | Local write | Installs or repairs missing hooks; repeated installation converges. Hook-file no-op behavior is maintained by the separate setup change.                                                                                                                                                                            |
 | `setup status`                                                                                                                   | Read        | Hook inspection only.                                                                                                                                                                                                                                                                                               |
-| `setup uninstall`                                                                                                                | Local write | Missing SessionEnd hook is a successful no-op; SessionStart integrations remain. Maintained by the separate setup change.                                                                                                                                                                                           |
+| `setup uninstall`                                                                                                                | Local write | Removes managed SessionStart/SessionEnd hooks and the OpenCode plugin; missing SessionEnd hooks are a successful no-op. SessionStart removal failures return `UPSTREAM_ERROR` after attempting SessionEnd removal. Fix the reported paths' permissions and retry.                                                   |
 | `update --check` / `update --dry-run`                                                                                            | Read        | SDK registry lookup, no installation; package-manager fallback can maintain its own cache.                                                                                                                                                                                                                          |
 | `update`                                                                                                                         | Local write | SDK skips installation when current is latest, reports already on the latest version. A newer registry release changes the desired target. Partial installation repair belongs to the detected package manager.                                                                                                     |
 | `--help` / per-command `--help`, `-v` / `-V` / `--version`                                                                       | Read        | Static help or version, no mutation.                                                                                                                                                                                                                                                                                |

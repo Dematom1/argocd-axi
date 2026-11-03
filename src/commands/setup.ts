@@ -1,10 +1,11 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   detectInstallMethod,
   installSessionStartHooks,
   sessionStartHookStatus,
+  uninstallSessionStartHooks,
 } from "axi-sdk-js";
 import { parseArgs, renderCommandHelp, type CommandSpec } from "../args.js";
 import { CODES, axiError, validationError } from "../errors.js";
@@ -24,7 +25,7 @@ export const SETUP_HOOKS_SPEC: CommandSpec = {
   examples: ["argocd-axi setup hooks"],
   notes: [
     "The hook runs `argocd-axi-ctx`, which is local only: current context, server and CLI version, with no network call, no SSO refresh and no credential read",
-    "SessionEnd records command names, counts and the most-used --context value only; setup status and setup uninstall inspect or remove that Claude Code hook",
+    "SessionEnd records command names, counts and the most-used --context value only; setup status and setup uninstall inspect or remove all managed integrations",
     "Intended for global installs; repeated runs are no-ops",
   ],
 };
@@ -72,6 +73,60 @@ function hookStatus() {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isManagedSessionStartCommand(command: string): boolean {
+  return command.includes("argocd-axi");
+}
+
+function repairSessionStartHooks(): void {
+  const targets = sessionStartHookStatus({ marker: "argocd-axi" });
+  for (const file of [targets.claude.path, targets.codex.path]) {
+    const value: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (
+      !isRecord(value) ||
+      !isRecord(value.hooks) ||
+      !Array.isArray(value.hooks.SessionStart)
+    )
+      continue;
+    let seen = false;
+    let changed = false;
+    // axi-sdk-js 0.1.13 repairs only the first matching entry. Keep that repaired
+    // entry and remove later duplicates until the SDK deduplicates updates.
+    const groups = value.hooks.SessionStart.flatMap((group: unknown) => {
+      if (!isRecord(group) || !Array.isArray(group.hooks)) return [group];
+      const hooks = group.hooks.filter((hook: unknown) => {
+        if (
+          !isRecord(hook) ||
+          typeof hook.command !== "string" ||
+          !isManagedSessionStartCommand(hook.command)
+        )
+          return true;
+        if (!seen) {
+          seen = true;
+          // The SDK also stores raw paths in shell hooks; quote absolute paths
+          // here without changing the OpenCode plugin's shell-free executable.
+          if (isAbsolute(hook.command)) {
+            hook.command = `'${hook.command.replaceAll("'", "'\\''")}'`;
+            changed = true;
+          }
+          return true;
+        }
+        changed = true;
+        return false;
+      });
+      if (hooks.length === group.hooks.length) return [group];
+      return hooks.length ? [{ ...group, hooks }] : [];
+    });
+    if (changed) {
+      value.hooks.SessionStart = groups;
+      writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+    }
+  }
+}
+
 export async function setupCommand(args: string[]): Promise<string> {
   const action = args[0];
   if (action !== "hooks" && action !== "status" && action !== "uninstall") {
@@ -84,17 +139,41 @@ export async function setupCommand(args: string[]): Promise<string> {
   parseArgs(SETUP_HOOKS_SPEC, args.slice(1));
   if (action === "status")
     return finish([encodeObject(hookStatus())], undefined);
-  if (action === "uninstall")
+  if (action === "uninstall") {
+    const before = sessionStartHookStatus({ marker: "argocd-axi" });
+    const errors: string[] = [];
+    uninstallSessionStartHooks({
+      marker: "argocd-axi",
+      onError: (message) => errors.push(message),
+    });
+    let sessionEndRemoved = false;
+    try {
+      sessionEndRemoved = uninstallSessionEndHook();
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+    if (errors.length)
+      throw axiError(
+        `Hook removal reported problems: ${errors.join("; ")}`,
+        CODES.UPSTREAM_ERROR,
+        [
+          "Check write permissions for the paths above, then re-run `argocd-axi setup uninstall`",
+        ],
+      );
     return finish(
       [
         encodeObject({
-          sessionEnd: uninstallSessionEndHook()
+          claude: before.claude.installed ? "removed" : "not installed (no-op)",
+          codex: before.codex.installed ? "removed" : "not installed (no-op)",
+          opencode: before.opencode.installed
             ? "removed"
             : "not installed (no-op)",
+          sessionEnd: sessionEndRemoved ? "removed" : "not installed (no-op)",
         }),
       ],
       undefined,
     );
+  }
 
   // An npx (or pnpm dlx, bunx) run lives in a cache that later sessions may
   // not have on PATH or may have evicted, so a hook pointing at it would
@@ -119,6 +198,8 @@ export async function setupCommand(args: string[]): Promise<string> {
     onError: (message) => errors.push(message),
   });
   try {
+    // Run only after successful SDK installation, so the retained entry is current.
+    if (errors.length === 0) repairSessionStartHooks();
     installSessionEndHook(
       realpathSync(join(dirname(entrypoint), "argocd-axi.js")),
     );
