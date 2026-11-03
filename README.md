@@ -48,8 +48,10 @@ argocd-axi turns that into small, definitive answers:
   `apps diff --full` adds the redacted, line-oriented diff.
 - **Opt-in writes.** `apps sync <app>` previews the per-resource diff and
   makes no change unless `--confirm` is passed. It never prunes unless
-  `--prune` is explicit. Resource actions and automated-sync changes also
-  preview by default and execute only on configured writable contexts.
+  `--prune` is explicit. Selective sync can target managed resources with
+  `--resource`; see [write completion and migration](#write-completion-and-migration).
+  Resource actions and automated-sync changes also preview by default and
+  execute only on configured writable contexts.
 - **Safe output.** Secret data, passwords, tokens and sensitive-looking Helm
   parameters are redacted and counted. No flag reveals them.
 - **Never hangs.** Nothing streams or follows; waits are bounded; no prompt can
@@ -178,7 +180,7 @@ argocd-axi apps [--problems --project --selector --repo --cluster --sync --healt
 argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
-argocd-axi apps sync <app> [--confirm] [--prune] [--timeout <s>] [--context <c>]
+argocd-axi apps sync <app> [--resource <GROUP:KIND:NAME>]... [--confirm] [--prune] [--timeout <s>] [--context <c>]
 # --confirm starts the operation and returns; --timeout bounds the request, not deployment
 argocd-axi apps auto-sync <app> <on|off> [--confirm] [--context <c>]
 argocd-axi apps history <app> [--limit <n>]
@@ -201,6 +203,8 @@ Apps in other namespaces are addressed as `namespace/name`.
 ### What "needs attention" means
 
 ### Write completion and migration
+
+`apps sync --resource GROUP:KIND:NAME` previews the selected resources and, with `--confirm`, syncs only those managed resources. Use `GROUP:KIND:NAMESPACE/NAME` to disambiguate namespaced resources, or an empty group for core kinds such as `:Service:my-svc`. Repeat `--resource` to select several resources. Unknown or malformed specs are refused before submission. Selective sync does not run resource hooks or record the sync in application history, so it cannot be rolled back from that history.
 
 `apps sync --confirm` returns `sync: started` when the server accepts the async
 operation. It prints the target revision, the last observed revision, and commands

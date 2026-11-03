@@ -278,6 +278,172 @@ describe("apps", () => {
     expect(calls.some((call) => call[1] === "sync")).toBe(false);
   });
 
+  it("previews and submits only validated selected resources", async () => {
+    const previewHome = makeHome();
+    mkdirSync(join(previewHome, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(previewHome, ".config", "argocd-axi", "config"),
+      "writable-contexts: [prod]",
+    );
+    const preview = await runCli(
+      [
+        "apps",
+        "sync",
+        "payments-api",
+        "--context",
+        "prod",
+        "--resource",
+        "apps:Deployment:payments/payments-api",
+        "--resource",
+        ":Service:payments/payments-api",
+      ],
+      { home: previewHome },
+    );
+    expect(preview.stdout).toContain("apps:Deployment:payments/payments-api");
+    expect(preview.stdout).toContain(":Service:payments/payments-api");
+    expect(preview.calls.some((call) => call[1] === "sync")).toBe(false);
+
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [prod]",
+    );
+    const { calls } = await runCli(
+      [
+        "apps",
+        "sync",
+        "payments-api",
+        "--context",
+        "prod",
+        "--confirm",
+        "--resource",
+        "apps:Deployment:payments/payments-api",
+        "--resource",
+        ":Service:payments/payments-api",
+      ],
+      {
+        home,
+        scenario: scenario([
+          {
+            argv: ["app", "get", "payments-api"],
+            stdoutFile: "app-payments-api.json",
+          },
+          { argv: ["proj", "windows", "list", "payments"], stdout: "[]" },
+          {
+            argv: ["account", "can-i", "sync", "applications"],
+            stdout: "yes\n",
+          },
+          {
+            argv: [
+              "app",
+              "sync",
+              "payments-api",
+              "--async",
+              "--info",
+              "initiated-by=argocd-axi",
+              "--resource",
+              "apps:Deployment:payments/payments-api",
+              "--resource",
+              ":Service:payments/payments-api",
+            ],
+            stdout: "",
+          },
+        ]),
+      },
+    );
+    const syncCall = calls.find((call) => call[1] === "sync");
+    expect(syncCall).toContain("--resource");
+    expect(syncCall).toContain("apps:Deployment:payments/payments-api");
+    expect(syncCall).toContain(":Service:payments/payments-api");
+  });
+
+  it("qualifies unique namespaced selectors and refuses ambiguous ones", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [prod]",
+    );
+    const app = JSON.stringify({
+      metadata: { name: "demo" },
+      spec: { project: "default" },
+      status: {
+        resources: [
+          { group: "apps", kind: "Deployment", namespace: "one", name: "web" },
+          { group: "apps", kind: "Deployment", namespace: "two", name: "web" },
+          { group: "batch", kind: "Job", namespace: "three", name: "task" },
+        ],
+      },
+    });
+    const ambiguous = await runCli(
+      [
+        "apps",
+        "sync",
+        "demo",
+        "--context",
+        "prod",
+        "--resource",
+        "apps:Deployment:web",
+      ],
+      {
+        home,
+        scenario: scenario([{ argv: ["app", "get", "demo"], stdout: app }]),
+      },
+    );
+    expect(ambiguous.stdout).toContain(
+      "REFUSED: resource apps:Deployment:web is ambiguous",
+    );
+    expect(ambiguous.calls.some((call) => call[1] === "sync")).toBe(false);
+
+    const unique = await runCli(
+      [
+        "apps",
+        "sync",
+        "demo",
+        "--context",
+        "prod",
+        "--resource",
+        "batch:Job:task",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "demo"], stdout: app },
+          { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
+        ]),
+      },
+    );
+    expect(unique.stdout).toContain("batch:Job:three/task");
+    expect(unique.calls.some((call) => call[1] === "sync")).toBe(false);
+  });
+
+  it("refuses unknown and malformed sync resources without submitting", async () => {
+    for (const resource of ["apps:Deployment:not-managed", "bad-spec"]) {
+      const home = makeHome();
+      mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+      writeFileSync(
+        join(home, ".config", "argocd-axi", "config"),
+        "writable-contexts: [prod]",
+      );
+      const result = await runCli(
+        [
+          "apps",
+          "sync",
+          "payments-api",
+          "--context",
+          "prod",
+          "--resource",
+          resource,
+        ],
+        { home },
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain("REFUSED");
+      expect(result.calls.some((call) => call[1] === "sync")).toBe(false);
+    }
+  });
+
   it("refuses a server-rejected sync window without losing its reason", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });

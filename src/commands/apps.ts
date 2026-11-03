@@ -1345,6 +1345,13 @@ export const APPS_SYNC_SPEC: CommandSpec = {
       description: "Start the sync and return immediately after acceptance",
     },
     {
+      name: "--resource",
+      kind: "multi",
+      valueName: "GROUP:KIND:NAME",
+      description:
+        "Only sync this managed resource (repeatable; namespace/name accepted)",
+    },
+    {
       name: "--prune",
       kind: "bool",
       description: "Allow pruning resources in the sync",
@@ -1361,6 +1368,7 @@ export const APPS_SYNC_SPEC: CommandSpec = {
   examples: [
     "argocd-axi apps sync guestbook --context staging",
     "argocd-axi apps sync guestbook --context staging --confirm",
+    "argocd-axi apps sync guestbook --resource apps:Deployment:default/web",
   ],
   notes: [
     "Returns after the server accepts the operation, not after deployment; use apps view or apps wait to follow it",
@@ -1375,6 +1383,29 @@ export async function appsSync(args: string[]): Promise<string> {
   const context = getString(parsed, "--context");
   const confirm = getBool(parsed, "--confirm");
   const prune = getBool(parsed, "--prune");
+  const resourceSpecs = getList(parsed, "--resource");
+  const resources = resourceSpecs.map((spec) => {
+    const parts = spec.split(":");
+    if (
+      parts.length !== 3 ||
+      !parts[1] ||
+      !parts[2] ||
+      (parts[2].includes("/") &&
+        (parts[2].startsWith("/") ||
+          parts[2].endsWith("/") ||
+          parts[2].split("/").length !== 2))
+    )
+      throw axiError(
+        `REFUSED: malformed resource spec ${spec}; expected GROUP:KIND:NAME or GROUP:KIND:NAMESPACE/NAME`,
+        CODES.REFUSED,
+      );
+    return {
+      spec,
+      group: parts[0] as string,
+      kind: parts[1] as string,
+      target: parts[2] as string,
+    };
+  });
   const timeout = getInt(parsed, "--timeout", {
     default: 120,
     min: 1,
@@ -1392,7 +1423,33 @@ export async function appsSync(args: string[]): Promise<string> {
   const options = { context: gate.context };
   const app = await getApp(name, options);
   const follow = operationHelp(name, gate.context);
-  if (confirm && isOperationRunning(app))
+  const selected = resources.map(({ spec, group, kind, target }) => {
+    const [namespace, resourceName] = target.includes("/")
+      ? target.split("/", 2)
+      : [undefined, target];
+    const matches = (app.status?.resources ?? []).filter(
+      (r) =>
+        (r.group ?? "") === group &&
+        r.kind === kind &&
+        r.name === resourceName &&
+        (namespace === undefined || r.namespace === namespace),
+    );
+    if (matches.length > 1)
+      throw axiError(
+        `REFUSED: resource ${spec} is ambiguous; use GROUP:KIND:NAMESPACE/NAME`,
+        CODES.REFUSED,
+      );
+    if (matches.length === 0)
+      throw axiError(
+        `REFUSED: resource ${spec} is not managed by ${name}; run \`argocd-axi apps resources ${name}\``,
+        CODES.REFUSED,
+      );
+    const resource = matches[0];
+    return namespace === undefined && resource?.namespace
+      ? `${group}:${kind}:${resource.namespace}/${resourceName}`
+      : spec;
+  });
+  if (confirm && selected.length === 0 && isOperationRunning(app))
     return finishWrite(
       gate,
       [encodeObject({ sync: "already running", revision: syncRevision(app) })],
@@ -1400,7 +1457,9 @@ export async function appsSync(args: string[]): Promise<string> {
     );
   const diff = confirm
     ? undefined
-    : await appsDiff([name, "--context", gate.context], false);
+    : selected.length
+      ? encodeObject({ resources: selected })
+      : await appsDiff([name, "--context", gate.context], false);
   const project = validateName("project", app.spec?.project ?? "default");
   const windows =
     (await argocdJson<SyncWindow[] | null>(
@@ -1426,6 +1485,7 @@ export async function appsSync(args: string[]): Promise<string> {
     );
   const writeTarget = await resolveWriteTarget(gate);
   const syncArgs = [name, "--async", "--info", "initiated-by=argocd-axi"];
+  for (const resource of selected) syncArgs.push("--resource", resource);
   if (prune) syncArgs.push("--prune");
   try {
     await runArgocd("app sync", syncArgs, {
