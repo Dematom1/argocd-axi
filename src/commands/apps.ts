@@ -732,7 +732,7 @@ export async function appsResources(args: string[]): Promise<string> {
 export const APPS_DIFF_SPEC: CommandSpec = {
   path: "apps diff",
   summary:
-    "What differs between Git and the live cluster, per resource; raw diff text only with --full",
+    "What differs between Git and the live cluster, per resource; line diff with --full",
   positionals: [APP_ARG],
   flags: [
     {

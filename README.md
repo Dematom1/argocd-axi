@@ -45,7 +45,7 @@ argocd-axi turns that into small, definitive answers:
 - **Problems first.** Every list sorts the apps that need attention to the
   top and says why, in one line, with `count: N of M total`.
 - **Summary first.** Diffs and manifests come back as a per-resource list;
-  the raw text is one `--full` away.
+  `apps diff --full` adds the redacted, line-oriented diff.
 - **Opt-in writes.** `apps sync <app>` previews the per-resource diff and
   makes no change unless `--confirm` is passed. It never prunes unless
   `--prune` is explicit. Resource actions and automated-sync changes also
