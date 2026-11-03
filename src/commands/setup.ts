@@ -165,7 +165,9 @@ export async function setupCommand(args: string[]): Promise<string> {
         encodeObject({
           claude: before.claude.installed ? "removed" : "not installed (no-op)",
           codex: before.codex.installed ? "removed" : "not installed (no-op)",
-          opencode: before.opencode.installed ? "removed" : "not installed (no-op)",
+          opencode: before.opencode.installed
+            ? "removed"
+            : "not installed (no-op)",
           sessionEnd: sessionEndRemoved ? "removed" : "not installed (no-op)",
         }),
       ],
