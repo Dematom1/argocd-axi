@@ -357,6 +357,30 @@ describe("state-scoped write retries", () => {
     expect(result.stdout).toContain("already-done");
   });
 
+  it("does not report termination complete while operation remains pending", async () => {
+    const result = await runCli(
+      ["apps", "terminate-op", "demo", "--context", "prod", "--confirm"],
+      {
+        home: writableHome(),
+        scenario: scenario([
+          ...baseResponses,
+          { argv: ["app", "get", "demo"], stdout: JSON.stringify(before) },
+          {
+            argv: ["app", "get", "demo"],
+            stdout: JSON.stringify({ ...before, status: {}, operation: {} }),
+          },
+          {
+            argv: ["app", "terminate-op"],
+            stderr: "no operation is in progress",
+            exit: 20,
+          },
+        ]),
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).not.toContain("already-done");
+  });
+
   it("does not resubmit a termination already in progress", async () => {
     const result = await runCli(
       ["apps", "terminate-op", "demo", "--context", "prod", "--confirm"],
