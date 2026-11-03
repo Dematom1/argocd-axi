@@ -161,10 +161,7 @@ describe("truthful setup", () => {
       expect(groups).toHaveLength(3);
       expect(groups[0].hooks).toHaveLength(1);
       expect(groups[0].hooks[0].command).not.toContain("/old/location/");
-      expect(groups[1]).toEqual({
-        matcher: "keep",
-        hooks: [unrelated, mentionsProduct, customLegacy],
-      });
+      expect(groups[1]).toEqual({ matcher: "keep", hooks: [unrelated] });
       expect(groups[2]).toEqual({ matcher: "empty", hooks: [] });
     }
   });
@@ -231,9 +228,11 @@ describe("truthful setup", () => {
           "utf8",
         ),
       ).toContain('"apps": 1');
-      expect((await runCli(["setup", "uninstall"], { home })).stdout).toContain(
-        "sessionEnd: removed",
-      );
+      const uninstall = await runCli(["setup", "uninstall"], { home });
+      expect(uninstall.stdout).toContain("claude: removed");
+      expect(uninstall.stdout).toContain("codex: removed");
+      expect(uninstall.stdout).toContain("opencode: removed");
+      expect(uninstall.stdout).toContain("sessionEnd: removed");
       const removed = JSON.parse(readFileSync(file, "utf8"));
       expect(removed.hooks.SessionEnd).toEqual([
         { matcher: "", hooks: [unrelated] },

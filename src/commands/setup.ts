@@ -78,9 +78,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isManagedSessionStartCommand(command: string): boolean {
-  return /^(?:argocd-axi-ctx(?:\.js)?|\/.*\/argocd-axi-ctx(?:\.js)?|'(?:[^']|'\\'')*\/argocd-axi-ctx(?:\.js)?')$/.test(
-    command,
-  );
+  return command.includes("argocd-axi");
 }
 
 function repairSessionStartHooks(): void {
@@ -142,6 +140,7 @@ export async function setupCommand(args: string[]): Promise<string> {
   if (action === "status")
     return finish([encodeObject(hookStatus())], undefined);
   if (action === "uninstall") {
+    const before = sessionStartHookStatus({ marker: "argocd-axi" });
     const errors: string[] = [];
     uninstallSessionStartHooks({
       marker: "argocd-axi",
@@ -164,6 +163,9 @@ export async function setupCommand(args: string[]): Promise<string> {
     return finish(
       [
         encodeObject({
+          claude: before.claude.installed ? "removed" : "not installed (no-op)",
+          codex: before.codex.installed ? "removed" : "not installed (no-op)",
+          opencode: before.opencode.installed ? "removed" : "not installed (no-op)",
           sessionEnd: sessionEndRemoved ? "removed" : "not installed (no-op)",
         }),
       ],
