@@ -337,10 +337,7 @@ describe("state-scoped write retries", () => {
       {
         argv: ["app", "get", "demo"],
         state: "finished",
-        stdout: JSON.stringify({
-          ...before,
-          status: { operationState: { phase: "Succeeded" } },
-        }),
+        stdout: JSON.stringify({ ...before, status: {} }),
       },
       {
         argv: ["app", "terminate-op"],

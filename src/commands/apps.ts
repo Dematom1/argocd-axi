@@ -2145,16 +2145,12 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
   } catch (error) {
     if (
       !(error instanceof AxiError) ||
-      !/no operation|operation.*(?:not|already).*(?:running|progress|terminat|complet)/i.test(
-        error.message,
-      )
+      !/no operation is in progress/i.test(error.message)
     )
       throw error;
     const current = await getApp(name, options);
-    if (
-      isOperationRunning(current) &&
-      current.status?.operationState?.phase !== "Terminating"
-    )
+    const currentPhase = current.status?.operationState?.phase;
+    if (currentPhase !== undefined && currentPhase !== "Terminating")
       throw error;
     return finishWrite(
       gate,

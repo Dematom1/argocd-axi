@@ -329,6 +329,19 @@ export async function chooseContext(
 async function writableAdd(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
   const requested = parsed.positionals[0];
+  const writable = loadConfig().config.writableContexts;
+  if (
+    requested !== undefined &&
+    writable.includes(validateContextName(requested))
+  )
+    return finish(
+      [
+        encodeObject({
+          writableContext: `${requested} is already writable (already-done; no change)`,
+        }),
+      ],
+      undefined,
+    );
   const listing = await listContexts();
   if (listing.notInstalled) throw listing.notInstalled;
   if (listing.unavailable) {
@@ -338,7 +351,6 @@ async function writableAdd(args: string[]): Promise<string> {
       LOGIN_HELP,
     );
   }
-  const writable = loadConfig().config.writableContexts;
   let name = parsed.positionals[0]
     ? validateContextName(parsed.positionals[0])
     : undefined;
