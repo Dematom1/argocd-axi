@@ -329,11 +329,6 @@ export async function chooseContext(
 async function writableAdd(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
   const requested = parsed.positionals[0];
-  if (!process.stdin.isTTY || !process.stdout.isTTY)
-    throw axiError(
-      "writable context changes require an interactive terminal; run this command in a terminal",
-      CODES.REFUSED,
-    );
   const listing = await listContexts();
   if (listing.notInstalled) throw listing.notInstalled;
   if (listing.unavailable) {
@@ -380,6 +375,11 @@ async function writableAdd(args: string[]): Promise<string> {
         }),
       ],
       undefined,
+    );
+  if (!process.stdin.isTTY || !process.stdout.isTTY)
+    throw axiError(
+      "writable context changes require an interactive terminal; run this command in a terminal",
+      CODES.REFUSED,
     );
   username ??= (
     await argocdJson<{ username?: string }>(
