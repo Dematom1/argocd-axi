@@ -52,6 +52,72 @@ describe("apps", () => {
     }
   });
 
+  it("retries a rate-limited poll before observing a healthy app", async () => {
+    const result = await runCli(
+      ["apps", "wait", "argo-rollouts", "--timeout", "5"],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "argo-rollouts"],
+            sequence: [
+              {
+                exit: 20,
+                stderr:
+                  "rpc error: code = ResourceExhausted desc = too many requests",
+              },
+              { stdout: rollout("healthy") },
+            ],
+          },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("condition met");
+    expect(result.stdout).toContain("health: Healthy");
+    expect(result.calls).toHaveLength(2);
+  });
+
+  it.each([false, true])(
+    "keeps bounded timeout diagnostics during rate limits (last state=%s)",
+    async (observed) => {
+      const limited = {
+        exit: 20,
+        stderr: "rpc error: code = ResourceExhausted desc = too many requests",
+      };
+      const result = await runCli(
+        ["apps", "wait", "argo-rollouts", "--timeout", "4"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "argo-rollouts"],
+              sequence: [
+                ...(observed ? [{ stdout: rollout("degraded") }] : []),
+                limited,
+              ],
+            },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("timed out after 4s");
+      expect(result.stdout).toContain("latest poll rate limited");
+      expect(result.stdout).not.toContain("condition met (");
+      expect(result.calls.length).toBeLessThanOrEqual(3);
+      if (observed) {
+        expect(result.stdout).toContain("health: Degraded (expected Healthy)");
+        expect(result.stdout).toContain("blockingResources: 4 of 4 total");
+        expect(result.stdout).toContain(
+          "CustomResourceDefinition is not established",
+        );
+      } else {
+        expect(result.stdout).toContain(
+          "unknown (no response before deadline)",
+        );
+        expect(result.stdout).toContain("health: no response before deadline");
+      }
+    },
+  );
+
   it("polls Missing then Degraded CRDs until Healthy, without native wait", async () => {
     const result = await runCli(
       [
@@ -295,6 +361,10 @@ describe("apps", () => {
         if (!submits) {
           expect(result.stdout).toContain("sync: already synced");
           expect(result.stdout).toContain("submitted: no");
+          expect(result.stdout).toContain("last Argo CD comparison");
+          expect(result.stdout).toContain(
+            "argocd-axi apps refresh demo --context staging --confirm",
+          );
           expect(call).toBeUndefined();
         } else if (preview) {
           expect(result.stdout).toContain("apps:Deployment:shop/selected");
@@ -334,6 +404,10 @@ describe("apps", () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("sync: already synced");
       expect(result.stdout).toContain("submitted: no");
+      expect(result.stdout).toContain("last Argo CD comparison");
+      expect(result.stdout).toContain(
+        "argocd-axi apps refresh argo-rollouts --context staging --confirm",
+      );
       expect(result.calls.some((call) => call[1] === "sync")).toBe(false);
     }
   });

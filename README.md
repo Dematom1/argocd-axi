@@ -256,7 +256,9 @@ An already-synced app with no running operation or resource drift is a clean
 sync no-op: nothing is submitted. With `--resource`, only selected resources
 that are not Synced or need pruning are submitted. If every selected resource
 is Synced and none needs pruning, the command is a no-op even if other
-resources in the app are out of sync.
+resources in the app are out of sync. No-op decisions use the last Argo CD
+comparison, which can lag recent Git changes. The no-op result suggests
+`apps refresh <app> --confirm` before retrying sync; refresh requires write approval.
 
 `apps wait` checks whether all requested conditions hold now; it does not wait
 for a future operation. Synced and Healthy with no running or pending operation
@@ -265,7 +267,9 @@ Degraded and not-yet-existing apps keep polling until the timeout. Use
 `--fail-on-degraded` to stop immediately on Degraded. Timeout exits 1 and reports
 each unmet condition, the last state, and up to 20 blocking resources with their
 messages and total count. Re-running wait only observes state and never submits
-work.
+work. Rate-limited polls retry with increasing delays from 1 to 10 seconds,
+bounded by the same timeout. A timeout retains the last observed state and
+identifies a rate-limited final poll.
 
 An app needs attention when its sync status is OutOfSync or Unknown; its
 health is Degraded, Missing or Unknown; it has been Progressing for more than

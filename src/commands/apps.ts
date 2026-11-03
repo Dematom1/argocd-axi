@@ -1298,6 +1298,7 @@ export const APPS_WAIT_SPEC: CommandSpec = {
     "Wait checks whether the requested conditions hold now; it does not wait for a future operation",
     "Synced and Healthy with no running or pending operation satisfies --operation, even without historical operationState",
     "Polls through Missing, Degraded and not-yet-existing apps; --fail-on-degraded stops on Degraded",
+    "Rate-limited polls retry with increasing delays (1s to 10s), bounded by the same timeout",
     "Timeout exits 1 with unmet conditions, last state and blocking resource messages",
   ],
 };
@@ -1327,6 +1328,8 @@ export async function appsWait(args: string[]): Promise<string> {
   let missing: string | undefined;
   let unmet: string[] = [];
   let degraded = false;
+  let rateLimited = false;
+  let retryDelay = WAIT_POLL_MS;
   const progress = () =>
     process.stderr.write(
       `Waiting for wait (${Math.floor((Date.now() - started) / 1000)}s elapsed; limit ${timeout}s)\n`,
@@ -1350,12 +1353,22 @@ export async function appsWait(args: string[]): Promise<string> {
           missing = error.message;
         } else if (
           error instanceof AxiError &&
+          error.code === CODES.RATE_LIMITED
+        ) {
+          rateLimited = true;
+          await sleep(Math.min(retryDelay, Math.max(0, deadline - Date.now())));
+          retryDelay = Math.min(retryDelay * 2, 10_000);
+          continue;
+        } else if (
+          error instanceof AxiError &&
           error.code === CODES.TIMEOUT &&
           Date.now() >= deadline
         ) {
           break;
         } else throw error;
       }
+      rateLimited = false;
+      retryDelay = WAIT_POLL_MS;
       unmet = requested.flatMap((condition) => {
         if (!app) return [`${condition.slice(2)}: app not yet visible`];
         switch (condition) {
@@ -1391,7 +1404,8 @@ export async function appsWait(args: string[]): Promise<string> {
   }
 
   const elapsed = Math.round((Date.now() - started) / 1000);
-  const met = !degraded && unmet.length === 0 && app !== undefined;
+  const met =
+    !degraded && !rateLimited && unmet.length === 0 && app !== undefined;
   if (!met) process.exitCode = 1;
   const redactor = new Redactor();
   const waited = requested.map((c) => c.slice(2)).join(", ");
@@ -1429,6 +1443,11 @@ export async function appsWait(args: string[]): Promise<string> {
                 ? "not yet visible"
                 : "unknown (no response before deadline)",
             },
+        ...(rateLimited
+          ? {
+              snapshot: `${app ? "last successful read" : "no app state received"}; latest poll rate limited`,
+            }
+          : {}),
         ...(!met
           ? {
               unmet: unmet.length
@@ -1516,6 +1535,7 @@ export const APPS_SYNC_SPEC: CommandSpec = {
     "Returns after the server accepts the operation, not after deployment; use apps view or apps wait to follow it",
     "For app-of-apps, run `argocd-axi apps wait <parent>` before acting on children that may not exist yet",
     "An already-synced app with no running operation or resource drift is a no-op; nothing is submitted",
+    "No-op decisions use the last Argo CD comparison; after recent Git changes, refresh the app before retrying sync (write approval required)",
     "With --resource, synced selections that do not need pruning are skipped; if all selections are synced, nothing is submitted",
     "An existing operation is reported as already running (exit 0), including a concurrent submission race",
     "Never prunes unless --prune is given; requires the context in writable-contexts to execute",
@@ -1616,9 +1636,13 @@ export async function appsSync(args: string[]): Promise<string> {
           (r) => r.status === "OutOfSync" || r.requiresPruning,
         )
   )
-    return finishWrite(gate, [
-      encodeObject({ sync: "already synced", submitted: "no" }),
-    ]);
+    return finishWrite(
+      gate,
+      [encodeObject({ sync: "already synced", submitted: "no" })],
+      [
+        `Sync status is the last Argo CD comparison; if Git changed recently, run \`argocd-axi apps refresh ${name} --context ${gate.context} --confirm\` before retrying sync (write approval required)`,
+      ],
+    );
   const diff = confirm
     ? undefined
     : selected.length
