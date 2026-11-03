@@ -178,7 +178,7 @@ argocd-axi apps [--problems --project --selector --repo --cluster --sync --healt
 argocd-axi apps view <app> [--full]
 argocd-axi apps resources <app> [--problems | --orphaned]
 argocd-axi apps diff <app> [--revision <rev>] [--full]
-argocd-axi apps sync <app> [--confirm] [--prune] [--timeout <s>] [--context <c>]
+argocd-axi apps sync <app> [--resource <GROUP:KIND:NAME>]... [--confirm] [--prune] [--timeout <s>] [--context <c>]
 # --confirm starts the operation and returns; --timeout bounds the request, not deployment
 argocd-axi apps auto-sync <app> <on|off> [--confirm] [--context <c>]
 argocd-axi apps history <app> [--limit <n>]
@@ -201,6 +201,8 @@ Apps in other namespaces are addressed as `namespace/name`.
 ### What "needs attention" means
 
 ### Write completion and migration
+
+`apps sync --resource GROUP:KIND:NAME` previews and syncs only listed managed resources. The native form `GROUP:KIND:NAMESPACE/NAME` disambiguates namespaced resources; use an empty group for core kinds, such as `:Service:my-svc`. Repeat `--resource` to select several resources. Unknown or malformed specs are refused before submission.
 
 `apps sync --confirm` returns `sync: started` when the server accepts the async
 operation. It prints the target revision, the last observed revision, and commands
