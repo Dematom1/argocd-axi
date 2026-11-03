@@ -77,6 +77,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function isManagedSessionStartCommand(command: string): boolean {
+  return /^(?:argocd-axi-ctx|['"]?\/.*\/argocd-axi-ctx)(?:\.js)?['"]?(?:\s|$)/.test(
+    command,
+  );
+}
+
 function repairSessionStartHooks(): void {
   const targets = sessionStartHookStatus({ marker: "argocd-axi" });
   for (const file of [targets.claude.path, targets.codex.path]) {
@@ -97,7 +103,7 @@ function repairSessionStartHooks(): void {
         if (
           !isRecord(hook) ||
           typeof hook.command !== "string" ||
-          !hook.command.includes("argocd-axi")
+          !isManagedSessionStartCommand(hook.command)
         )
           return true;
         if (!seen) {

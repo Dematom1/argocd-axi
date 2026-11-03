@@ -78,13 +78,20 @@ describe("truthful setup", () => {
       join(home, ".codex", "hooks.json"),
     ];
     const unrelated = { type: "command", command: "echo keep" };
+    const mentionsProduct = {
+      type: "command",
+      command: "echo argocd-axi status",
+    };
     for (const file of files) {
       const value = JSON.parse(readFileSync(file, "utf8"));
       value.other = true;
       value.hooks.SessionStart[0].hooks[0].command =
         "/old/location/argocd-axi-ctx";
       value.hooks.SessionStart.push(
-        { matcher: "keep", hooks: [unrelated, { command: "argocd-axi-ctx" }] },
+        {
+          matcher: "keep",
+          hooks: [unrelated, mentionsProduct, { command: "argocd-axi-ctx" }],
+        },
         { hooks: [{ command: "/another/argocd-axi-ctx" }] },
         { matcher: "empty", hooks: [] },
       );
@@ -99,7 +106,10 @@ describe("truthful setup", () => {
       expect(groups).toHaveLength(3);
       expect(groups[0].hooks).toHaveLength(1);
       expect(groups[0].hooks[0].command).not.toContain("/old/location/");
-      expect(groups[1]).toEqual({ matcher: "keep", hooks: [unrelated] });
+      expect(groups[1]).toEqual({
+        matcher: "keep",
+        hooks: [unrelated, mentionsProduct],
+      });
       expect(groups[2]).toEqual({ matcher: "empty", hooks: [] });
     }
   });
