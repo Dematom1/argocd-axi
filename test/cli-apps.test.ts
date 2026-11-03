@@ -1502,6 +1502,138 @@ describe("apps", () => {
     }
   });
 
+  it.each(["ResourceExhausted", "Unavailable"])(
+    "continues sliced waits after a transient %s snapshot failure",
+    async (code) => {
+      const drifting = JSON.stringify({
+        metadata: { name: "retry" },
+        status: {
+          sync: { status: "OutOfSync" },
+          health: { status: "Healthy" },
+        },
+      });
+      const synced = JSON.stringify({
+        metadata: { name: "retry" },
+        status: { sync: { status: "Synced" }, health: { status: "Healthy" } },
+      });
+      const result = await runCli(
+        ["apps", "wait", "retry", "--sync", "--timeout", "15"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "retry"],
+              sequence: [
+                { stdout: drifting },
+                {
+                  exit: 20,
+                  stderr: `rpc error: code = ${code} desc = temporary failure`,
+                },
+                { stdout: drifting },
+                { stdout: synced },
+              ],
+            },
+            {
+              argv: ["app", "wait", "retry"],
+              sequence: [
+                { exit: 20, stderr: "timed out" },
+                { exit: 20, stderr: "timed out" },
+                { stdout: "done" },
+              ],
+            },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("condition met (sync)");
+      expect(result.stdout).toContain("sync: Synced");
+      expect(result.calls.filter((call) => call[1] === "wait")).toHaveLength(3);
+      expect(result.calls.filter((call) => call[1] === "get")).toHaveLength(4);
+    },
+  );
+
+  it("retains the last snapshot when transient refresh errors exhaust the wait", async () => {
+    const result = await runCli(
+      ["apps", "wait", "retry", "--sync", "--timeout", "6"],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "retry"],
+            sequence: [
+              {
+                stdout: JSON.stringify({
+                  status: {
+                    sync: { status: "OutOfSync" },
+                    resources: [
+                      {
+                        kind: "Deployment",
+                        namespace: "default",
+                        name: "api",
+                        status: "OutOfSync",
+                      },
+                    ],
+                  },
+                }),
+              },
+              {
+                exit: 20,
+                stderr:
+                  "rpc error: code = Unavailable desc = temporary failure",
+              },
+            ],
+          },
+          { argv: ["app", "wait", "retry"], exit: 20, stderr: "timed out" },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(
+      "timed out after 6s; condition not met (sync)",
+    );
+    expect(result.stdout).toContain(
+      "last successful read; refresh failed: SERVER_UNREACHABLE",
+    );
+    expect(result.stdout).toContain("default/api");
+    expect(result.calls.filter((call) => call[1] === "wait")).toHaveLength(2);
+  });
+
+  it.each([
+    ["rpc error: code = NotFound desc = gone", "NOT_FOUND"],
+    [
+      "rpc error: code = Unauthenticated desc = login required",
+      "AUTH_REQUIRED",
+    ],
+    ["rpc error: code = PermissionDenied desc = denied", "FORBIDDEN"],
+    ["rpc error: code = InvalidArgument desc = invalid", "VALIDATION_ERROR"],
+    ["context 'absent' undefined", "CONTEXT_NOT_FOUND"],
+    ["unrecognized upstream failure", "UPSTREAM_ERROR"],
+  ])(
+    "does not retry a permanent snapshot failure: %s",
+    async (stderr, code) => {
+      const result = await runCli(
+        ["apps", "wait", "retry", "--sync", "--timeout", "15"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "retry"],
+              sequence: [
+                {
+                  stdout: JSON.stringify({
+                    status: { sync: { status: "OutOfSync" } },
+                  }),
+                },
+                { exit: 20, stderr },
+              ],
+            },
+            { argv: ["app", "wait", "retry"], exit: 20, stderr: "timed out" },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(code === "VALIDATION_ERROR" ? 2 : 1);
+      expect(result.stdout).toContain(`code: ${code}`);
+      expect(result.calls.filter((call) => call[1] === "wait")).toHaveLength(1);
+    },
+  );
+
   it("bounds health blockers and names every unmet condition", async () => {
     const resources = Array.from({ length: 23 }, (_, i) => ({
       kind: "Deployment",

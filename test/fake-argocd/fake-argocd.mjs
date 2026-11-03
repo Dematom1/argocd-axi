@@ -50,8 +50,21 @@ candidates.sort(
       (a.contains?.length ?? 0) +
       (a.context !== undefined ? 1 : 0)),
 );
-const response = candidates[0];
+let response = candidates[0];
 if (!response) fail(`no fixture for ${JSON.stringify(rest)}`);
+if (response.sequence) {
+  const invocation = logPath
+    ? readFileSync(logPath, "utf8")
+        .split("\n")
+        .filter((line) => line === JSON.stringify(argv)).length
+    : 1;
+  response = {
+    ...response,
+    ...response.sequence[
+      Math.min(invocation - 1, response.sequence.length - 1)
+    ],
+  };
+}
 
 // Timestamps in fixtures may be written relative to now, e.g. {{now-25m}}.
 function relativeTimes(text) {

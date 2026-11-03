@@ -1296,6 +1296,7 @@ export async function appsWait(args: string[]): Promise<string> {
     );
   };
   let met = false;
+  let snapshotFailure: string | undefined;
   let remaining = timeout;
   while (!(app && pruneOnly(app)) && remaining > 0) {
     // Short native waits let us observe prune-only drift after an operation finishes.
@@ -1328,8 +1329,23 @@ export async function appsWait(args: string[]): Promise<string> {
         throw error;
       remaining = 0;
     }
-    app = await getApp(name, options);
-    if (met) break;
+    if (met) {
+      app = undefined;
+      snapshotFailure = undefined;
+      break;
+    }
+    try {
+      app = await getApp(name, options);
+      snapshotFailure = undefined;
+    } catch (error) {
+      if (
+        !(error instanceof AxiError) ||
+        (error.code !== CODES.RATE_LIMITED &&
+          error.code !== CODES.SERVER_UNREACHABLE)
+      )
+        throw error;
+      snapshotFailure = error.code;
+    }
     remaining = Math.min(
       remaining - slice,
       timeout - (Date.now() - started) / 1000,
@@ -1382,6 +1398,11 @@ export async function appsWait(args: string[]): Promise<string> {
             ? `sync: prune-only drift; condition not met after ${elapsed}s`
             : `timed out after ${timeout}s; ${Object.keys(unmet).length ? `condition not met (${Object.keys(unmet).join(", ")})` : "latest snapshot meets requested conditions, but not observed before deadline"}`,
         app: state,
+        ...(snapshotFailure
+          ? {
+              snapshot: `last successful read; refresh failed: ${snapshotFailure}`,
+            }
+          : {}),
         ...(!met
           ? {
               unmet,
