@@ -1427,21 +1427,26 @@ export async function appsSync(args: string[]): Promise<string> {
     const [namespace, resourceName] = target.includes("/")
       ? target.split("/", 2)
       : [undefined, target];
-    const match = (app.status?.resources ?? []).some(
+    const matches = (app.status?.resources ?? []).filter(
       (r) =>
         (r.group ?? "") === group &&
         r.kind === kind &&
         r.name === resourceName &&
         (namespace === undefined || r.namespace === namespace),
     );
-    if (!match)
+    if (matches.length > 1)
+      throw axiError(
+        `REFUSED: resource ${spec} is ambiguous; use GROUP:KIND:NAMESPACE/NAME`,
+        CODES.REFUSED,
+      );
+    if (matches.length === 0)
       throw axiError(
         `REFUSED: resource ${spec} is not managed by ${name}; run \`argocd-axi apps resources ${name}\``,
         CODES.REFUSED,
       );
     return spec;
   });
-  if (confirm && isOperationRunning(app))
+  if (confirm && selected.length === 0 && isOperationRunning(app))
     return finishWrite(
       gate,
       [encodeObject({ sync: "already running", revision: syncRevision(app) })],
