@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.13](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.12...argocd-axi-v0.1.13) (2026-11-03)
+
+
+### Features
+
+* merge green release PRs weekly ([#47](https://github.com/Dematom1/argocd-axi/issues/47)) ([9240260](https://github.com/Dematom1/argocd-axi/commit/9240260f8fa15569356b98588ce771c2c6c9d7e6))
+
+
+### Bug Fixes
+
+* **apps:** print full diffs as plain lines ([#49](https://github.com/Dematom1/argocd-axi/issues/49)) ([29e92b5](https://github.com/Dematom1/argocd-axi/commit/29e92b530a2a982c841685f3d37059c3c04d85b6))
+
 ## [0.1.12](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.11...argocd-axi-v0.1.12) (2026-11-02)
 
 
