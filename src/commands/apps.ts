@@ -1600,9 +1600,24 @@ export async function appsSync(args: string[]): Promise<string> {
   if (
     syncStatus(app) === "Synced" &&
     !isOperationRunning(app) &&
-    !(app.status?.resources ?? []).some(
-      (r) => r.status === "OutOfSync" || r.requiresPruning,
-    )
+    (selected.length
+      ? resources.every(({ group, kind, target }) => {
+          const [namespace, resourceName] = target.includes("/")
+            ? target.split("/", 2)
+            : [undefined, target];
+          return (app.status?.resources ?? []).some(
+            (r) =>
+              (r.group ?? "") === group &&
+              r.kind === kind &&
+              r.name === resourceName &&
+              (namespace === undefined || r.namespace === namespace) &&
+              r.status === "Synced" &&
+              !r.requiresPruning,
+          );
+        })
+      : !(app.status?.resources ?? []).some(
+          (r) => r.status === "OutOfSync" || r.requiresPruning,
+        ))
   )
     return finishWrite(gate, [
       encodeObject({ sync: "already synced", submitted: "no" }),

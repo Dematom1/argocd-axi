@@ -217,6 +217,40 @@ describe("apps", () => {
     expect(result.stdout).not.toContain("supersecretvalue123");
   });
 
+  it("still submits an explicitly selected synced resource", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]",
+    );
+    const result = await runCli(
+      [
+        "apps", "sync", "argo-rollouts", "--context", "staging", "--confirm",
+        "--resource", "apps:Deployment:argo-rollouts/argo-rollouts",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "argo-rollouts"], stdout: rollout("healthy") },
+          { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
+          { argv: ["account", "can-i", "sync", "applications"], stdout: "yes\\n" },
+          {
+            argv: [
+              "app", "sync", "argo-rollouts", "--async", "--info",
+              "initiated-by=argocd-axi", "--resource",
+              "apps:Deployment:argo-rollouts/argo-rollouts",
+            ],
+            stdout: "",
+          },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.calls.some((call) => call[1] === "sync")).toBe(true);
+    expect(result.stdout).not.toContain("submitted: no");
+  });
+
   it("makes already-synced submissions a repeatable no-op", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
