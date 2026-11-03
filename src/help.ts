@@ -26,7 +26,7 @@ export const COMMAND_LINES = [
   "apps history <app>: deployments, newest first",
   "apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted",
   "apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows",
-  "apps wait <app> [--sync --health --operation] [--timeout <s>]: bounded wait with stderr progress, returns the state either way",
+  "apps wait <app> [--sync --health --operation] [--timeout <s>]: bounded wait with stderr progress; timeout or prune-only drift exits 1 with blockers",
   "apps actions <app>: list available resource actions",
   "projects | projects view <p> | projects windows <p>: projects, their rules, and whether sync is allowed now",
   "appsets | appsets view <name> | appsets generate <file>: ApplicationSets and what a spec would generate",

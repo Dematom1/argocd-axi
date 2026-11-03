@@ -56,7 +56,7 @@ commands[27]:
   apps history <app>: deployments, newest first
   apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted
   apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows
-  apps wait <app> [--sync --health --operation] [--timeout <s>]: bounded wait with stderr progress, returns the state either way
+  apps wait <app> [--sync --health --operation] [--timeout <s>]: bounded wait with stderr progress; timeout or prune-only drift exits 1 with blockers
   apps actions <app>: list available resource actions
   projects | projects view <p> | projects windows <p>: projects, their rules, and whether sync is allowed now
   appsets | appsets view <name> | appsets generate <file>: ApplicationSets and what a spec would generate
@@ -72,5 +72,5 @@ Run `npx -y argocd-axi --help` for global flags, or `npx -y argocd-axi <command>
 - An unhealthy or out-of-sync app is data, not an error: exit 0 means the command worked. Exit 1 is an error, 2 a usage error; errors print `error`, `code` and `help` on stdout.
 - An app needs attention when it is OutOfSync or sync Unknown; Degraded, Missing or health Unknown; Progressing for more than 10 minutes; its last sync Failed or Errored; or it has conditions.
 - Secret-looking values (Secret data, passwords, tokens, Helm parameters) are redacted and counted; no flag reveals them, and log redaction is best effort.
-- Nothing streams: `apps logs` returns recent lines (default 100), `apps wait` is bounded (default 120 s) and returns the current state if it times out.
+- Nothing streams: `apps logs` returns recent lines (default 100), `apps wait` is bounded (default 120 s) and exits 1 with unmet conditions and blocking resources on timeout. When a Succeeded operation leaves only prune-required drift, --sync returns promptly as prune-only drift (exit 1, not Synced), naming resources and the explicit prune command; wait never writes.
 - Apps in other namespaces are addressed as `namespace/name`.

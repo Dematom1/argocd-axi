@@ -3,7 +3,7 @@ import { decode } from "@toon-format/toon";
 import { renderTextBlock } from "../src/toon.js";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { makeHome, runCli, scenario } from "./helpers.js";
+import { expectSafeCalls, makeHome, runCli, scenario } from "./helpers.js";
 
 describe("apps", () => {
   it.each([
@@ -1369,6 +1369,129 @@ describe("apps", () => {
     expect(view.stdout).toContain("attention: none");
   });
 
+  it("reports prune-only drift promptly without treating it as Synced", async () => {
+    const result = await runCli(
+      [
+        "apps",
+        "wait",
+        "hook-leftover",
+        "--sync",
+        "--health",
+        "--operation",
+        "--timeout",
+        "300",
+        "--context",
+        "prod",
+      ],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "hook-leftover"],
+            stdoutFile: "app-prune-only.json",
+          },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("sync: prune-only drift");
+    expect(result.stdout).toContain("OutOfSync (prune-only drift)");
+    expect(result.stdout).toContain("Job");
+    expect(result.stdout).toContain("default/post-sync-job");
+    expect(result.stdout).toContain("total: 1");
+    expect(result.stdout).toContain(
+      "argocd-axi apps sync hook-leftover --prune --confirm --context prod",
+    );
+    expect(result.stdout).not.toContain("timed out");
+    expect(
+      result.calls.some((call) => call[1] === "wait" || call[1] === "sync"),
+    ).toBe(false);
+    expectSafeCalls(result.calls);
+  });
+
+  it("does not mistake ordinary or mixed drift for prune-only drift", async () => {
+    for (const mixed of [false, true]) {
+      const resources = [
+        {
+          kind: "Deployment",
+          namespace: "default",
+          name: "api",
+          status: "OutOfSync",
+          health: { status: "Healthy" },
+        },
+        ...(mixed
+          ? [
+              {
+                kind: "Job",
+                namespace: "default",
+                name: "hook",
+                status: "OutOfSync",
+                requiresPruning: true,
+              },
+            ]
+          : []),
+      ];
+      const result = await runCli(["apps", "wait", "drift", "--timeout", "1"], {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "drift"],
+            stdout: JSON.stringify({
+              metadata: { name: "drift" },
+              status: {
+                sync: { status: "OutOfSync" },
+                health: { status: "Healthy" },
+                operationState: { phase: "Succeeded" },
+                resources,
+              },
+            }),
+          },
+          { argv: ["app", "wait", "drift"], exit: 20, stderr: "timed out" },
+        ]),
+      });
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain(
+        "timed out after 1s; condition not met (sync)",
+      );
+      expect(result.stdout).toContain("sync: OutOfSync");
+      expect(result.stdout).toContain("default/api");
+      expect(result.stdout).not.toContain("prune-only drift");
+      expect(result.calls.filter((call) => call[1] === "wait")).toHaveLength(1);
+    }
+  });
+
+  it("bounds health blockers and names every unmet condition", async () => {
+    const resources = Array.from({ length: 23 }, (_, i) => ({
+      kind: "Deployment",
+      namespace: "default",
+      name: `api-${i}`,
+      status: "Synced",
+      health: { status: "Degraded" },
+    }));
+    const result = await runCli(["apps", "wait", "broken", "--timeout", "1"], {
+      scenario: scenario([
+        {
+          argv: ["app", "get", "broken"],
+          stdout: JSON.stringify({
+            status: {
+              sync: { status: "Synced" },
+              health: { status: "Degraded" },
+              operationState: { phase: "Running" },
+              resources,
+            },
+          }),
+        },
+        { argv: ["app", "wait", "broken"], exit: 20, stderr: "timed out" },
+      ]),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("condition not met (health, operation)");
+    expect(result.stdout).toContain("health: Degraded");
+    expect(result.stdout).toContain("operation: Running");
+    expect(result.stdout).toContain("total: 23");
+    expect(result.stdout).toContain("shown: 20");
+    expect(result.stdout).toContain("default/api-19");
+    expect(result.stdout).not.toContain("default/api-20");
+  });
+
   it("waits with a bound and returns the state either way (S16)", async () => {
     const met = await runCli([
       "apps",
@@ -1396,9 +1519,9 @@ describe("apps", () => {
       "--timeout",
       "5",
     ]);
-    expect(timedOut.exitCode).toBe(0);
+    expect(timedOut.exitCode).toBe(1);
     expect(timedOut.stdout).toContain(
-      'wait: "timed out after 5s; condition not met (sync, health, operation)"',
+      'wait: "timed out after 5s; condition not met (health, operation)"',
     );
     expect(timedOut.stdout).toContain("health: Progressing");
     expect(timedOut.stdout).toContain(

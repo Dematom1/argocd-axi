@@ -1227,7 +1227,7 @@ export async function appsLogs(args: string[]): Promise<string> {
 export const APPS_WAIT_SPEC: CommandSpec = {
   path: "apps wait",
   summary:
-    "Wait, bounded, until the app is synced, healthy and its operation done; returns the state either way",
+    "Wait, bounded, until the app is synced, healthy and its operation done; unmet conditions exit 1",
   positionals: [APP_ARG],
   flags: [
     { name: "--sync", kind: "bool", description: "Wait for Synced" },
@@ -1252,7 +1252,8 @@ export const APPS_WAIT_SPEC: CommandSpec = {
   notes: [
     "Prints elapsed-time progress to stderr immediately and every 5 seconds; stdout remains structured final output",
     "With no condition flags it waits for sync, health and operation together, like argocd",
-    "A timeout is not an error: the current state is returned with a hint to wait again",
+    "Timeout exits 1 with unmet conditions and blocking resources; success exits 0",
+    "Succeeded operations with only prune-required drift return promptly as prune-only drift (exit 1, not Synced); no resources are changed",
   ],
 };
 
@@ -1272,34 +1273,65 @@ export async function appsWait(args: string[]): Promise<string> {
   const options = contextOption(parsed);
   const started = Date.now();
 
-  let met = false;
-  try {
-    const result = await runArgocd(
-      "app wait",
-      [name, ...conditions, "--timeout", String(timeout)],
-      {
-        ...options,
-        timeoutMs: timeout * 1000 + WAIT_GRACE_MS,
-        progressTimeoutMs: timeout * 1000,
-        allowFailure: true,
-        failure: { notFoundHelp: NOT_FOUND_HELP },
-      },
+  const wantsSync = conditions.length === 0 || conditions.includes("--sync");
+  let app = wantsSync ? await getApp(name, options) : undefined;
+  const pruneOnly = (current: Application): boolean => {
+    const drift = (current.status?.resources ?? []).filter(
+      (resource) => resource.status === "OutOfSync",
     );
-    if (result.exitCode === 0) {
-      met = true;
-    } else if (!/timed out|deadline exceeded/i.test(result.stderr)) {
-      throw mapArgocdFailure(result.stderr || result.stdout, {
-        notFoundHelp: NOT_FOUND_HELP,
-      });
+    return (
+      wantsSync &&
+      syncStatus(current) === "OutOfSync" &&
+      current.status?.operationState?.phase === "Succeeded" &&
+      !current.operation &&
+      drift.length > 0 &&
+      drift.every((resource) => resource.requiresPruning === true)
+    );
+  };
+  let met = false;
+  let remaining = timeout;
+  while (!(app && pruneOnly(app)) && remaining > 0) {
+    // Short native waits let us observe prune-only drift after an operation finishes.
+    const slice = Math.max(
+      1,
+      Math.ceil(wantsSync ? Math.min(remaining, 5) : remaining),
+    );
+    try {
+      const result = await runArgocd(
+        "app wait",
+        [name, ...conditions, "--timeout", String(slice)],
+        {
+          ...options,
+          timeoutMs: slice * 1000 + WAIT_GRACE_MS,
+          progressTimeoutMs: timeout * 1000,
+          progressStartedAt: started,
+          allowFailure: true,
+          failure: { notFoundHelp: NOT_FOUND_HELP },
+        },
+      );
+      if (result.exitCode === 0) {
+        met = true;
+      } else if (!/timed out|deadline exceeded/i.test(result.stderr)) {
+        throw mapArgocdFailure(result.stderr || result.stdout, {
+          notFoundHelp: NOT_FOUND_HELP,
+        });
+      }
+    } catch (error) {
+      if (!(error instanceof AxiError && error.code === CODES.TIMEOUT))
+        throw error;
+      remaining = 0;
     }
-  } catch (error) {
-    // The seam's own hard timeout is a timed-out wait, not an error.
-    if (!(error instanceof AxiError && error.code === CODES.TIMEOUT))
-      throw error;
+    app = await getApp(name, options);
+    if (met) break;
+    remaining = Math.min(
+      remaining - slice,
+      timeout - (Date.now() - started) / 1000,
+    );
   }
 
   const elapsed = Math.round((Date.now() - started) / 1000);
-  const app = await getApp(name, options);
+  app ??= await getApp(name, options);
+  const pruning = pruneOnly(app);
   const redactor = new Redactor();
   const waited =
     conditions.length > 0
@@ -1311,13 +1343,54 @@ export async function appsWait(args: string[]): Promise<string> {
     health: healthStatus(app),
     operation: app.status?.operationState?.phase ?? "none",
   };
+  const unmet: Record<string, string> = {};
+  if (wantsSync && state.sync !== "Synced")
+    unmet.sync = pruning ? "OutOfSync (prune-only drift)" : state.sync;
+  if (
+    (conditions.length === 0 || conditions.includes("--health")) &&
+    state.health !== "Healthy"
+  )
+    unmet.health = state.health;
+  if (
+    (conditions.length === 0 || conditions.includes("--operation")) &&
+    isOperationRunning(app)
+  )
+    unmet.operation = app.operation
+      ? `${state.operation} (operation pending)`
+      : state.operation;
+  const blockers = (app.status?.resources ?? []).filter(
+    (resource) =>
+      (unmet.sync !== undefined &&
+        resource.status !== undefined &&
+        resource.status !== "Synced") ||
+      (unmet.health !== undefined && isUnhealthy(resource)),
+  );
+  if (!met) process.exitCode = 1;
   return finish(
     [
       encodeObject({
         wait: met
           ? `condition met (${waited}) after ${elapsed}s`
-          : `timed out after ${timeout}s; condition not met (${waited})`,
+          : pruning
+            ? `sync: prune-only drift; condition not met after ${elapsed}s`
+            : `timed out after ${timeout}s; ${Object.keys(unmet).length ? `condition not met (${Object.keys(unmet).join(", ")})` : "latest snapshot meets requested conditions, but not observed before deadline"}`,
         app: state,
+        ...(!met
+          ? {
+              unmet,
+              blockingResources: {
+                total: blockers.length,
+                shown: Math.min(blockers.length, 20),
+              },
+              resources: blockers.slice(0, 20).map((resource) => ({
+                kind: resource.kind ?? "unknown",
+                resource: `${resource.namespace ?? "(cluster)"}/${resource.name ?? "unknown"}`,
+                sync: resource.status ?? "Unknown",
+                health: resource.health?.status ?? "Unknown",
+                requiresPruning: resource.requiresPruning === true,
+              })),
+            }
+          : {}),
         attention:
           attentionReasons(app, Date.now(), redactor).join("; ") || "none",
       }),
@@ -1325,9 +1398,14 @@ export async function appsWait(args: string[]): Promise<string> {
     redactor,
     met
       ? []
-      : [
-          `Run \`argocd-axi apps wait ${name}${conditions.map((c) => ` ${c}`).join("")} --timeout ${timeout}${contextSuffix(parsed)}\` to wait again`,
-        ],
+      : pruning
+        ? [
+            `Run \`argocd-axi apps sync ${name} --prune --confirm${contextSuffix(parsed)}\` to remove prune-required resources (write approval required)`,
+          ]
+        : [
+            `Run \`argocd-axi apps wait ${name}${conditions.map((c) => ` ${c}`).join("")} --timeout ${timeout}${contextSuffix(parsed)}\` to wait again`,
+            `Run \`argocd-axi apps resources ${name} --problems${contextSuffix(parsed)}\` to inspect blocking resources`,
+          ],
   );
 }
 

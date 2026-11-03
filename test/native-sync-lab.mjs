@@ -172,12 +172,12 @@ try {
   assert(!calls.slice(start).some((c) => c.route.endsWith("/Watch")));
   let progressBeforeExit = false;
   result = await run(
-    ["apps", "wait", "proof", "--operation", "--timeout", "6"],
+    ["apps", "wait", "proof", "--sync", "--operation", "--timeout", "6"],
     (text) => {
       if (text.includes("0s elapsed")) progressBeforeExit = true;
     },
   );
-  assert.equal(result.code, 0, JSON.stringify(result));
+  assert.equal(result.code, 1, JSON.stringify(result));
   assert(progressBeforeExit);
   assert.match(result.stderr, /5s elapsed/);
   assert.match(result.stdout, /timed out after 6s/);

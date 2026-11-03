@@ -1,0 +1,11 @@
+{
+  "metadata": { "name": "hook-leftover" },
+  "status": {
+    "sync": { "status": "OutOfSync" },
+    "health": { "status": "Healthy" },
+    "operationState": { "phase": "Succeeded" },
+    "resources": [
+      { "group": "batch", "kind": "Job", "namespace": "default", "name": "post-sync-job", "hook": true, "status": "OutOfSync", "requiresPruning": true }
+    ]
+  }
+}

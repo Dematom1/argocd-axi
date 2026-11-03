@@ -221,8 +221,13 @@ argocd-axi apps wait <app> --context <context> --timeout 300
 argocd-axi apps view <app> --context <context>
 ```
 
-Inspect the structured wait result before proceeding: timeout returns exit 0 with
-`condition not met`, not deployment success. `apps view` shows operation failures
+Wait success exits 0; timeout exits 1 with `condition not met`, the unmet
+conditions and current values, and up to 20 blocking resources (with total count).
+When the last operation Succeeded and all OutOfSync resources require pruning,
+`--sync` returns promptly with `sync: prune-only drift` and exit 1, not Synced.
+It names the resources and suggests `argocd-axi apps sync <app> --prune --confirm`;
+wait never performs that write. This also applies to the default combined wait.
+Other requested conditions remain visible if unmet. `apps view` shows operation failures
 and the resolved operation revision. A requested branch or tag may move after
 submission; the sync response does not claim that the last observed commit is the
 new operation's commit.
@@ -272,8 +277,8 @@ specific app.
   summary is followed by redacted plain-text diff lines. There is no `--json`;
   the raw `argocd` CLI is the fallback for anything argocd-axi does not cover.
 - Exit 0 means the command did what was asked. An OutOfSync or Degraded app,
-  drift found by `apps diff`, a `can-i` answer of no, and an `apps wait` that
-  timed out are all data with exit 0.
+  drift found by `apps diff`, and a `can-i` answer of no are data with exit 0.
+  `apps wait` exits 1 on timeout or prune-only drift: the requested wait did not succeed.
 - Exit 1 is an error, exit 2 a usage error (unknown flag, missing argument).
   Unknown flags are rejected before any argocd call, with the valid flags
   listed.
