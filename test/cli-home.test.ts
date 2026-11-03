@@ -126,7 +126,7 @@ describe("home view", () => {
     { argv: ["version", "--client"], stdoutFile: "version-client.json" },
   ]);
 
-  it("refreshes the version check at most every 12 hours and warns on major skew", async () => {
+  it("checks versions without persisting state and warns on major skew", async () => {
     const home = makeHome();
     const first = await runCli([], { home, scenario: skewed });
     expect(first.stdout).toContain(
@@ -141,13 +141,11 @@ describe("home view", () => {
     const second = await runCli([], { home, scenario: skewed });
     expect(
       second.calls.filter((c) => c[0] === "version" && c[1] !== "--client"),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
     expect(second.stdout).toContain("warning:");
     const ctx = await runCli(["ctx"], { home, scenario: skewed });
-    expect(ctx.stdout).toContain("serverVersion: v2.13.1 (checked just now)");
-    expect(ctx.stdout).toContain(
-      "warning: argocd CLI v3.3.6 and server v2.13.1",
-    );
+    expect(ctx.stdout).not.toContain("serverVersion:");
+    expect(ctx.stdout).not.toContain("warning:");
   });
 
   it("rejects a server override that disagrees with the context", async () => {
@@ -331,7 +329,7 @@ describe("ctx and the session hook (S17)", () => {
     const already = await runCli(["ctx", "use", "prod"]);
     expect(already.exitCode).toBe(0);
     expect(already.stdout).toContain(
-      "prod is already the current context (no-op)",
+      "prod is already the current context (already-done; no-op)",
     );
     expect(already.calls).toEqual([["context"]]);
     const missing = await runCli(["ctx", "use", "nope"]);

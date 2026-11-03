@@ -1,9 +1,8 @@
 /**
  * The allowlist registry (design decision S5). These are the only argocd
- * invocations the subprocess seam in `argocd.ts` can make. Every entry is a
- * server read or a local-config operation; nothing here can change an Argo CD
- * server or cluster. A test pins this table, so adding an operation is a
- * deliberate, reviewed change.
+ * invocations the subprocess seam in `argocd.ts` can make. Entries declare
+ * reads, local operations, or opt-in Application writes. A test pins this
+ * table, so adding an operation is a deliberate, reviewed change.
  */
 
 export type Tier =

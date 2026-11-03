@@ -93,8 +93,10 @@ export async function contextCommand(args: string[]): Promise<string> {
       undefined,
     );
   const cwd = typeof payload.cwd === "string" ? payload.cwd : process.cwd();
+  let result: boolean | "already-done";
   try {
-    if (!(await recordSession(directory(cwd), summary)))
+    result = await recordSession(directory(cwd), summary);
+    if (result === false)
       return finish(
         [encodeObject({ recorded: "nothing - session log is busy" })],
         undefined,
@@ -109,5 +111,13 @@ export async function contextCommand(args: string[]): Promise<string> {
       undefined,
     );
   }
-  return finish([encodeObject({ recorded: sessionText(summary) })], undefined);
+  return finish(
+    [
+      encodeObject({
+        recorded: sessionText(summary),
+        ...(result === "already-done" ? { result } : {}),
+      }),
+    ],
+    undefined,
+  );
 }

@@ -1,13 +1,12 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { argocdJson } from "./argocd.js";
 
 /**
  * CLI and server version skew (design decision A10). The server version is
- * checked by a networked command at most once per 12 hours per context and
- * server, cached in argocd-axi's own cache directory, and only read from the
- * cache by the offline `ctx` view. There is no hard minimum version; a major
+ * checked by the networked home view without persisting state. Existing
+ * version caches remain readable by the offline `ctx` view. There is no hard minimum version; a major
  * version difference is a warning, never an error.
  */
 
@@ -52,20 +51,6 @@ function readCache(): CacheFile {
 
 export function readVersionCheck(key: string): VersionCheck | undefined {
   return readCache().entries[key];
-}
-
-function writeVersionCheck(key: string, check: VersionCheck): void {
-  try {
-    const path = cachePath();
-    const cache = readCache();
-    cache.entries[key] = check;
-    mkdirSync(dirname(path), { recursive: true });
-    const temp = `${path}.${process.pid}.tmp`;
-    writeFileSync(temp, `${JSON.stringify(cache, null, 2)}\n`, { mode: 0o600 });
-    renameSync(temp, path);
-  } catch {
-    // The cache is an optimisation; failing to write it must not fail a command.
-  }
 }
 
 function pickVersion(section: unknown): string | undefined {
@@ -115,8 +100,8 @@ export function isStale(check: VersionCheck | undefined, now: number): boolean {
 }
 
 /**
- * Return the cached check, refreshing it from the server when it is older
- * than the TTL. Network failures leave the previous value in place.
+ * Read a recent legacy cache or query the server, without writing any files.
+ * Network failures fall back to the legacy value.
  */
 export async function refreshVersionCheck(
   context: string,
@@ -137,7 +122,6 @@ export async function refreshVersionCheck(
       server: serverVersion,
       checkedAt: new Date(now).toISOString(),
     };
-    writeVersionCheck(key, check);
     return check;
   } catch {
     return cached;
