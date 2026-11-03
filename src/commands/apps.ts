@@ -2104,7 +2104,7 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
   const options = { context: gate.context },
     app = await getApp(name, options),
     phase = app.status?.operationState?.phase;
-  if (!isOperationRunning(app) || phase === "Terminating")
+  if (!isOperationRunning(app) || (phase === "Terminating" && confirm))
     return finishWrite(
       gate,
       [

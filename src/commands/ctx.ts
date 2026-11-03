@@ -329,20 +329,6 @@ export async function chooseContext(
 async function writableAdd(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
   const requested = parsed.positionals[0];
-  if (
-    requested !== undefined &&
-    loadConfig().config.writableContexts.includes(
-      validateContextName(requested),
-    )
-  )
-    return finish(
-      [
-        encodeObject({
-          writableContext: `${requested} is already writable (already-done; no change)`,
-        }),
-      ],
-      undefined,
-    );
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw axiError(
       "writable context changes require an interactive terminal; run this command in a terminal",
