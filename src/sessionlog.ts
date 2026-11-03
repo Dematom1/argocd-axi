@@ -330,7 +330,7 @@ export function releaseSessionLock(lock: SessionLock): void {
 export async function recordSession(
   directory: string,
   summary: SessionSummary,
-): Promise<boolean> {
+): Promise<boolean | "already-done"> {
   const path = sessionsPath();
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const lock = await acquireLock(path);
@@ -338,7 +338,8 @@ export async function recordSession(
   try {
     const directories = readSessions();
     const previous = directories[directory];
-    if (previous && sessionText(previous) === sessionText(summary)) return true;
+    if (previous && sessionText(previous) === sessionText(summary))
+      return "already-done";
     delete directories[directory];
     directories[directory] = summary;
     for (const old of Object.keys(directories).slice(
