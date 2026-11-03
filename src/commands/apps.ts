@@ -2150,10 +2150,7 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
       throw error;
     const current = await getApp(name, options);
     const currentPhase = current.status?.operationState?.phase;
-    if (
-      isOperationRunning(current) &&
-      currentPhase !== "Terminating"
-    )
+    if (isOperationRunning(current) && currentPhase !== "Terminating")
       throw error;
     return finishWrite(
       gate,
