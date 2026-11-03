@@ -38,7 +38,7 @@ export const CTX_SPEC: CommandSpec = {
   examples: ["argocd-axi ctx", "argocd-axi ctx --context staging"],
   notes: [
     "This is what the optional SessionStart hook prints: no network, no SSO refresh, no credential read",
-    "The server version shown is the cached result of the last networked check (refreshed at most every 12 hours)",
+    "Server version is shown only when a legacy version cache exists; read commands never create or refresh cache files",
   ],
 };
 
@@ -176,7 +176,7 @@ export async function ctxUse(args: string[]): Promise<string> {
     return finish(
       [
         encodeObject({
-          context: `${name} is already the current context (no-op)`,
+          context: `${name} is already the current context (already-done; no-op)`,
           server: match.server,
         }),
       ],
@@ -328,6 +328,21 @@ export async function chooseContext(
 
 async function writableAdd(args: string[]): Promise<string> {
   const parsed = parseArgs(WRITABLE_ADD_SPEC, args);
+  const requested = parsed.positionals[0];
+  if (
+    requested !== undefined &&
+    loadConfig().config.writableContexts.includes(
+      validateContextName(requested),
+    )
+  )
+    return finish(
+      [
+        encodeObject({
+          writableContext: `${requested} is already writable (already-done; no change)`,
+        }),
+      ],
+      undefined,
+    );
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw axiError(
       "writable context changes require an interactive terminal; run this command in a terminal",
@@ -375,7 +390,7 @@ async function writableAdd(args: string[]): Promise<string> {
     return finish(
       [
         encodeObject({
-          writableContext: `${selectedName} is already writable (no change)`,
+          writableContext: `${selectedName} is already writable (already-done; no change)`,
         }),
       ],
       undefined,
@@ -411,7 +426,7 @@ async function writableAdd(args: string[]): Promise<string> {
       encodeObject({
         writableContext: changed
           ? `added ${selectedName}`
-          : `${selectedName} is already writable (no change)`,
+          : `${selectedName} is already writable (already-done; no change)`,
       }),
     ],
     undefined,
@@ -427,7 +442,7 @@ async function writableRemove(args: string[]): Promise<string> {
       encodeObject({
         writableContext: changed
           ? `removed ${name}`
-          : `${name} is not in writable-contexts (no change)`,
+          : `${name} is not in writable-contexts (already-done; no change)`,
       }),
     ],
     undefined,

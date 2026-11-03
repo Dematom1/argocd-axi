@@ -174,7 +174,7 @@ describe("writable context management", () => {
     expect(picker.calls).toEqual([]);
   });
 
-  it("refuses non-interactive adds and reports no-op removes", async () => {
+  it("allows non-interactive no-op adds and reports no-op removes", async () => {
     const home = makeHome();
     const configDir = join(home, ".config", "argocd-axi");
     mkdirSync(configDir, { recursive: true });
@@ -184,8 +184,8 @@ describe("writable context management", () => {
     );
 
     const add = await runCli(["ctx", "writable", "add", "staging"], { home });
-    expect(add.exitCode).toBe(1);
-    expect(add.stdout).toContain("require an interactive terminal");
+    expect(add.exitCode).toBe(0);
+    expect(add.stdout).toContain("already-done");
     expect(add.calls).toEqual([]);
 
     const remove = await runCli(["ctx", "writable", "remove", "missing"], {
@@ -193,7 +193,7 @@ describe("writable context management", () => {
     });
     expect(remove.exitCode).toBe(0);
     expect(remove.stdout).toContain(
-      "missing is not in writable-contexts (no change)",
+      "missing is not in writable-contexts (already-done; no change)",
     );
   });
 });

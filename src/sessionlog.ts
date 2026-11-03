@@ -337,6 +337,8 @@ export async function recordSession(
   if (lock === undefined) return false;
   try {
     const directories = readSessions();
+    const previous = directories[directory];
+    if (previous && sessionText(previous) === sessionText(summary)) return true;
     delete directories[directory];
     directories[directory] = summary;
     for (const old of Object.keys(directories).slice(

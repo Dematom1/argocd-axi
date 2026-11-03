@@ -1694,6 +1694,37 @@ async function appsActionRun(args: string[]): Promise<string> {
         .join(", ")}. Specify --group and/or --namespace`,
       CODES.REFUSED,
     );
+  // ponytail: health-based deduplication covers observed rollouts, not concurrent
+  // submissions; exactly-once events would need server-side request keys.
+  const rollout = resource.group === "argoproj.io" && kind === "Rollout";
+  const deployment =
+    resource.group === "apps" &&
+    ["Deployment", "StatefulSet", "DaemonSet"].includes(kind);
+  const health = resource.health?.status;
+  const advancing =
+    rollout && ["promote", "promote-full", "resume"].includes(action);
+  const result =
+    advancing && health === "Healthy"
+      ? "already-done"
+      : (advancing || (action === "restart" && (rollout || deployment))) &&
+          health === "Progressing"
+        ? "in-progress"
+        : undefined;
+  if (confirm && result)
+    return finishWrite(
+      gate,
+      [
+        encodeObject({
+          action,
+          app: appNameArg,
+          kind,
+          resource: resourceName,
+          health,
+          result,
+        }),
+      ],
+      viewHelp(appNameArg, gate.context),
+    );
   const actions = await argocdJson<Array<Record<string, unknown>>>(
     "app actions list",
     [appNameArg, "--kind", kind, "-o", "json"],
@@ -1908,12 +1939,48 @@ export async function appsRollback(args: string[]): Promise<string> {
       `REFUSED: history id ${id} not found for ${name}`,
       CODES.REFUSED,
     );
+  const target = history.revisions?.join(", ") ?? history.revision ?? "unknown";
+  const currentRevision =
+    app.status?.sync?.revisions?.join(", ") ?? app.status?.sync?.revision;
+  if (
+    confirm &&
+    target !== "unknown" &&
+    currentRevision === target &&
+    syncStatus(app) === "Synced" &&
+    !isOperationRunning(app)
+  )
+    return finishWrite(gate, [
+      encodeObject({
+        rollback: name,
+        currentRevision: syncRevision(app),
+        targetHistoryId: id,
+        targetRevision: target,
+        status: "already-done",
+      }),
+    ]);
+  const operation = app.status?.operationState;
+  const operationTarget =
+    operation?.syncResult?.revisions?.join(", ") ??
+    operation?.syncResult?.revision;
+  if (confirm && isOperationRunning(app) && operationTarget === target)
+    return finishWrite(
+      gate,
+      [
+        encodeObject({
+          rollback: name,
+          targetHistoryId: id,
+          targetRevision: target,
+          status: "in-progress",
+          phase: operation?.phase,
+        }),
+      ],
+      operationHelp(name, gate.context),
+    );
   if (autoSyncSummary(app) !== "manual")
     throw axiError(
       `REFUSED: disable auto-sync before rolling back ${name}`,
       CODES.REFUSED,
     );
-  const target = history.revisions?.join(", ") ?? history.revision ?? "unknown";
   const previewBlocks = [
     encodeObject({
       rollback: name,
@@ -1995,9 +2062,20 @@ export async function appsRefresh(args: string[]): Promise<string> {
     { ...options, timeoutMs: timeout * 1000 },
     name,
   );
+  const current = await getApp(name, options);
   return finishWrite(
     gate,
-    [...blocks, encodeObject({ refresh: "submitted" })],
+    [
+      ...blocks,
+      encodeObject({
+        refresh: "completed",
+        current: {
+          sync: syncStatus(current),
+          health: healthStatus(current),
+          revision: syncRevision(current),
+        },
+      }),
+    ],
     [],
     writeTarget,
   );
@@ -2026,13 +2104,18 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
   const options = { context: gate.context },
     app = await getApp(name, options),
     phase = app.status?.operationState?.phase;
-  if (!isOperationRunning(app))
+  if (!isOperationRunning(app) || phase === "Terminating")
     return finishWrite(
       gate,
       [
         encodeObject({
           terminateOperation: name,
-          status: "no operation running",
+          status: phase === "Terminating" ? "in-progress" : "already-done",
+          operation: phase ?? "none",
+          message:
+            phase === "Terminating"
+              ? "termination already requested"
+              : "no operation running",
         }),
       ],
       undefined,
@@ -2052,12 +2135,40 @@ export async function appsTerminateOp(args: string[]): Promise<string> {
     ]);
   await checkWritePermission("sync", app, name, options);
   const writeTarget = await resolveWriteTarget(gate);
-  await runApplicationWrite(
-    "app terminate-op",
-    [name],
-    { ...options, timeoutMs: timeout * 1000 },
-    name,
-  );
+  try {
+    await runApplicationWrite(
+      "app terminate-op",
+      [name],
+      { ...options, timeoutMs: timeout * 1000 },
+      name,
+    );
+  } catch (error) {
+    if (
+      !(error instanceof AxiError) ||
+      !/no operation|operation.*(?:not|already).*(?:running|progress|terminat|complet)/i.test(
+        error.message,
+      )
+    )
+      throw error;
+    const current = await getApp(name, options);
+    if (
+      isOperationRunning(current) &&
+      current.status?.operationState?.phase !== "Terminating"
+    )
+      throw error;
+    return finishWrite(
+      gate,
+      [
+        encodeObject({
+          terminateOperation: name,
+          status: isOperationRunning(current) ? "in-progress" : "already-done",
+          operation: current.status?.operationState?.phase ?? "none",
+        }),
+      ],
+      [],
+      writeTarget,
+    );
+  }
   return finishWrite(
     gate,
     [
@@ -2139,6 +2250,11 @@ async function appsAutoSync(args: string[]): Promise<string> {
     return finishWrite(gate, blocks, [
       "No changes made; add --confirm to change automated sync",
       ...(gate.mode === "preview" ? gate.help : []),
+    ]);
+  if ((current !== "manual") === (mode === "on"))
+    return finishWrite(gate, [
+      ...blocks,
+      encodeObject({ result: "already-done" }),
     ]);
   await checkWritePermission("update", app, name, options);
   const writeTarget = await resolveWriteTarget(gate);

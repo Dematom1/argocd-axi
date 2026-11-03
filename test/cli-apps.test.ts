@@ -38,7 +38,7 @@ describe("apps", () => {
       ["apps", "refresh", "payments-api", "--confirm", "--context", "prod"],
       { home },
     );
-    expect(stdout).toContain("refresh: submitted");
+    expect(stdout).toContain("refresh: completed");
     const targetLookup = calls.findIndex((call) => call[0] === "context");
     const refresh = calls.findIndex((call) => call.includes("--refresh"));
     expect(targetLookup).toBeGreaterThanOrEqual(0);
@@ -252,7 +252,8 @@ describe("apps", () => {
       "prod",
     ]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("status: no operation running");
+    expect(stdout).toContain("status: already-done");
+    expect(stdout).toContain("message: no operation running");
   });
 
   it("sync preview names its context and server and never invokes a write", async () => {

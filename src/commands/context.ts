@@ -93,6 +93,8 @@ export async function contextCommand(args: string[]): Promise<string> {
       undefined,
     );
   const cwd = typeof payload.cwd === "string" ? payload.cwd : process.cwd();
+  const alreadyRecorded =
+    display(lastSession(directory(cwd))) === sessionText(summary);
   try {
     if (!(await recordSession(directory(cwd), summary)))
       return finish(
@@ -109,5 +111,13 @@ export async function contextCommand(args: string[]): Promise<string> {
       undefined,
     );
   }
-  return finish([encodeObject({ recorded: sessionText(summary) })], undefined);
+  return finish(
+    [
+      encodeObject({
+        recorded: sessionText(summary),
+        ...(alreadyRecorded ? { result: "already-done" } : {}),
+      }),
+    ],
+    undefined,
+  );
 }

@@ -1,5 +1,10 @@
 // Answers argocd invocations from a scenario file. See test/helpers.ts.
-import { appendFileSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const argv = process.argv.slice(2);
@@ -18,6 +23,11 @@ function fail(message) {
 if (!scenarioPath) fail("FAKE_ARGOCD_SCENARIO is not set");
 const scenario = JSON.parse(readFileSync(scenarioPath, "utf8"));
 const base = dirname(scenarioPath);
+const statePath = process.env.FAKE_ARGOCD_STATE;
+const state =
+  statePath && existsSync(statePath)
+    ? readFileSync(statePath, "utf8")
+    : "initial";
 
 // Pull out --argocd-context so responses can be scoped to a context.
 let context;
@@ -31,6 +41,7 @@ for (let i = 0; i < argv.length; i++) {
 }
 
 function matches(response) {
+  if (response.state !== undefined && response.state !== state) return false;
   if (response.context !== undefined && response.context !== (context ?? null))
     return false;
   const prefix = response.argv;
@@ -78,6 +89,10 @@ if (response.jsonArrayOf) {
 // Set exitCode instead of calling process.exit so piped output larger than
 // the pipe buffer is fully flushed (pipe writes are async on macOS).
 const finish = () => {
+  if (response.nextState !== undefined && (response.exit ?? 0) === 0) {
+    if (!statePath) fail("nextState requires FAKE_ARGOCD_STATE");
+    writeFileSync(statePath, response.nextState);
+  }
   if (stdout) process.stdout.write(relativeTimes(stdout));
   if (response.stderr) process.stderr.write(response.stderr);
   process.exitCode = response.exit ?? 0;
