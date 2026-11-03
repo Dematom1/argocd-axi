@@ -39,6 +39,7 @@ export interface RunOptions {
   home?: string;
   bin?: "argocd-axi" | "argocd-axi-ctx";
   stdin?: string;
+  plainText?: boolean;
 }
 
 export function makeHome(): string {
@@ -95,7 +96,7 @@ export async function runCli(
         .filter(Boolean)
         .map((line) => JSON.parse(line) as string[])
     : [];
-  if (!(args.includes("diff") && args.includes("--full"))) {
+  if (!options.plainText) {
     expect(() => decode(stdout), args.join(" ") || "home").not.toThrow();
   }
   return { stdout, stderr, exitCode, calls, home };
