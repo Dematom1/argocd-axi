@@ -78,7 +78,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isManagedSessionStartCommand(command: string): boolean {
-  return /^(?:argocd-axi-ctx|['"]?\/.*\/argocd-axi-ctx)(?:\.js)?['"]?(?:\s|$)/.test(
+  return /^(?:argocd-axi-ctx(?:\.js)?|\/.*\/argocd-axi-ctx(?:\.js)?|'(?:[^']|'\\'')*\/argocd-axi-ctx(?:\.js)?')$/.test(
     command,
   );
 }

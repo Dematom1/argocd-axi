@@ -82,6 +82,10 @@ describe("truthful setup", () => {
       type: "command",
       command: "echo argocd-axi status",
     };
+    const customLegacy = {
+      type: "command",
+      command: "'/old path/argocd-axi-ctx' --custom",
+    };
     for (const file of files) {
       const value = JSON.parse(readFileSync(file, "utf8"));
       value.other = true;
@@ -90,7 +94,12 @@ describe("truthful setup", () => {
       value.hooks.SessionStart.push(
         {
           matcher: "keep",
-          hooks: [unrelated, mentionsProduct, { command: "argocd-axi-ctx" }],
+          hooks: [
+            unrelated,
+            mentionsProduct,
+            customLegacy,
+            { command: "argocd-axi-ctx" },
+          ],
         },
         { hooks: [{ command: "/another/argocd-axi-ctx" }] },
         { matcher: "empty", hooks: [] },
@@ -108,7 +117,7 @@ describe("truthful setup", () => {
       expect(groups[0].hooks[0].command).not.toContain("/old/location/");
       expect(groups[1]).toEqual({
         matcher: "keep",
-        hooks: [unrelated, mentionsProduct],
+        hooks: [unrelated, mentionsProduct, customLegacy],
       });
       expect(groups[2]).toEqual({ matcher: "empty", hooks: [] });
     }
