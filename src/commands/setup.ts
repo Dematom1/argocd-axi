@@ -5,6 +5,7 @@ import {
   detectInstallMethod,
   installSessionStartHooks,
   sessionStartHookStatus,
+  uninstallSessionStartHooks,
 } from "axi-sdk-js";
 import { parseArgs, renderCommandHelp, type CommandSpec } from "../args.js";
 import { CODES, axiError, validationError } from "../errors.js";
@@ -24,7 +25,7 @@ export const SETUP_HOOKS_SPEC: CommandSpec = {
   examples: ["argocd-axi setup hooks"],
   notes: [
     "The hook runs `argocd-axi-ctx`, which is local only: current context, server and CLI version, with no network call, no SSO refresh and no credential read",
-    "SessionEnd records command names, counts and the most-used --context value only; setup status and setup uninstall inspect or remove that Claude Code hook",
+    "SessionEnd records command names, counts and the most-used --context value only; setup status and setup uninstall inspect or remove all managed integrations",
     "Intended for global installs; repeated runs are no-ops",
   ],
 };
@@ -84,7 +85,20 @@ export async function setupCommand(args: string[]): Promise<string> {
   parseArgs(SETUP_HOOKS_SPEC, args.slice(1));
   if (action === "status")
     return finish([encodeObject(hookStatus())], undefined);
-  if (action === "uninstall")
+  if (action === "uninstall") {
+    const errors: string[] = [];
+    uninstallSessionStartHooks({
+      marker: "argocd-axi",
+      onError: (message) => errors.push(message),
+    });
+    if (errors.length)
+      throw axiError(
+        `Hook removal reported problems: ${errors.join("; ")}`,
+        CODES.UPSTREAM_ERROR,
+        [
+          "Check write permissions for the paths above, then re-run `argocd-axi setup uninstall`",
+        ],
+      );
     return finish(
       [
         encodeObject({
@@ -95,6 +109,7 @@ export async function setupCommand(args: string[]): Promise<string> {
       ],
       undefined,
     );
+  }
 
   // An npx (or pnpm dlx, bunx) run lives in a cache that later sessions may
   // not have on PATH or may have evicted, so a hook pointing at it would

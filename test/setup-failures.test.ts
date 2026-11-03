@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   symlinkSync,
@@ -81,6 +82,20 @@ describe("truthful setup", () => {
         { matcher: "", hooks: [unrelated] },
       ]);
       expect(removed.hooks.Stop).toEqual([unrelated]);
+      expect(removed.hooks.SessionStart).toBeUndefined();
+      expect(
+        JSON.parse(readFileSync(join(home, ".codex", "hooks.json"), "utf8"))
+          .hooks,
+      ).toBeUndefined();
+      expect(
+        readFileSync(join(home, ".codex", "config.toml"), "utf8"),
+      ).toContain("hooks = true");
+      expect(
+        existsSync(
+          join(home, ".config", "opencode", "plugins", "axi-argocd-axi.js"),
+        ),
+      ).toBe(false);
+      expect((await runCli(["setup", "uninstall"], { home })).exitCode).toBe(0);
     },
   );
 
@@ -103,6 +118,33 @@ describe("truthful setup", () => {
         const status = await runCli(["setup", "status"], { home });
         expect(status.exitCode).not.toBe(0);
         expect(status.stdout).toContain("code: CONFIG_INVALID");
+      } finally {
+        chmodSync(dir, 0o755);
+        chmodSync(file, 0o600);
+      }
+    },
+  );
+
+  it
+    .skipIf(process.platform === "win32" || process.getuid?.() === 0)
+    .each([".codex", ".config/opencode/plugins"])(
+    "reports denied removal in %s with repair guidance",
+    async (relative) => {
+      const home = makeHome();
+      expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);
+      const dir = join(home, relative);
+      const file = join(
+        dir,
+        relative === ".codex" ? "hooks.json" : "axi-argocd-axi.js",
+      );
+      try {
+        chmodSync(dir, 0o555);
+        chmodSync(file, 0o444);
+        const result = await runCli(["setup", "uninstall"], { home });
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toContain("code: UPSTREAM_ERROR");
+        expect(result.stdout).toContain("argocd-axi setup uninstall");
+        expect(existsSync(file)).toBe(true);
       } finally {
         chmodSync(dir, 0o755);
         chmodSync(file, 0o600);
