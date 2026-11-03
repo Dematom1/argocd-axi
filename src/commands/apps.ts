@@ -746,7 +746,7 @@ export const APPS_DIFF_SPEC: CommandSpec = {
       name: "--full",
       kind: "bool",
       description:
-        "Also print the raw diff text (secret-looking values redacted)",
+        "Also print the diff as plain lines (secret-looking values redacted)",
     },
     CONTEXT_FLAG,
   ],
@@ -861,7 +861,7 @@ export async function appsDiff(
   ];
   if (full) {
     const lines = redactor.text(text).split("\n");
-    blocks.push(renderTextBlock("diff", lines));
+    blocks.push(`diff:\n${lines.join("\n")}`);
   }
   return finish(
     blocks,

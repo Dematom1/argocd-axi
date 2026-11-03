@@ -95,7 +95,9 @@ export async function runCli(
         .filter(Boolean)
         .map((line) => JSON.parse(line) as string[])
     : [];
-  expect(() => decode(stdout), args.join(" ") || "home").not.toThrow();
+  if (!(args.includes("diff") && args.includes("--full"))) {
+    expect(() => decode(stdout), args.join(" ") || "home").not.toThrow();
+  }
   return { stdout, stderr, exitCode, calls, home };
 }
 

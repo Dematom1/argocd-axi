@@ -675,7 +675,9 @@ describe("apps", () => {
       "payments-api",
       "--exit-code=false",
     ]);
-    expect(full.stdout).toContain("diff[17]");
+    expect(full.stdout).toContain("count: 2 resources differ");
+    expect(full.stdout).toContain("diff:\n===== apps/Deployment");
+    expect(full.stdout).not.toContain("diff[");
     expect(full.stdout).toContain(
       "===== apps/Deployment payments/payments-api ======",
     );
