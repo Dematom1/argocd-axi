@@ -226,19 +226,33 @@ describe("apps", () => {
     );
     const result = await runCli(
       [
-        "apps", "sync", "argo-rollouts", "--context", "staging", "--confirm",
-        "--resource", "apps:Deployment:argo-rollouts/argo-rollouts",
+        "apps",
+        "sync",
+        "argo-rollouts",
+        "--context",
+        "staging",
+        "--confirm",
+        "--resource",
+        "apps:Deployment:argo-rollouts/argo-rollouts",
       ],
       {
         home,
         scenario: scenario([
           { argv: ["app", "get", "argo-rollouts"], stdout: rollout("healthy") },
           { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
-          { argv: ["account", "can-i", "sync", "applications"], stdout: "yes\\n" },
+          {
+            argv: ["account", "can-i", "sync", "applications"],
+            stdout: "yes\n",
+          },
           {
             argv: [
-              "app", "sync", "argo-rollouts", "--async", "--info",
-              "initiated-by=argocd-axi", "--resource",
+              "app",
+              "sync",
+              "argo-rollouts",
+              "--async",
+              "--info",
+              "initiated-by=argocd-axi",
+              "--resource",
               "apps:Deployment:argo-rollouts/argo-rollouts",
             ],
             stdout: "",
