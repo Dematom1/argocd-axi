@@ -47,7 +47,7 @@ commands[27]:
   apps view <app>: source, destination, sync, health, operation, conditions, auto-sync, problem resources
   apps resources <app> [--problems --orphaned]: managed resources with sync and health
   apps diff <app> [--revision <rev>] [--full]: what differs from Git, per resource; redacted plain-line diff with --full
-  apps sync <app> [--confirm] [--prune] [--timeout <s>]: preview, then start sync asynchronously; follow with apps view or apps wait
+  apps sync <app> [--confirm] [--prune] [--timeout <s>]: returns on acceptance; already synced is a no-op; wait on the parent before acting on children
   apps rollback <app> <history-id> [--confirm] [--timeout <s>]: preview revision, then optionally roll back
   apps refresh <app> [--hard] [--confirm] [--timeout <s>]: preview, then refresh one app
   apps terminate-op <app> [--confirm] [--timeout <s>]: preview, then optionally stop a running operation
@@ -56,7 +56,7 @@ commands[27]:
   apps history <app>: deployments, newest first
   apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted
   apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows
-  apps wait <app> [--sync --health --operation] [--timeout <s>]: bounded wait with stderr progress, returns the state either way
+  apps wait <app> [--sync --health --operation] [--timeout <s>] [--fail-on-degraded]: polls through missing apps and transient health; timeout exits 1 with last state and blockers
   apps actions <app>: list available resource actions
   projects | projects view <p> | projects windows <p>: projects, their rules, and whether sync is allowed now
   appsets | appsets view <name> | appsets generate <file>: ApplicationSets and what a spec would generate
@@ -72,5 +72,6 @@ Run `npx -y argocd-axi --help` for global flags, or `npx -y argocd-axi <command>
 - An unhealthy or out-of-sync app is data, not an error: exit 0 means the command worked. Exit 1 is an error, 2 a usage error; errors print `error`, `code` and `help` on stdout.
 - An app needs attention when it is OutOfSync or sync Unknown; Degraded, Missing or health Unknown; Progressing for more than 10 minutes; its last sync Failed or Errored; or it has conditions.
 - Secret-looking values (Secret data, passwords, tokens, Helm parameters) are redacted and counted; no flag reveals them, and log redaction is best effort.
-- Nothing streams: `apps logs` returns recent lines (default 100), `apps wait` is bounded (default 120 s) and returns the current state if it times out.
+- Nothing streams: `apps logs` returns recent lines (default 100). `apps wait` polls through Missing, Degraded and not-yet-existing apps (default timeout 120 s). Timeout exits 1 with unmet conditions, last state and blocking resource messages. `--fail-on-degraded` opts into fail-fast behavior. Re-running wait only observes state.
+- `apps sync` returns on acceptance, not deployment completion. For app-of-apps, run `apps wait <parent>` before acting on children. An absent child may be reported as permission denied; absence from the visible list can also mean RBAC hides it. Already-synced apps without running operations or resource drift are no-ops; nothing is submitted.
 - Apps in other namespaces are addressed as `namespace/name`.

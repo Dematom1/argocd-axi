@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { setTimeout as sleep } from "node:timers/promises";
 import { parseAllDocuments, stringify } from "yaml";
 import { argocdJson, runArgocd } from "../argocd.js";
 import { loadConfig } from "../config.js";
@@ -15,12 +16,7 @@ import {
   validateName,
   type CommandSpec,
 } from "../args.js";
-import {
-  CODES,
-  axiError,
-  mapArgocdFailure,
-  validationError,
-} from "../errors.js";
+import { CODES, axiError, validationError } from "../errors.js";
 import {
   appName,
   appSources,
@@ -91,18 +87,60 @@ async function finishWrite(
   );
 }
 
+class AppMayNotExistError extends AxiError {
+  constructor(name: string, context?: string) {
+    super(
+      `Permission denied by Argo CD RBAC; ${name} is not in the visible app list and may not exist yet (a parent app-of-apps may still be syncing), or may be hidden by RBAC`,
+      CODES.FORBIDDEN,
+      [
+        `Run \`argocd-axi apps wait <parent>${context ? ` --context ${context}` : ""}\` before acting on children`,
+        ...NOT_FOUND_HELP,
+      ],
+    );
+  }
+}
+
 async function getApp(
   name: string,
-  options: { context?: string },
+  options: { context?: string; timeoutMs?: number },
 ): Promise<Application> {
-  return argocdJson<Application>(
-    "app get",
-    [validateName("app", name), "-o", "json"],
-    {
-      ...options,
-      failure: { notFoundHelp: NOT_FOUND_HELP },
-    },
-  );
+  const started = Date.now();
+  try {
+    return await argocdJson<Application>(
+      "app get",
+      [validateName("app", name), "-o", "json"],
+      { ...options, failure: { notFoundHelp: NOT_FOUND_HELP } },
+    );
+  } catch (error) {
+    if (!(error instanceof AxiError && error.code === CODES.FORBIDDEN))
+      throw error;
+    let visible: Application[];
+    try {
+      visible =
+        (await argocdJson<Application[] | null>("app list", ["-o", "json"], {
+          ...options,
+          timeoutMs:
+            options.timeoutMs === undefined
+              ? undefined
+              : Math.max(1, options.timeoutMs - (Date.now() - started)),
+        })) ?? [];
+    } catch {
+      // A failed visibility check cannot establish absence; retain the denial.
+      throw error;
+    }
+    const [namespace, app] = name.includes("/")
+      ? name.split("/")
+      : [undefined, name];
+    if (
+      !visible.some(
+        (item) =>
+          appName(item) === app &&
+          (namespace === undefined || item.metadata?.namespace === namespace),
+      )
+    )
+      throw new AppMayNotExistError(name, options.context);
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------- apps (list)
@@ -1227,11 +1265,16 @@ export async function appsLogs(args: string[]): Promise<string> {
 export const APPS_WAIT_SPEC: CommandSpec = {
   path: "apps wait",
   summary:
-    "Wait, bounded, until the app is synced, healthy and its operation done; returns the state either way",
+    "Wait, bounded, until the app is synced, healthy and its operation done; unmet conditions exit 1",
   positionals: [APP_ARG],
   flags: [
     { name: "--sync", kind: "bool", description: "Wait for Synced" },
     { name: "--health", kind: "bool", description: "Wait for Healthy" },
+    {
+      name: "--fail-on-degraded",
+      kind: "bool",
+      description: "Stop immediately if app health is Degraded",
+    },
     {
       name: "--operation",
       kind: "bool",
@@ -1252,11 +1295,12 @@ export const APPS_WAIT_SPEC: CommandSpec = {
   notes: [
     "Prints elapsed-time progress to stderr immediately and every 5 seconds; stdout remains structured final output",
     "With no condition flags it waits for sync, health and operation together, like argocd",
-    "A timeout is not an error: the current state is returned with a hint to wait again",
+    "Polls through Missing, Degraded and not-yet-existing apps; --fail-on-degraded stops on Degraded",
+    "Timeout exits 1 with unmet conditions, last state and blocking resource messages",
   ],
 };
 
-const WAIT_GRACE_MS = 15_000;
+const WAIT_POLL_MS = 1000;
 
 export async function appsWait(args: string[]): Promise<string> {
   const parsed = parseArgs(APPS_WAIT_SPEC, args);
@@ -1272,61 +1316,157 @@ export async function appsWait(args: string[]): Promise<string> {
   const options = contextOption(parsed);
   const started = Date.now();
 
-  let met = false;
-  try {
-    const result = await runArgocd(
-      "app wait",
-      [name, ...conditions, "--timeout", String(timeout)],
-      {
-        ...options,
-        timeoutMs: timeout * 1000 + WAIT_GRACE_MS,
-        progressTimeoutMs: timeout * 1000,
-        allowFailure: true,
-        failure: { notFoundHelp: NOT_FOUND_HELP },
-      },
+  const deadline = started + timeout * 1000;
+  const requested = conditions.length
+    ? conditions
+    : ["--sync", "--health", "--operation"];
+  const failOnDegraded = getBool(parsed, "--fail-on-degraded");
+  let app: Application | undefined;
+  let missing: string | undefined;
+  let unmet: string[] = [];
+  let degraded = false;
+  const progress = () =>
+    process.stderr.write(
+      `Waiting for wait (${Math.floor((Date.now() - started) / 1000)}s elapsed; limit ${timeout}s)\n`,
     );
-    if (result.exitCode === 0) {
-      met = true;
-    } else if (!/timed out|deadline exceeded/i.test(result.stderr)) {
-      throw mapArgocdFailure(result.stderr || result.stdout, {
-        notFoundHelp: NOT_FOUND_HELP,
+  progress();
+  const ticker = setInterval(progress, 5000);
+  try {
+    do {
+      try {
+        app = await getApp(name, {
+          ...options,
+          timeoutMs: Math.max(1, deadline - Date.now()),
+        });
+        missing = undefined;
+      } catch (error) {
+        if (
+          error instanceof AppMayNotExistError ||
+          (error instanceof AxiError && error.code === CODES.NOT_FOUND)
+        ) {
+          app = undefined;
+          missing = error.message;
+        } else if (
+          error instanceof AxiError &&
+          error.code === CODES.TIMEOUT &&
+          Date.now() >= deadline
+        ) {
+          break;
+        } else throw error;
+      }
+      unmet = requested.flatMap((condition) => {
+        if (!app) return [`${condition.slice(2)}: app not yet visible`];
+        switch (condition) {
+          case "--sync":
+            return syncStatus(app) === "Synced"
+              ? []
+              : [`sync: ${syncStatus(app)} (expected Synced)`];
+          case "--health":
+            return healthStatus(app) === "Healthy"
+              ? []
+              : [`health: ${healthStatus(app)} (expected Healthy)`];
+          default:
+            return isOperationRunning(app)
+              ? [
+                  `operation: ${app.status?.operationState?.phase ?? "pending"} (expected finished)`,
+                ]
+              : [];
+        }
       });
-    }
-  } catch (error) {
-    // The seam's own hard timeout is a timed-out wait, not an error.
-    if (!(error instanceof AxiError && error.code === CODES.TIMEOUT))
-      throw error;
+      degraded = Boolean(
+        app && failOnDegraded && healthStatus(app) === "Degraded",
+      );
+      if (
+        degraded &&
+        !unmet.some((condition) => condition.startsWith("health:"))
+      )
+        unmet.push("health: Degraded (--fail-on-degraded)");
+      if (degraded || unmet.length === 0 || Date.now() >= deadline) break;
+      await sleep(Math.min(WAIT_POLL_MS, Math.max(0, deadline - Date.now())));
+    } while (Date.now() < deadline);
+  } finally {
+    clearInterval(ticker);
   }
 
   const elapsed = Math.round((Date.now() - started) / 1000);
-  const app = await getApp(name, options);
+  const met = !degraded && unmet.length === 0 && app !== undefined;
+  if (!met) process.exitCode = 1;
   const redactor = new Redactor();
-  const waited =
-    conditions.length > 0
-      ? conditions.map((c) => c.slice(2)).join(", ")
-      : "sync, health, operation";
-  const state = {
-    name: appName(app),
-    sync: syncStatus(app),
-    health: healthStatus(app),
-    operation: app.status?.operationState?.phase ?? "none",
-  };
+  const waited = requested.map((c) => c.slice(2)).join(", ");
+  const blocking = app
+    ? (app.status?.resources ?? []).filter(isResourceProblem)
+    : [];
+  const messages = new Map(
+    (app?.status?.operationState?.syncResult?.resources ?? []).map((r) => [
+      `${r.group ?? ""}/${r.kind ?? ""}/${r.namespace ?? ""}/${r.name ?? ""}`,
+      r.message,
+    ]),
+  );
+  const cut = (text: string | undefined, max = MESSAGE_CHARS) =>
+    text ? truncate(redactor.text(text), max) : undefined;
   return finish(
     [
       encodeObject({
         wait: met
           ? `condition met (${waited}) after ${elapsed}s`
-          : `timed out after ${timeout}s; condition not met (${waited})`,
-        app: state,
-        attention:
-          attentionReasons(app, Date.now(), redactor).join("; ") || "none",
+          : degraded
+            ? `stopped on Degraded after ${elapsed}s (--fail-on-degraded)`
+            : `timed out after ${timeout}s; condition not met (${waited})`,
+        app: app
+          ? {
+              name: appName(app),
+              sync: syncStatus(app),
+              health: healthStatus(app),
+              operation: isOperationRunning(app)
+                ? (app.status?.operationState?.phase ?? "pending")
+                : (app.status?.operationState?.phase ?? "none"),
+            }
+          : {
+              name,
+              existence: missing
+                ? "not yet visible"
+                : "unknown (no response before deadline)",
+            },
+        ...(!met
+          ? {
+              unmet: unmet.length
+                ? unmet
+                : requested.map(
+                    (c) => `${c.slice(2)}: no response before deadline`,
+                  ),
+            }
+          : {}),
+        attention: app
+          ? cut(attentionReasons(app, Date.now(), redactor).join("; ")) ||
+            "none"
+          : cut(missing) || "No app state received before deadline",
       }),
+      !met
+        ? encodeObject({
+            blockingResources: `${Math.min(blocking.length, 20)} of ${blocking.length} total`,
+            resources: blocking.slice(0, 20).map((r) => ({
+              ...resourceRows([r], redactor, cut)[0],
+              syncMessage:
+                cut(
+                  messages.get(
+                    `${r.group ?? ""}/${r.kind ?? ""}/${r.namespace ?? ""}/${r.name ?? ""}`,
+                  ),
+                ) ?? "",
+            })),
+          })
+        : undefined,
     ],
     redactor,
     met
       ? []
       : [
+          `Run \`argocd-axi apps view ${name}${contextSuffix(parsed)}\` to diagnose the last state`,
           `Run \`argocd-axi apps wait ${name}${conditions.map((c) => ` ${c}`).join("")} --timeout ${timeout}${contextSuffix(parsed)}\` to wait again`,
+          ...(!app
+            ? [
+                `Run \`argocd-axi apps wait <parent>${contextSuffix(parsed)}\` before acting on children; an invisible app may not exist yet or may be hidden by RBAC`,
+              ]
+            : []),
         ],
   );
 }
@@ -1372,6 +1512,8 @@ export const APPS_SYNC_SPEC: CommandSpec = {
   ],
   notes: [
     "Returns after the server accepts the operation, not after deployment; use apps view or apps wait to follow it",
+    "For app-of-apps, run `argocd-axi apps wait <parent>` before acting on children that may not exist yet",
+    "An already-synced app with no running operation or resource drift is a no-op; nothing is submitted",
     "An existing operation is reported as already running (exit 0), including a concurrent submission race",
     "Never prunes unless --prune is given; requires the context in writable-contexts to execute",
   ],
@@ -1455,6 +1597,16 @@ export async function appsSync(args: string[]): Promise<string> {
       [encodeObject({ sync: "already running", revision: syncRevision(app) })],
       follow,
     );
+  if (
+    syncStatus(app) === "Synced" &&
+    !isOperationRunning(app) &&
+    !(app.status?.resources ?? []).some(
+      (r) => r.status === "OutOfSync" || r.requiresPruning,
+    )
+  )
+    return finishWrite(gate, [
+      encodeObject({ sync: "already synced", submitted: "no" }),
+    ]);
   const diff = confirm
     ? undefined
     : selected.length

@@ -47,7 +47,15 @@ export interface OperationState {
   startedAt?: string;
   finishedAt?: string;
   operation?: { initiatedBy?: { username?: string; automated?: boolean } };
-  syncResult?: { revision?: string; revisions?: string[] };
+  syncResult?: {
+    revision?: string;
+    revisions?: string[];
+    resources?: Array<
+      Pick<ResourceStatus, "group" | "kind" | "namespace" | "name"> & {
+        message?: string;
+      }
+    >;
+  };
 }
 
 export interface Application {

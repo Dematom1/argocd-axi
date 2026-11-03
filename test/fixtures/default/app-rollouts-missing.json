@@ -1,0 +1,11 @@
+{
+  "metadata": { "name": "argo-rollouts", "namespace": "argocd" },
+  "status": {
+    "sync": { "status": "OutOfSync" },
+    "health": { "status": "Missing" },
+    "operationState": { "phase": "Running" },
+    "resources": [
+      { "group": "apps", "kind": "Deployment", "name": "argo-rollouts", "namespace": "argo-rollouts", "status": "OutOfSync", "health": { "status": "Missing", "message": "Resource does not exist" } }
+    ]
+  }
+}
