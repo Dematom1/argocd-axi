@@ -159,9 +159,12 @@ Pick one; you do not need both.
   log is limited to 100 directories and stored with `0600` permissions. Run
   `argocd-axi context` to view the current directory's last session.
   `argocd-axi setup status` verifies installed hooks across integrations; use
-  `argocd-axi setup uninstall` to remove only the Claude Code SessionEnd hook.
-  SessionStart hooks and the OpenCode plugin are preserved. Hooks need a
-  persistent install (`npm install -g argocd-axi`); setup refuses an npx-cache
+  `argocd-axi setup uninstall` to remove all managed SessionStart and SessionEnd
+  hooks and the OpenCode plugin. Other tools' hooks and the shared Codex
+  hooks feature flag are preserved. With axi-sdk-js 0.1.13, SessionStart setup
+  and status use `~/.claude/settings.json`, ignoring `CLAUDE_CONFIG_DIR`;
+  SessionEnd honors that variable. Custom Claude directories need an SDK fix.
+  Hooks need a persistent install (`npm install -g argocd-axi`); setup refuses an npx-cache
   install because hooks would point at a temporary path.
 - **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi`
   installs [`skills/argocd-axi/SKILL.md`](skills/argocd-axi/SKILL.md), which
