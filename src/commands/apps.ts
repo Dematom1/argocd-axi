@@ -1444,7 +1444,10 @@ export async function appsSync(args: string[]): Promise<string> {
         `REFUSED: resource ${spec} is not managed by ${name}; run \`argocd-axi apps resources ${name}\``,
         CODES.REFUSED,
       );
-    return spec;
+    const resource = matches[0];
+    return namespace === undefined && resource?.namespace
+      ? `${group}:${kind}:${resource.namespace}/${resourceName}`
+      : spec;
   });
   if (confirm && selected.length === 0 && isOperationRunning(app))
     return finishWrite(

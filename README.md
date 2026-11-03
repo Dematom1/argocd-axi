@@ -202,7 +202,7 @@ Apps in other namespaces are addressed as `namespace/name`.
 
 ### Write completion and migration
 
-`apps sync --resource GROUP:KIND:NAME` previews and syncs only listed managed resources. The native form `GROUP:KIND:NAMESPACE/NAME` disambiguates namespaced resources; use an empty group for core kinds, such as `:Service:my-svc`. Repeat `--resource` to select several resources. Unknown or malformed specs are refused before submission.
+`apps sync --resource GROUP:KIND:NAME` previews and syncs only listed managed resources. The native form `GROUP:KIND:NAMESPACE/NAME` disambiguates namespaced resources; use an empty group for core kinds, such as `:Service:my-svc`. Repeat `--resource` to select several resources. Unknown or malformed specs are refused before submission. Selective sync does not run resource hooks or record the sync in application history, so it cannot be rolled back from that history.
 
 `apps sync --confirm` returns `sync: started` when the server accepts the async
 operation. It prints the target revision, the last observed revision, and commands

@@ -358,6 +358,66 @@ describe("apps", () => {
     expect(syncCall).toContain(":Service:payments/payments-api");
   });
 
+  it("qualifies unique namespaced selectors and refuses ambiguous ones", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [prod]",
+    );
+    const app = JSON.stringify({
+      metadata: { name: "demo" },
+      spec: { project: "default" },
+      status: {
+        resources: [
+          { group: "apps", kind: "Deployment", namespace: "one", name: "web" },
+          { group: "apps", kind: "Deployment", namespace: "two", name: "web" },
+          { group: "batch", kind: "Job", namespace: "three", name: "task" },
+        ],
+      },
+    });
+    const ambiguous = await runCli(
+      [
+        "apps",
+        "sync",
+        "demo",
+        "--context",
+        "prod",
+        "--resource",
+        "apps:Deployment:web",
+      ],
+      {
+        home,
+        scenario: scenario([{ argv: ["app", "get", "demo"], stdout: app }]),
+      },
+    );
+    expect(ambiguous.stdout).toContain(
+      "REFUSED: resource apps:Deployment:web is ambiguous",
+    );
+    expect(ambiguous.calls.some((call) => call[1] === "sync")).toBe(false);
+
+    const unique = await runCli(
+      [
+        "apps",
+        "sync",
+        "demo",
+        "--context",
+        "prod",
+        "--resource",
+        "batch:Job:task",
+      ],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["app", "get", "demo"], stdout: app },
+          { argv: ["proj", "windows", "list", "default"], stdout: "[]" },
+        ]),
+      },
+    );
+    expect(unique.stdout).toContain("batch:Job:three/task");
+    expect(unique.calls.some((call) => call[1] === "sync")).toBe(false);
+  });
+
   it("refuses unknown and malformed sync resources without submitting", async () => {
     for (const resource of ["apps:Deployment:not-managed", "bad-spec"]) {
       const home = makeHome();
