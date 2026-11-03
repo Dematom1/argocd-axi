@@ -147,6 +147,12 @@ export async function setupCommand(args: string[]): Promise<string> {
       marker: "argocd-axi",
       onError: (message) => errors.push(message),
     });
+    let sessionEndRemoved = false;
+    try {
+      sessionEndRemoved = uninstallSessionEndHook();
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
     if (errors.length)
       throw axiError(
         `Hook removal reported problems: ${errors.join("; ")}`,
@@ -158,9 +164,7 @@ export async function setupCommand(args: string[]): Promise<string> {
     return finish(
       [
         encodeObject({
-          sessionEnd: uninstallSessionEndHook()
-            ? "removed"
-            : "not installed (no-op)",
+          sessionEnd: sessionEndRemoved ? "removed" : "not installed (no-op)",
         }),
       ],
       undefined,

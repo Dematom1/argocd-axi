@@ -302,10 +302,21 @@ describe("truthful setup", () => {
         expect(result.stdout).toContain("code: UPSTREAM_ERROR");
         expect(result.stdout).toContain("argocd-axi setup uninstall");
         expect(existsSync(file)).toBe(true);
+        expect(
+          JSON.parse(
+            readFileSync(join(home, ".claude", "settings.json"), "utf8"),
+          ).hooks,
+        ).toBeUndefined();
       } finally {
         chmodSync(dir, 0o755);
         chmodSync(file, 0o600);
       }
+      const retry = await runCli(["setup", "uninstall"], { home });
+      expect(retry.exitCode).toBe(0);
+      expect(retry.stdout).toContain("sessionEnd: not installed (no-op)");
+      const status = await runCli(["setup", "status"], { home });
+      expect(status.stdout).toContain("codex: false");
+      expect(status.stdout).toContain("opencode: false");
     },
   );
 
