@@ -1,0 +1,134 @@
+name: Merge green release PR
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: Inspect eligibility without merging
+        type: boolean
+        default: true
+    secrets:
+      RELEASE_APP_ID:
+        required: true
+      RELEASE_APP_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: merge-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      # v2.2.2; same App and repository scope as release-please.yml.
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # v8.0.0. No checkout: sibling callers execute this pinned workflow's code.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          RELEASE_TOKEN: ${{ steps.app.outputs.token }}
+          RELEASE_AUTHOR: ${{ steps.app.outputs.app-slug }}[bot]
+          DRY_RUN: ${{ inputs.dry-run }}
+        with:
+          script: |
+            const repo = context.repo;
+            const report = async message => {
+              core.info(message);
+              await core.summary.addHeading('Weekly release merge').addRaw(message).write();
+            };
+            const eligible = pr => pr.state === 'open' && !pr.draft &&
+              pr.base.ref === 'main' && pr.head.repo?.full_name === `${repo.owner}/${repo.repo}` &&
+              pr.head.ref.startsWith('release-please--') &&
+              /^chore\(main\): release(?:\s|$)/.test(pr.title) &&
+              pr.user.type === 'Bot' && pr.user.login === process.env.RELEASE_AUTHOR;
+            try {
+              const prs = await github.paginate(github.rest.pulls.list, {
+                ...repo, state: 'open', base: 'main', per_page: 100,
+              });
+              const candidates = prs.filter(eligible);
+              if (candidates.length !== 1) {
+                await report(`No merge: found ${candidates.length} matching release App PRs; exactly one is required.`);
+                return;
+              }
+              const number = candidates[0].number;
+              const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: number });
+              if (!eligible(pr)) {
+                await report('No merge: release PR identity changed.');
+                return;
+              }
+              const sha = pr.head.sha;
+              const checks = await github.paginate(github.rest.checks.listForRef, {
+                ...repo, ref: sha, filter: 'latest', per_page: 100,
+              });
+              const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
+                ...repo, ref: sha, per_page: 100,
+              });
+              const statuses = combined.statuses;
+              if (combined.total_count > statuses.length) {
+                await report(`No merge for ${pr.html_url} at ${sha}: commit status results are incomplete (${statuses.length}/${combined.total_count}).`);
+                return;
+              }
+              // GitHub treats neutral/skipped checks as passing (the release
+              // App's no-mistakes attestation check is intentionally skipped).
+              const badChecks = checks.filter(check => check.status !== 'completed' ||
+                !['success', 'neutral', 'skipped'].includes(check.conclusion));
+              const badStatuses = statuses.filter(status => status.state !== 'success');
+              if (checks.length + statuses.length === 0 || badChecks.length || badStatuses.length) {
+                await report(`No merge for ${pr.html_url} at ${sha}: checks missing, pending or failing.\n` +
+                  [...badChecks.map(c => `${c.name}: ${c.status}/${c.conclusion}`),
+                    ...badStatuses.map(s => `${s.context}: ${s.state}`)].join('\n'));
+                return;
+              }
+              // GitHub enforces required checks (including missing ones), reviews,
+              // rulesets and mergeability. Never bypass or change those policies.
+              const { data: current } = await github.rest.pulls.get({ ...repo, pull_number: number });
+              if (!eligible(current) || current.head.sha !== sha) {
+                await report('No merge: release PR identity or head changed during check inspection.');
+                return;
+              }
+              if (current.mergeable !== true || current.mergeable_state !== 'clean') {
+                await report(`No merge for ${pr.html_url} at ${sha}: GitHub mergeable=${current.mergeable}, mergeable_state=${current.mergeable_state}; required checks may be missing or repository rules may block merging.`);
+                return;
+              }
+              if (process.env.DRY_RUN !== 'false') {
+                await report(`Dry run: would squash ${pr.html_url} at ${sha}. No merge requested; App authorization is only proven by an actual merge request.`);
+                return;
+              }
+              // Native fetch avoids Octokit's default-token auth hook overriding
+              // an App token supplied as a per-request header.
+              const response = await fetch(`${process.env.GITHUB_API_URL}/repos/${repo.owner}/${repo.repo}/pulls/${number}/merge`, {
+                method: 'PUT',
+                headers: {
+                  authorization: `Bearer ${process.env.RELEASE_TOKEN}`,
+                  accept: 'application/vnd.github+json',
+                  'content-type': 'application/json',
+                  'x-github-api-version': '2022-11-28',
+                },
+                body: JSON.stringify({ sha, merge_method: 'squash' }),
+              });
+              const result = await response.json();
+              await report(`${pr.html_url} at ${sha}: GitHub HTTP ${response.status}; merged=${result.merged}; ${result.message}`);
+              if (!response.ok || !result.merged) core.setFailed(result.message);
+            } catch (error) {
+              await report(`GitHub refusal (${error.status ?? 'unknown'}): ${error.message}`);
+              core.setFailed(error.message);
+            }
+
+      - name: Report token failure
+        if: ${{ failure() && steps.app.outcome == 'failure' }}
+        run: echo 'No merge - release App token creation failed; see the token step for the exact GitHub refusal.' >> "$GITHUB_STEP_SUMMARY"
