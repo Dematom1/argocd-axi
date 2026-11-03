@@ -258,11 +258,14 @@ that are not Synced or need pruning are submitted. If every selected resource
 is Synced and none needs pruning, the command is a no-op even if other
 resources in the app are out of sync.
 
-`apps wait` polls until all requested conditions hold. Missing, Degraded and
-not-yet-existing apps keep polling until the timeout. Use `--fail-on-degraded`
-to stop immediately on Degraded. Timeout exits 1 and reports each unmet
-condition, the last state, and up to 20 blocking resources with their messages
-and total count. Re-running wait only observes state and never submits work.
+`apps wait` checks whether all requested conditions hold now; it does not wait
+for a future operation. Synced and Healthy with no running or pending operation
+satisfies `--operation`, even without historical `operationState`. Missing,
+Degraded and not-yet-existing apps keep polling until the timeout. Use
+`--fail-on-degraded` to stop immediately on Degraded. Timeout exits 1 and reports
+each unmet condition, the last state, and up to 20 blocking resources with their
+messages and total count. Re-running wait only observes state and never submits
+work.
 
 An app needs attention when its sync status is OutOfSync or Unknown; its
 health is Degraded, Missing or Unknown; it has been Progressing for more than

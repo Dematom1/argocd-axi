@@ -1295,6 +1295,8 @@ export const APPS_WAIT_SPEC: CommandSpec = {
   notes: [
     "Prints elapsed-time progress to stderr immediately and every 5 seconds; stdout remains structured final output",
     "With no condition flags it waits for sync, health and operation together, like argocd",
+    "Wait checks whether the requested conditions hold now; it does not wait for a future operation",
+    "Synced and Healthy with no running or pending operation satisfies --operation, even without historical operationState",
     "Polls through Missing, Degraded and not-yet-existing apps; --fail-on-degraded stops on Degraded",
     "Timeout exits 1 with unmet conditions, last state and blocking resource messages",
   ],
