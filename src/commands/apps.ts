@@ -1318,6 +1318,8 @@ export async function appsWait(args: string[]): Promise<string> {
     getBool(parsed, flag),
   );
   const options = contextOption(parsed);
+  if (options.context === undefined)
+    options.context = (await resolveTarget(undefined)).target.context;
   const started = Date.now();
 
   const deadline = started + timeout * 1000;
@@ -1512,7 +1514,9 @@ export async function appsWait(args: string[]): Promise<string> {
       : [
           ...(pruning
             ? [
-                `Run \`argocd-axi apps sync ${name} --prune --confirm${contextSuffix(parsed)}\` to remove prune-required resources (write approval required)`,
+                options.context
+                  ? `Run \`argocd-axi apps sync ${name} --prune --confirm --context ${options.context}\` to remove prune-required resources (write approval required)`
+                  : "Run `argocd-axi ctx` to establish the read context before choosing an explicit prune target",
               ]
             : []),
           `Run \`argocd-axi apps view ${name}${contextSuffix(parsed)}\` to diagnose the last state`,

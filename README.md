@@ -283,8 +283,10 @@ last operation Succeeded and every non-Synced resource is OutOfSync and requires
 pruning. This is not Synced. Valid `reconciledAt` and `operationState.finishedAt`
 timestamps must establish reconciliation at or after completion; stale or unknown
 snapshots keep polling. The result names the blocking resources and suggests
-`argocd-axi apps sync <app> --prune --confirm`, carrying the selected context.
-Wait never performs that write. Health-only and operation-only waits ignore
+`argocd-axi apps sync <app> --prune --confirm --context <read-context>`, pinned to
+the explicit or current context used by the wait, not the sole writable context.
+If no read context can be established, the result suggests `argocd-axi ctx`
+instead of a confirmed prune command. Wait never performs that write. Health-only and operation-only waits ignore
 unrequested sync drift.
 
 An app needs attention when its sync status is OutOfSync or Unknown; its
