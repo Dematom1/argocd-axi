@@ -7,7 +7,7 @@ Thanks for wanting to help. This page is the whole contribution contract: agree 
 - **Bugs** are welcome without asking first. Open a [bug report](https://github.com/{owner}/{repo}/issues/new/choose) with the exact version, a reproduction, the expected and actual behavior, and sanitized output.
 - **Substantial fixes and features** need an accepted scope before you write code. Search the open issues and pull requests, then open an issue that says what you want to change and how far the change goes. The maintainer checks it against current `main` and open work, classifies its contract effect (below), and adds the `ready-for-pr` label with a short note on scope and validation. Wait for that label. A green pipeline does not oblige the maintainer to accept scope that was not agreed.
 - **Tiny documentation fixes**, such as a typo with no behavior change, can go straight to a pull request.
-- **Security problems** never go in a public issue or pull request. If the repository's Security tab offers "Report a vulnerability", use it. Otherwise open an issue that says only that you have a security report and need a private contact, with no details.
+- **Security problems** must be reported privately through the repository's Security tab > "Report a vulnerability". Never report them in a public issue or pull request.
 
 Never put secrets, tokens, live credentials or unredacted production output in an issue, a pull request or a test fixture.
 
