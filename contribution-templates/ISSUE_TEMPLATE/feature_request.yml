@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a substantial change. Wait for the ready-for-pr label before you implement it.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Substantial changes need an accepted scope first. The maintainer checks the proposal against current `main` and open work, then adds the `ready-for-pr` label with a scope note. Please do not start implementation before that. Never paste secrets or live credentials.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The exact version you use, from `{repo} --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Requested outcome
+      description: The behavior you want, including example commands and output.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What the change includes and what it deliberately leaves out.
+    validations:
+      required: true
+  - type: dropdown
+    id: contract
+    attributes:
+      label: Contract effect
+      description: See "Classify the contract effect" in CONTRIBUTING.md.
+      options:
+        - opt-in - adds behavior without changing defaults
+        - restore - returns behavior that regressed
+        - new-default - changes default behavior or the existing contract
+        - cannot-tell
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Output, logs or links that support the request, with secrets removed.
+      render: shell

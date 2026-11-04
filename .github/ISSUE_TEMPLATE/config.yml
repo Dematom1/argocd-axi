@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contribution guide
+    url: https://github.com/Dematom1/argocd-axi/blob/main/CONTRIBUTING.md
+    about: How issues, the ready-for-pr go-ahead, no-mistakes, full-ci and merges work here. Read it before opening a pull request.

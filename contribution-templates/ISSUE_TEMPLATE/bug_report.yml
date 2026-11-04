@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a bug. Bug reports are welcome without asking first.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste secrets, tokens, kubeconfigs, API keys or other live credentials. Redact hostnames and identifiers you do not want public.
+        Security problems do not belong here; see "Agree on the change first" in [CONTRIBUTING.md](https://github.com/{owner}/{repo}/blob/main/CONTRIBUTING.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The exact version you ran, from `{repo} --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Node.js version, and the versions of any tool or server this one talks to.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The exact commands that show the bug, starting from a clean state.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized output
+      description: Relevant output with secrets and private identifiers removed.
+      render: shell
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What a fix should change, and what it should leave alone. Say if you would like to fix it yourself.
