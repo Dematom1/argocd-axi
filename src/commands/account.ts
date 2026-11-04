@@ -106,7 +106,8 @@ export const CAN_I_SPEC: CommandSpec = {
     {
       name: "object",
       required: true,
-      description: "project/app (applications), a name, or '*'",
+      description:
+        "project/app (applications, logs, exec; a bare app name is resolved to its project), a name, or '*'",
     },
   ],
   flags: [CONTEXT_FLAG],
@@ -116,6 +117,23 @@ export const CAN_I_SPEC: CommandSpec = {
   ],
   notes: ['"no" is an answer, not an error: the command exits 0 either way'],
 };
+
+/** Resources whose object is an application, checked by Argo CD as `project/app`. */
+const APP_OBJECT_RESOURCES = ["applications", "logs", "exec"];
+
+async function lookupAppProject(
+  name: string,
+  context: string | undefined,
+): Promise<string> {
+  const app = await argocdJson<{ spec?: { project?: string } }>(
+    "app get",
+    [name, "-o", "json"],
+    { context },
+  );
+  if (!app.spec?.project)
+    throw axiError(`application ${name} has no project`, CODES.UPSTREAM_ERROR);
+  return app.spec.project;
+}
 
 export async function canICommand(args: string[]): Promise<string> {
   const parsed = parseArgs(CAN_I_SPEC, args);
@@ -135,9 +153,32 @@ export async function canICommand(args: string[]): Promise<string> {
   if (object.startsWith("-") || /\s/.test(object))
     throw validationError(`invalid object ${JSON.stringify(object)}`);
 
+  // Argo CD checks RBAC against project/app, so a bare app name gets a
+  // misleading "no". Resolve the project; if that fails, refuse to answer
+  // rather than say "no".
+  let subject = object;
+  let project: string | undefined;
+  if (
+    APP_OBJECT_RESOURCES.includes(resource) &&
+    object !== "*" &&
+    !object.includes("/")
+  ) {
+    try {
+      project = await lookupAppProject(object, contextOption(parsed).context);
+    } catch (error) {
+      throw validationError(
+        `cannot resolve the project of application ${object}: ${error instanceof Error ? error.message : String(error)}`,
+        [
+          `Pass the project with the app: argocd-axi can-i ${action} ${resource} <project>/${object}${contextSuffix(parsed)}`,
+        ],
+      );
+    }
+    subject = `${project}/${object}`;
+  }
+
   const result = await runArgocd(
     "account can-i",
-    [action, resource, object],
+    [action, resource, subject],
     contextOption(parsed),
   );
   const answer = result.stdout.trim().toLowerCase();
@@ -158,7 +199,8 @@ export async function canICommand(args: string[]): Promise<string> {
     [
       encodeObject({
         answer: allowed ? "yes" : "no",
-        check: `${action} ${resource} ${object}`,
+        check: `${action} ${resource} ${subject}`,
+        project,
       }),
     ],
     undefined,

@@ -5,3 +5,4 @@ skills/
 test/fixtures/
 CHANGELOG.md
 .release-please-manifest.json
+.claude/settings.local.json
