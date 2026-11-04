@@ -27,7 +27,9 @@ function isManagedEntry(entry: unknown): boolean {
   if (!isRecord(entry) || typeof entry.command !== "string") return false;
   return (
     entry.command === "argocd-axi context end" ||
-    entry.command.endsWith("/argocd-axi context end") ||
+    /^\/(?:[^\s'"`$;&|<>()\\]*\/)?argocd-axi context end$/.test(
+      entry.command,
+    ) ||
     /^node '(?:[^']|'\\'')*[\\/]argocd-axi\.js' context end$/.test(
       entry.command,
     )

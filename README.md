@@ -159,9 +159,16 @@ Pick one; you do not need both.
   log is limited to 100 directories and stored with `0600` permissions. Run
   `argocd-axi context` to view the current directory's last session.
   `argocd-axi setup status` verifies installed hooks across integrations; use
-  `argocd-axi setup uninstall` to remove only the Claude Code SessionEnd hook.
-  SessionStart hooks and the OpenCode plugin are preserved. Hooks need a
-  persistent install (`npm install -g argocd-axi`); setup refuses an npx-cache
+  `argocd-axi setup uninstall` to remove all managed SessionStart and SessionEnd
+  hooks and the OpenCode plugin. The shared Codex hooks feature flag is
+  preserved. axi-sdk-js treats any SessionStart command containing `argocd-axi`
+  as managed, so uninstall may also remove an unrelated command containing that text.
+  With axi-sdk-js 0.1.13, SessionStart setup, status, and uninstall
+  use `~/.claude/settings.json`, ignoring `CLAUDE_CONFIG_DIR`;
+  SessionEnd honors that variable. Uninstall can leave SessionStart hooks in
+  a custom Claude directory. Custom Claude directories need an SDK fix.
+  Hooks need a persistent install (`npm install -g argocd-axi`); setup refuses
+  an npx-cache
   install because hooks would point at a temporary path.
 - **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi`
   installs [`skills/argocd-axi/SKILL.md`](skills/argocd-axi/SKILL.md), which
@@ -186,7 +193,7 @@ argocd-axi apps auto-sync <app> <on|off> [--confirm] [--context <c>]
 argocd-axi apps history <app> [--limit <n>]
 argocd-axi apps manifests <app> [--source git|live] [--revision <rev>] [--kind <k>] [--full]
 argocd-axi apps logs <app> [--kind <k> --name <n>] [--tail 100] [--since 15m] [--filter <s>] [--full] [-p]
-argocd-axi apps wait <app> [--sync --health --operation] [--timeout 120]
+argocd-axi apps wait <app> [--sync --health --operation] [--timeout 120] [--fail-on-degraded]
 argocd-axi apps actions <app> [--kind <k>]
 argocd-axi apps actions run <app> <action> --kind <k> --name <resource> [--confirm] [--context <c>]
 argocd-axi projects | projects view <p> | projects windows <p>
@@ -221,15 +228,8 @@ argocd-axi apps wait <app> --context <context> --timeout 300
 argocd-axi apps view <app> --context <context>
 ```
 
-Wait success exits 0; timeout exits 1 with `condition not met`, the unmet
-conditions and current values, and up to 20 blocking resources (with total count).
-When the last operation Succeeded and all OutOfSync resources require pruning,
-`--sync` returns promptly with `sync: prune-only drift` and exit 1, not Synced.
-This requires valid `reconciledAt` and `operationState.finishedAt` timestamps,
-with reconciliation at or after completion; stale or unknown snapshots keep waiting.
-It names the resources and suggests `argocd-axi apps sync <app> --prune --confirm`;
-wait never performs that write. This also applies to the default combined wait.
-Other requested conditions remain visible if unmet. `apps view` shows operation failures
+Inspect the structured wait result before proceeding: timeout returns exit 1 with
+`condition not met`, not deployment success. `apps view` shows operation failures
 and the resolved operation revision. A requested branch or tag may move after
 submission; the sync response does not claim that the last observed commit is the
 new operation's commit.
@@ -254,12 +254,116 @@ seconds). A request timeout does not prove the server rejected the write. Inspec
 `apps view` before retrying. Local configuration, context, and setup writes do not
 wait for deployment.
 
+`apps sync` returns on acceptance, not deployment completion. For app-of-apps,
+run `argocd-axi apps wait <parent>` before acting on children. A child may not
+exist yet even when Argo CD answers permission denied. For a named app denied
+by RBAC, the tool checks the visible app list and explains this possibility
+when the app is absent. Absence can also mean RBAC hides the app.
+An already-synced app with no running operation or resource drift is a clean
+sync no-op: nothing is submitted. With `--resource`, only selected resources
+that are not Synced or need pruning are submitted. If every selected resource
+is Synced and none needs pruning, the command is a no-op even if other
+resources in the app are out of sync. No-op decisions use the last Argo CD
+comparison, which can lag recent Git changes. The no-op result suggests
+`apps refresh <app> --confirm` before retrying sync; refresh requires write approval.
+
+`apps wait` checks whether all requested conditions hold now; it does not wait
+for a future operation. Synced and Healthy with no running or pending operation
+satisfies `--operation`, even without historical `operationState`. Missing,
+Degraded and not-yet-existing apps keep polling until the timeout. Use
+`--fail-on-degraded` to stop immediately on Degraded. Timeout exits 1 and reports
+each unmet condition, the last state, and up to 20 blocking resources with their
+messages and total count. Re-running wait only observes state and never submits
+work. Rate-limited polls retry with increasing delays from 1 to 10 seconds,
+bounded by the same timeout. A timeout retains the last observed state and
+identifies a rate-limited final poll.
+
+A sync wait returns promptly as `sync: prune-only drift` with exit 1 when the
+last operation Succeeded and every non-Synced resource is OutOfSync and requires
+pruning. This is not Synced. Valid `reconciledAt` and `operationState.finishedAt`
+timestamps must establish reconciliation at or after completion; stale or unknown
+snapshots keep polling. The result names the blocking resources and suggests
+`argocd-axi apps sync <app> --prune --confirm`, carrying the selected context.
+Wait never performs that write. Health-only and operation-only waits ignore
+unrequested sync drift.
+
 An app needs attention when its sync status is OutOfSync or Unknown; its
 health is Degraded, Missing or Unknown; it has been Progressing for more than
 10 minutes; its last sync Failed or Errored; or it has conditions. Both axes
 and the reason are always shown, and Progressing is never folded into
 healthy. When Argo CD does not report when health turned Progressing, the
 duration is shown as unknown and the app is not counted as needing attention.
+
+### Idempotency contract
+
+Reads do not submit mutations or write wrapper state files. The home view checks
+versions without persisting a cache. `ctx` can still read a legacy version cache;
+only explicit `context end` records session memory. Values can change as the server
+changes, so repeatability means no extra effects, not byte-identical output.
+
+This inventory follows `COMMANDS` in `src/cli.ts`, its nested command specs,
+`REFUSALS` in `src/registry.ts`, and the SDK's `update` built-in. Application
+writes still require the writable-context gate and `--confirm`. Satisfied desired
+states return exit 0 with `already-done`; observed partial states return exit 0
+with `in-progress`. Native reads are allowed on a no-op.
+
+| Command                                                                                                                          | Class       | Retry contract (and previous write behavior)                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No arguments                                                                                                                     | Read        | Live overview; no files changed. Previously persisted the version check.                                                                                                                                                                                                                                            |
+| `ctx`                                                                                                                            | Read        | Local context and version inspection only.                                                                                                                                                                                                                                                                          |
+| `auth guide`                                                                                                                     | Read        | Offline credential instructions only.                                                                                                                                                                                                                                                                               |
+| `whoami`                                                                                                                         | Read        | Identity lookup only.                                                                                                                                                                                                                                                                                               |
+| `can-i`                                                                                                                          | Read        | Permission lookup only; both yes and no exit 0.                                                                                                                                                                                                                                                                     |
+| `apps`                                                                                                                           | Read        | Application list only.                                                                                                                                                                                                                                                                                              |
+| `apps view`                                                                                                                      | Read        | Application state only.                                                                                                                                                                                                                                                                                             |
+| `apps resources`                                                                                                                 | Read        | Managed or orphaned resource lookup only.                                                                                                                                                                                                                                                                           |
+| `apps diff`                                                                                                                      | Read        | No refresh or mutation, including `--full` and `--revision`; drift exits 0.                                                                                                                                                                                                                                         |
+| `apps history`                                                                                                                   | Read        | Deployment history lookup only.                                                                                                                                                                                                                                                                                     |
+| `apps manifests`                                                                                                                 | Read        | Rendered Git or live manifests only.                                                                                                                                                                                                                                                                                |
+| `apps logs`                                                                                                                      | Read        | Bounded log lookup only.                                                                                                                                                                                                                                                                                            |
+| `apps actions`                                                                                                                   | Read        | Resource-action listing only.                                                                                                                                                                                                                                                                                       |
+| `apps wait`                                                                                                                      | Read        | Re-entrant bounded observation; wait/sync changes are maintained separately.                                                                                                                                                                                                                                        |
+| `apps sync`                                                                                                                      | Write       | Existing operations report already running; already-synced handling is maintained in the separate wait/sync change.                                                                                                                                                                                                 |
+| `apps rollback`                                                                                                                  | Write       | Same full revision(s), Synced, no running operation: already-done, no rollback. Matching running target: in-progress. Previously submitted another rollback. OutOfSync at the same revision still needs rollback.                                                                                                   |
+| `apps terminate-op`                                                                                                              | Write       | No operation: already-done. Terminating: in-progress. Neither submits termination. A native no-operation race is re-read before reporting success. Previously re-submitted termination while Terminating and errored on the race.                                                                                   |
+| `apps auto-sync`                                                                                                                 | Write       | Requested policy already on/off: already-done, no `app set`; preserves prune/self-heal. Includes `automated.enabled: false`. Previously submitted another update.                                                                                                                                                   |
+| `apps refresh`                                                                                                                   | Reconcile   | Repeats reconciliation, including `--hard`, and returns current sync, health and revision. Same desired end state; an additional native refresh is intentional. Previously repeated refresh and reported only submission.                                                                                           |
+| `apps actions run`                                                                                                               | Event       | Built-in Rollout promote/promote-full/resume on Healthy: already-done. Those actions, or a built-in workload restart, on Progressing: in-progress. Neither submits an action. Otherwise executes a listed, enabled action. Previously submitted again or errored when the action became disabled. See limits below. |
+| `ctx use`                                                                                                                        | Local write | Already-current context: already-done, no native switch. Previously already a no-op.                                                                                                                                                                                                                                |
+| `ctx writable` / `ctx writable list`                                                                                             | Read        | Allowlist inspection; bare `ctx writable` reports usage without changing state.                                                                                                                                                                                                                                     |
+| `ctx writable add`                                                                                                               | Local write | Existing named grant: already-done, no prompt or file rewrite. A new grant still requires interactive confirmation. Previously refused even the no-op without a terminal.                                                                                                                                           |
+| `ctx writable remove`                                                                                                            | Local write | Missing grant: already-done, no file rewrite. Previously already a no-op, without the explicit already-done result.                                                                                                                                                                                                 |
+| `context`                                                                                                                        | Read        | Reads optional session memory only.                                                                                                                                                                                                                                                                                 |
+| `context end`                                                                                                                    | Local write | Same summary: already-done, no session-file rewrite. Partial atomic writes leave the prior summary intact. Previously rewrote an identical summary.                                                                                                                                                                 |
+| `setup hooks`                                                                                                                    | Local write | Installs or repairs missing hooks; repeated installation converges. Hook-file no-op behavior is maintained by the separate setup change.                                                                                                                                                                            |
+| `setup status`                                                                                                                   | Read        | Hook inspection only.                                                                                                                                                                                                                                                                                               |
+| `setup uninstall`                                                                                                                | Local write | Removes managed SessionStart/SessionEnd hooks and the OpenCode plugin; missing SessionEnd hooks are a successful no-op. SessionStart removal failures return `UPSTREAM_ERROR` after attempting SessionEnd removal. Fix the reported paths' permissions and retry.                                                   |
+| `update --check` / `update --dry-run`                                                                                            | Read        | SDK registry lookup, no installation; package-manager fallback can maintain its own cache.                                                                                                                                                                                                                          |
+| `update`                                                                                                                         | Local write | SDK skips installation when current is latest, reports already on the latest version. A newer registry release changes the desired target. Partial installation repair belongs to the detected package manager.                                                                                                     |
+| `--help` / per-command `--help`, `-v` / `-V` / `--version`                                                                       | Read        | Static help or version, no mutation.                                                                                                                                                                                                                                                                                |
+| `login`, `relogin`, `logout`, `configure`, `account`, `repocreds`, `cert`, `gpg`, `admin`                                        | Refused     | Repeatable nonzero refusal, no effects.                                                                                                                                                                                                                                                                             |
+| `apps create`, `apps edit`, `apps delete`, `apps delete-resource`, `apps patch-resource`, `apps set`, `apps unset`, `apps patch` | Refused     | Repeatable nonzero refusal, no effects.                                                                                                                                                                                                                                                                             |
+| `projects role`, `projects create`, `projects delete`, `projects edit`, `projects set`                                           | Refused     | Repeatable nonzero refusal, no effects.                                                                                                                                                                                                                                                                             |
+| `appsets create`, `appsets delete`                                                                                               | Refused     | Repeatable nonzero refusal, no effects.                                                                                                                                                                                                                                                                             |
+| `repos add`, `repos rm`, `clusters add`, `clusters rm`, `clusters set`, `clusters rotate-auth`                                   | Refused     | Repeatable nonzero refusal, no effects.                                                                                                                                                                                                                                                                             |
+| `projects`, `projects view`, `projects windows`                                                                                  | Read        | Project and sync-window lookup only.                                                                                                                                                                                                                                                                                |
+| `appsets`, `appsets view`, `appsets generate`                                                                                    | Read        | Listing, lookup or generation preview only; generate does not create Applications.                                                                                                                                                                                                                                  |
+| `repos`, `clusters`                                                                                                              | Read        | Inventory lookup only.                                                                                                                                                                                                                                                                                              |
+
+**Event limits:** actions use the target resource's observed Argo CD health, not
+an execution receipt. `Progressing` suppresses another restart or advancement
+while that workload is rolling, including a rollout started elsewhere. A deliberate
+repeat after completion can run again, especially restart. Arbitrary custom
+actions have no generic target-state test and remain repeatable events. Concurrent
+calls before progress becomes visible can both submit. A retry after interruption
+cannot be distinguished from an intentional repeat beyond this state check. No
+request keys or exactly-once guarantee are provided. Refresh is repeatable
+reconciliation, not a deduplicated event.
+
+The fixture checks run with `npm test -- test/idempotency.test.ts`. They retain
+native state between invocations, count mutation calls, and compare local state
+contents and modification times. Setup, wait and sync have separate owners and
+checks; package installation is never exercised against a real installation.
 
 ### Sync windows
 
@@ -280,7 +384,8 @@ specific app.
   the raw `argocd` CLI is the fallback for anything argocd-axi does not cover.
 - Exit 0 means the command did what was asked. An OutOfSync or Degraded app,
   drift found by `apps diff`, and a `can-i` answer of no are data with exit 0.
-  `apps wait` exits 1 on timeout or prune-only drift: the requested wait did not succeed.
+  `apps wait` exits 1 if its conditions are not met before timeout or if
+  `--fail-on-degraded` stops the wait.
 - Exit 1 is an error, exit 2 a usage error (unknown flag, missing argument).
   Unknown flags are rejected before any argocd call, with the valid flags
   listed.
@@ -305,9 +410,9 @@ specific app.
 
 - **One subprocess seam.** Every argocd call goes through `src/argocd.ts`,
   which accepts only operations from the allowlist registry in
-  `src/registry.ts`. Every registered operation is a server read or a
-  local-config operation. The seam also refuses streaming, refresh, prompt,
-  local-file and delete flags whatever a command passes, gives argocd no
+  `src/registry.ts`. Registered operations declare server reads, local operations,
+  or opt-in Application writes. The seam refuses streaming, refresh (except
+  the registered refresh write), prompt, local-file and delete flags, gives argocd no
   stdin, and enforces a timeout and an output cap. Tests fail if a new
   operation becomes reachable without updating the registry.
 - **Opt-in Application writes.** Sync, rollback, refresh, terminate-op, resource actions and automated-sync changes preview by default and require `--confirm` to execute; when `--context` is omitted, exactly one configured `writable-contexts` entry is selected. With zero or multiple entries, pass `--context` explicitly. Execution is limited by `writable-contexts` and Argo CD RBAC. Other writes and credential commands answer `REFUSED`.
@@ -325,12 +430,14 @@ specific app.
   It defaults to none. To allow writes, a human runs
   `argocd-axi ctx writable add` in a terminal to select a configured context,
   or passes `<context>` directly; either path requires an explicit y/yes
-  confirmation. Non-interactive runs are refused. Use
+  confirmation. Non-interactive grants are refused unless the named context is
+  already writable, in which case the command is a no-op. Use
   `argocd-axi ctx writable remove <context>` to revoke access.
 
-- **Version cache.** The server version is checked at most once every 12
-  hours per context and server, and cached in `~/.cache/argocd-axi/`
-  (`$XDG_CACHE_HOME`). This file holds version strings only.
+- **Version checks.** The home view queries versions without writing files.
+  The local `ctx` view can read a legacy version cache from `~/.cache/argocd-axi/`
+  (`$XDG_CACHE_HOME`) but does not create or update it. A recent legacy entry
+  can also satisfy the home view's version check for up to 12 hours.
 
 ## Development
 

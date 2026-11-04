@@ -24,8 +24,6 @@ export interface RunOptions {
   timeoutMs?: number;
   /** User-facing limit shown in blocking progress. */
   progressTimeoutMs?: number;
-  /** Keep elapsed progress cumulative across bounded wait attempts. */
-  progressStartedAt?: number;
   /** Return non-zero exits to the caller instead of throwing. */
   allowFailure?: boolean;
   failure?: FailureContext;
@@ -86,7 +84,7 @@ export async function runArgocd(
   }
   const blocking =
     op === "app wait" || op === "app rollback" || op === "app refresh";
-  const started = options.progressStartedAt ?? Date.now();
+  const started = Date.now();
   const progress = () =>
     process.stderr.write(
       `Waiting for ${op.slice(4)} (${Math.floor((Date.now() - started) / 1000)}s elapsed; limit ${Math.ceil(progressTimeoutMs / 1000)}s)\n`,

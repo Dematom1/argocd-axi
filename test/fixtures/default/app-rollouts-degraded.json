@@ -1,0 +1,21 @@
+{
+  "metadata": { "name": "argo-rollouts", "namespace": "argocd" },
+  "status": {
+    "sync": { "status": "Synced" },
+    "health": { "status": "Degraded", "message": "CustomResourceDefinitions are not established" },
+    "operationState": {
+      "phase": "Succeeded",
+      "syncResult": {
+        "resources": [
+          { "group": "apiextensions.k8s.io", "kind": "CustomResourceDefinition", "name": "rollouts.argoproj.io", "message": "customresourcedefinition.apiextensions.k8s.io/rollouts.argoproj.io configured" }
+        ]
+      }
+    },
+    "resources": [
+      { "group": "apiextensions.k8s.io", "kind": "CustomResourceDefinition", "name": "rollouts.argoproj.io", "status": "Synced", "health": { "status": "Degraded", "message": "CustomResourceDefinition is not established" } },
+      { "group": "apiextensions.k8s.io", "kind": "CustomResourceDefinition", "name": "analysisruns.argoproj.io", "status": "Synced", "health": { "status": "Degraded", "message": "CustomResourceDefinition is not established" } },
+      { "group": "apiextensions.k8s.io", "kind": "CustomResourceDefinition", "name": "analysistemplates.argoproj.io", "status": "Synced", "health": { "status": "Degraded", "message": "CustomResourceDefinition is not established" } },
+      { "group": "apiextensions.k8s.io", "kind": "CustomResourceDefinition", "name": "clusteranalysistemplates.argoproj.io", "status": "Synced", "health": { "status": "Degraded", "message": "CustomResourceDefinition is not established" } }
+    ]
+  }
+}

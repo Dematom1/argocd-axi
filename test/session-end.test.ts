@@ -15,6 +15,29 @@ import { makeHome, runCli } from "./helpers.js";
 import { releaseSessionLock } from "../src/sessionlog.js";
 
 describe("session-end memory", () => {
+  it.each([false, true])(
+    "shows context end help without recording (denied=%s)",
+    async (denied) => {
+      const home = makeHome();
+      if (denied) chmodSync(home, 0o555);
+      try {
+        // runCli owns a fixture log in HOME, so use a separate writable log home.
+        const result = await runCli(["context", "end", "--help"], {
+          env: { HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+          stdin: JSON.stringify({ transcript_path: "must-not-be-read" }),
+        });
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("usage: argocd-axi context end");
+        expect(result.stdout).toContain("transcript_path");
+        expect(result.stdout).not.toContain("recorded:");
+        expect(result.calls).toEqual([]);
+        expect(existsSync(join(home, ".config"))).toBe(false);
+      } finally {
+        chmodSync(home, 0o755);
+      }
+    },
+  );
+
   it("records only command names, counts and the most-used context", async () => {
     const home = makeHome();
     expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);

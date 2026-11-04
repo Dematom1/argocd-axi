@@ -10,6 +10,7 @@ const root = resolve(process.argv[2]);
 const home = mkdtempSync(join(tmpdir(), "argocd-sync-lab-"));
 const calls = [];
 let running = false;
+let synced = false;
 let rejectSync = "";
 function vi(n) {
   const bytes = [];
@@ -37,7 +38,13 @@ function app() {
     field(
       3,
       Buffer.concat([
-        field(2, Buffer.concat([field(1, "Synced"), field(3, "abc1234")])),
+        field(
+          2,
+          Buffer.concat([
+            field(1, synced ? "Synced" : "OutOfSync"),
+            field(3, "abc1234"),
+          ]),
+        ),
         field(3, field(1, "Healthy")),
         ...(running ? [field(7, field(2, "Running"))] : []),
       ]),
@@ -172,7 +179,7 @@ try {
   assert(!calls.slice(start).some((c) => c.route.endsWith("/Watch")));
   let progressBeforeExit = false;
   result = await run(
-    ["apps", "wait", "proof", "--sync", "--operation", "--timeout", "6"],
+    ["apps", "wait", "proof", "--operation", "--timeout", "6"],
     (text) => {
       if (text.includes("0s elapsed")) progressBeforeExit = true;
     },
@@ -183,6 +190,12 @@ try {
   assert.match(result.stdout, /timed out after 6s/);
   assert(!result.stdout.includes("Waiting for"));
   running = false;
+  synced = true;
+  start = calls.length;
+  result = await run(["apps", "sync", "proof", "--confirm"]);
+  assert.equal(result.code, 0, JSON.stringify(result));
+  assert.match(result.stdout, /sync: already synced/);
+  assert(!calls.slice(start).some((c) => c.route.endsWith("/Sync")));
   result = await run([
     "apps",
     "wait",
