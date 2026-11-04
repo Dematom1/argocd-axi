@@ -220,6 +220,71 @@ describe("account, projects, appsets, inventory", () => {
     expect(odd.stdout).not.toContain("answer:");
   });
 
+  it("can-i resolves a bare app name to its project before checking RBAC", async () => {
+    const result = await runCli(
+      ["can-i", "sync", "applications", "payments-api"],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "payments-api"],
+            stdoutFile: "app-payments-api.json",
+          },
+          { argv: ["account", "can-i"], stdout: "yes\n" },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      "answer: yes\ncheck: sync applications payments/payments-api\nproject: payments",
+    );
+    expect(result.calls).toContainEqual([
+      "account",
+      "can-i",
+      "sync",
+      "applications",
+      "payments/payments-api",
+    ]);
+  });
+
+  it("can-i refuses to answer no for an unknown bare app name", async () => {
+    const result = await runCli(
+      ["can-i", "sync", "applications", "no-such-app"],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "no-such-app"],
+            exit: 20,
+            stderr:
+              'rpc error: code = NotFound desc = applications.argoproj.io "no-such-app" not found',
+          },
+          { argv: ["account", "can-i"], stdout: "no\n" },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("code: VALIDATION_ERROR");
+    expect(result.stdout).toContain(
+      "argocd-axi can-i sync applications <project>/no-such-app",
+    );
+    expect(result.stdout).not.toContain("answer:");
+    expect(result.calls.filter(([noun]) => noun === "account")).toEqual([]);
+  });
+
+  it("can-i leaves an explicit project/app unchanged", async () => {
+    const result = await runCli(
+      ["can-i", "sync", "applications", "payments/payments-api"],
+      {
+        scenario: scenario([{ argv: ["account", "can-i"], stdout: "yes\n" }]),
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      "answer: yes\ncheck: sync applications payments/payments-api",
+    );
+    expect(result.stdout).not.toContain("project:");
+    expect(result.calls.filter(([noun]) => noun === "app")).toEqual([]);
+  });
+
   it("projects, view and sync windows", async () => {
     expect((await runCli(["projects"])).stdout).toContain(
       'projects[2]{project,description,destinations,windows}:\n  default,"",1,0\n  payments,Payments team services,2,2',

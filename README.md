@@ -133,7 +133,10 @@ empty or minimal and review the effective policies in `argocd-rbac-cm`.
 `can-i` checks one object literally (`'other-project/*'` is not "any app in
 other-project"), so a `no` there proves nothing about other apps; spot-check
 concrete apps instead, e.g. `argocd-axi can-i get applications
-'other-project/some-app'`.
+'other-project/some-app'`. A bare app name (no `project/` prefix) for
+`applications`, `logs` or `exec` is resolved to its project first, and the
+answer shows which project was used; if the app cannot be found, `can-i`
+errors instead of answering `no`.
 
 argocd-axi itself refuses `proj role create-token`, `account generate-token`
 and every other command that prints or changes a credential.
