@@ -278,6 +278,17 @@ work. Rate-limited polls retry with increasing delays from 1 to 10 seconds,
 bounded by the same timeout. A timeout retains the last observed state and
 identifies a rate-limited final poll.
 
+A sync wait returns promptly as `sync: prune-only drift` with exit 1 when the
+last operation Succeeded and every non-Synced resource is OutOfSync and requires
+pruning. This is not Synced. Valid `reconciledAt` and `operationState.finishedAt`
+timestamps must establish reconciliation at or after completion; stale or unknown
+snapshots keep polling. The result names the blocking resources and suggests
+`argocd-axi apps sync <app> --prune --confirm --context <read-context>`, pinned to
+the explicit or current context used by the wait, not the sole writable context.
+If no read context can be established, the result suggests `argocd-axi ctx`
+instead of a confirmed prune command. Wait never performs that write. Health-only and operation-only waits ignore
+unrequested sync drift.
+
 An app needs attention when its sync status is OutOfSync or Unknown; its
 health is Degraded, Missing or Unknown; it has been Progressing for more than
 10 minutes; its last sync Failed or Errored; or it has conditions. Both axes

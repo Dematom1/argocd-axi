@@ -56,7 +56,7 @@ commands[27]:
   apps history <app>: deployments, newest first
   apps manifests <app> [--source git|live] [--kind <k>] [--full]: rendered manifests, Secret data redacted
   apps logs <app> [--kind --name --tail --since --filter -p]: recent pod logs, never follows
-  apps wait <app> [--sync --health --operation] [--timeout <s>] [--fail-on-degraded]: polls through missing apps and transient health; timeout exits 1 with last state and blockers
+  apps wait <app> [--sync --health --operation] [--timeout <s>] [--fail-on-degraded]: polls through missing apps and transient health; timeout or reconciled prune-only drift exits 1 with last state and blockers
   apps actions <app>: list available resource actions
   projects | projects view <p> | projects windows <p>: projects, their rules, and whether sync is allowed now
   appsets | appsets view <name> | appsets generate <file>: ApplicationSets and what a spec would generate
@@ -72,6 +72,6 @@ Run `npx -y argocd-axi --help` for global flags, or `npx -y argocd-axi <command>
 - An unhealthy or out-of-sync app is data, not an error: exit 0 means the command worked. Exit 1 is an error, 2 a usage error; errors print `error`, `code` and `help` on stdout.
 - An app needs attention when it is OutOfSync or sync Unknown; Degraded, Missing or health Unknown; Progressing for more than 10 minutes; its last sync Failed or Errored; or it has conditions.
 - Secret-looking values (Secret data, passwords, tokens, Helm parameters) are redacted and counted; no flag reveals them, and log redaction is best effort.
-- Nothing streams: `apps logs` returns recent lines (default 100). `apps wait` polls through Missing, Degraded and not-yet-existing apps (default timeout 120 s). Timeout exits 1 with unmet conditions, last state and blocking resource messages. `--fail-on-degraded` opts into fail-fast behavior. Re-running wait only observes state.
+- Nothing streams: `apps logs` returns recent lines (default 100). `apps wait` polls through Missing, Degraded and not-yet-existing apps (default timeout 120 s). Timeout exits 1 with unmet conditions, last state and blocking resource messages. `--fail-on-degraded` opts into fail-fast behavior. Re-running wait only observes state. Sync waits return promptly as prune-only drift (exit 1, not Synced) when a reconciled Succeeded operation leaves only prune-required resources; the result names resources and the explicit prune command, without writing.
 - `apps sync` returns on acceptance, not deployment completion. For app-of-apps, run `apps wait <parent>` before acting on children. An absent child may be reported as permission denied; absence from the visible list can also mean RBAC hides it. Already-synced apps without running operations or resource drift are no-ops; nothing is submitted. With `--resource`, only selected resources that are not Synced or need pruning are submitted; if all selections are Synced and none needs pruning, nothing is submitted.
 - Apps in other namespaces are addressed as `namespace/name`.

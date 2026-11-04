@@ -1300,6 +1300,7 @@ export const APPS_WAIT_SPEC: CommandSpec = {
     "Polls through Missing, Degraded and not-yet-existing apps; --fail-on-degraded stops on Degraded",
     "Rate-limited polls retry with increasing delays (1s to 10s), bounded by the same timeout",
     "Timeout exits 1 with unmet conditions, last state and blocking resource messages",
+    "A reconciled Succeeded operation with only prune-required drift returns promptly as prune-only drift (exit 1, not Synced); wait never writes",
   ],
 };
 
@@ -1317,6 +1318,8 @@ export async function appsWait(args: string[]): Promise<string> {
     getBool(parsed, flag),
   );
   const options = contextOption(parsed);
+  if (options.context === undefined)
+    options.context = (await resolveTarget(undefined)).target.context;
   const started = Date.now();
 
   const deadline = started + timeout * 1000;
@@ -1328,6 +1331,7 @@ export async function appsWait(args: string[]): Promise<string> {
   let missing: string | undefined;
   let unmet: string[] = [];
   let degraded = false;
+  let pruning = false;
   let rateLimited = false;
   let retryDelay = WAIT_POLL_MS;
   const progress = () =>
@@ -1396,7 +1400,32 @@ export async function appsWait(args: string[]): Promise<string> {
         !unmet.some((condition) => condition.startsWith("health:"))
       )
         unmet.push("health: Degraded (--fail-on-degraded)");
-      if (degraded || unmet.length === 0 || Date.now() >= deadline) break;
+      const drift = (app?.status?.resources ?? []).filter(
+        (resource) => resource.status !== "Synced",
+      );
+      pruning = Boolean(
+        app &&
+        requested.includes("--sync") &&
+        syncStatus(app) === "OutOfSync" &&
+        app.status?.operationState?.phase === "Succeeded" &&
+        !isOperationRunning(app) &&
+        Date.parse(app.status?.reconciledAt ?? "") >=
+          Date.parse(app.status?.operationState?.finishedAt ?? "") &&
+        drift.length > 0 &&
+        drift.every(
+          (resource) =>
+            resource.status === "OutOfSync" &&
+            resource.requiresPruning === true,
+        ),
+      );
+      if (pruning)
+        unmet = unmet.map((condition) =>
+          condition.startsWith("sync:")
+            ? "sync: OutOfSync (prune-only drift)"
+            : condition,
+        );
+      if (degraded || pruning || unmet.length === 0 || Date.now() >= deadline)
+        break;
       await sleep(Math.min(WAIT_POLL_MS, Math.max(0, deadline - Date.now())));
     } while (Date.now() < deadline);
   } finally {
@@ -1427,7 +1456,9 @@ export async function appsWait(args: string[]): Promise<string> {
           ? `condition met (${waited}) after ${elapsed}s`
           : degraded
             ? `stopped on Degraded after ${elapsed}s (--fail-on-degraded)`
-            : `timed out after ${timeout}s; condition not met (${waited})`,
+            : pruning
+              ? `sync: prune-only drift; condition not met after ${elapsed}s`
+              : `timed out after ${timeout}s; condition not met (${waited})`,
         app: app
           ? {
               name: appName(app),
@@ -1481,6 +1512,13 @@ export async function appsWait(args: string[]): Promise<string> {
     met
       ? []
       : [
+          ...(pruning
+            ? [
+                options.context
+                  ? `Run \`argocd-axi apps sync ${name} --prune --confirm --context ${options.context}\` to remove prune-required resources (write approval required)`
+                  : "Run `argocd-axi ctx` to establish the read context before choosing an explicit prune target",
+              ]
+            : []),
           `Run \`argocd-axi apps view ${name}${contextSuffix(parsed)}\` to diagnose the last state`,
           `Run \`argocd-axi apps wait ${name}${conditions.map((c) => ` ${c}`).join("")} --timeout ${timeout}${contextSuffix(parsed)}\` to wait again`,
           ...(!app

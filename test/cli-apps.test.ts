@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { makeHome, runCli, scenario, ROOT } from "./helpers.js";
 
 describe("apps", () => {
+  const appCalls = (calls: string[][]) =>
+    calls.filter(([noun]) => noun === "app");
   const rollout = (state: string) =>
     readFileSync(
       join(ROOT, "test", "fixtures", "default", `app-rollouts-${state}.json`),
@@ -15,6 +17,223 @@ describe("apps", () => {
     exit: 20,
     stderr: "rpc error: code = PermissionDenied desc = permission denied",
   };
+  const pruneSnapshot = readFileSync(
+    join(ROOT, "test", "fixtures", "default", "app-prune-only.json"),
+    "utf8",
+  );
+
+  it.each([[], ["--sync", "--health", "--operation"]])(
+    "reports reconciled prune-only drift promptly (%j)",
+    async (...flags) => {
+      const result = await runCli(
+        [
+          "apps",
+          "wait",
+          "hook-leftover",
+          ...flags,
+          "--timeout",
+          "300",
+          "--context",
+          "staging",
+        ],
+        {
+          scenario: scenario([
+            { argv: ["app", "get", "hook-leftover"], stdout: pruneSnapshot },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("sync: prune-only drift");
+      expect(result.stdout).toContain("Job");
+      expect(result.stdout).toContain("post-sync-job");
+      expect(result.stdout).toContain("default");
+      expect(result.stdout).toContain("blockingResources: 1 of 1 total");
+      expect(result.stdout).toContain(
+        "argocd-axi apps sync hook-leftover --prune --confirm --context staging",
+      );
+      expect(result.stdout).not.toContain("timed out");
+      expect(appCalls(result.calls)).toHaveLength(1);
+      expect(appCalls(result.calls)[0]?.slice(0, 2)).toEqual(["app", "get"]);
+    },
+  );
+
+  it("pins prune guidance to the read context instead of the sole writable context", async () => {
+    const home = makeHome();
+    mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
+    writeFileSync(
+      join(home, ".config", "argocd-axi", "config"),
+      "writable-contexts: [staging]\n",
+    );
+    const result = await runCli(
+      ["apps", "wait", "hook-leftover", "--sync", "--timeout", "1"],
+      {
+        home,
+        scenario: scenario([
+          { argv: ["context"], stdoutFile: "context.txt" },
+          { argv: ["app", "get", "hook-leftover"], stdout: pruneSnapshot },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(
+      "argocd-axi apps sync hook-leftover --prune --confirm --context prod",
+    );
+    expect(result.stdout).not.toContain("--context staging");
+    expect(appCalls(result.calls).find((call) => call[1] === "get")).toContain(
+      "prod",
+    );
+    expect(appCalls(result.calls).some((call) => call[1] === "sync")).toBe(
+      false,
+    );
+  });
+
+  it("does not suggest confirmed pruning when no read context can be established", async () => {
+    const result = await runCli(
+      ["apps", "wait", "hook-leftover", "--sync", "--timeout", "1"],
+      {
+        scenario: scenario([
+          { argv: ["context"], stdout: "CURRENT  NAME  SERVER\n" },
+          { argv: ["app", "get", "hook-leftover"], stdout: pruneSnapshot },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("sync: prune-only drift");
+    expect(result.stdout).toContain("argocd-axi ctx");
+    expect(result.stdout).not.toContain("--confirm");
+  });
+
+  it("detects prune-only drift inside the timing-independent polling loop", async () => {
+    const result = await runCli(
+      ["apps", "wait", "hook-leftover", "--timeout", "5"],
+      {
+        scenario: scenario([
+          {
+            argv: ["app", "get", "hook-leftover"],
+            sequence: [
+              { stdout: rollout("missing") },
+              { stdout: pruneSnapshot },
+            ],
+          },
+        ]),
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("sync: prune-only drift");
+    expect(result.stdout).not.toContain("timed out");
+    expect(appCalls(result.calls)).toHaveLength(2);
+    expect(appCalls(result.calls).every((call) => call[1] === "get")).toBe(
+      true,
+    );
+  });
+
+  it.each(["--health", "--operation"])(
+    "does not block %s on unrequested prune drift",
+    async (flag) => {
+      const result = await runCli(
+        ["apps", "wait", "hook-leftover", flag, "--timeout", "1"],
+        {
+          scenario: scenario([
+            { argv: ["app", "get", "hook-leftover"], stdout: pruneSnapshot },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("condition met");
+      expect(result.stdout).not.toContain("prune-only drift");
+    },
+  );
+
+  it.each(["OutOfSync", "Unknown", undefined])(
+    "keeps waiting on mixed or unknown resource drift (%s)",
+    async (status) => {
+      const result = await runCli(
+        ["apps", "wait", "mixed", "--sync", "--timeout", "1"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "mixed"],
+              stdout: JSON.stringify({
+                status: {
+                  sync: { status: "OutOfSync" },
+                  health: { status: "Healthy" },
+                  operationState: {
+                    phase: "Succeeded",
+                    finishedAt: "2026-11-03T19:00:00Z",
+                  },
+                  reconciledAt: "2026-11-03T19:01:00Z",
+                  resources: [
+                    {
+                      kind: "Job",
+                      namespace: "default",
+                      name: "hook",
+                      status: "OutOfSync",
+                      requiresPruning: true,
+                    },
+                    {
+                      kind: "Deployment",
+                      namespace: "default",
+                      name: "api",
+                      status,
+                    },
+                  ],
+                },
+              }),
+            },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("timed out after 1s");
+      expect(result.stdout).toContain("sync: OutOfSync (expected Synced)");
+      expect(result.stdout).not.toContain("prune-only drift");
+      expect(appCalls(result.calls).every((call) => call[1] === "get")).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each([
+    ["2026-11-03T19:01:00Z", "2026-11-03T19:00:00Z"],
+    [undefined, "2026-11-03T19:02:00Z"],
+    ["2026-11-03T19:01:00Z", undefined],
+    ["invalid", "2026-11-03T19:02:00Z"],
+    ["2026-11-03T19:01:00Z", "invalid"],
+  ])(
+    "keeps waiting on an unreconciled prune snapshot (%s, %s)",
+    async (finishedAt, reconciledAt) => {
+      const result = await runCli(
+        ["apps", "wait", "stale", "--sync", "--timeout", "1"],
+        {
+          scenario: scenario([
+            {
+              argv: ["app", "get", "stale"],
+              stdout: JSON.stringify({
+                status: {
+                  sync: { status: "OutOfSync" },
+                  health: { status: "Healthy" },
+                  operationState: { phase: "Succeeded", finishedAt },
+                  reconciledAt,
+                  resources: [
+                    {
+                      kind: "Job",
+                      namespace: "default",
+                      name: "hook",
+                      status: "OutOfSync",
+                      requiresPruning: true,
+                    },
+                  ],
+                },
+              }),
+            },
+          ]),
+        },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("timed out after 1s");
+      expect(result.stdout).not.toContain("prune-only drift");
+    },
+  );
 
   it("waits for a child absent from the visible list, and can be repeated", async () => {
     const child = scenario([
@@ -40,7 +259,7 @@ describe("apps", () => {
         "condition met (sync, health, operation)",
       );
       expect(result.stdout).toContain("health: Healthy");
-      expect(result.calls).toContainEqual([
+      expect(appCalls(result.calls)).toContainEqual([
         "app",
         "list",
         "-o",
@@ -48,7 +267,9 @@ describe("apps", () => {
         "--argocd-context",
         "staging",
       ]);
-      expect(result.calls.filter((call) => call[1] === "get")).toHaveLength(2);
+      expect(
+        appCalls(result.calls).filter((call) => call[1] === "get"),
+      ).toHaveLength(2);
     }
   });
 
@@ -74,7 +295,7 @@ describe("apps", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("condition met");
     expect(result.stdout).toContain("health: Healthy");
-    expect(result.calls).toHaveLength(2);
+    expect(appCalls(result.calls)).toHaveLength(2);
   });
 
   it.each([false, true])(
@@ -102,7 +323,7 @@ describe("apps", () => {
       expect(result.stdout).toContain("timed out after 4s");
       expect(result.stdout).toContain("latest poll rate limited");
       expect(result.stdout).not.toContain("condition met (");
-      expect(result.calls.length).toBeLessThanOrEqual(3);
+      expect(appCalls(result.calls).length).toBeLessThanOrEqual(3);
       if (observed) {
         expect(result.stdout).toContain("health: Degraded (expected Healthy)");
         expect(result.stdout).toContain("blockingResources: 4 of 4 total");
@@ -143,8 +364,10 @@ describe("apps", () => {
     );
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("health: Healthy");
-    expect(result.calls).toHaveLength(3);
-    expect(result.calls.every((call) => call[1] === "get")).toBe(true);
+    expect(appCalls(result.calls)).toHaveLength(3);
+    expect(appCalls(result.calls).every((call) => call[1] === "get")).toBe(
+      true,
+    );
   });
 
   it.each([false, true])(
@@ -178,7 +401,7 @@ describe("apps", () => {
         "CustomResourceDefinition is not established",
       );
       expect(result.stdout).toContain("rollouts.argoproj.io configured");
-      if (failFast) expect(result.calls).toHaveLength(1);
+      if (failFast) expect(appCalls(result.calls)).toHaveLength(1);
     },
   );
 
@@ -239,7 +462,7 @@ describe("apps", () => {
           visible || command === "sync" ? "code: FORBIDDEN" : "timed out",
         );
         expect(result.stdout.includes("may not exist yet")).toBe(!visible);
-        if (visible) expect(result.calls).toHaveLength(2);
+        if (visible) expect(appCalls(result.calls)).toHaveLength(2);
       }
     },
   );
@@ -1785,7 +2008,15 @@ describe("apps", () => {
     ]);
     expect(met.stderr).toContain("Waiting for wait (0s elapsed; limit 30s)");
     expect(met.stdout).not.toContain("Waiting for");
-    expect(met.calls[0]).toEqual(["app", "get", "guestbook", "-o", "json"]);
+    expect(appCalls(met.calls)[0]).toEqual([
+      "app",
+      "get",
+      "guestbook",
+      "-o",
+      "json",
+      "--argocd-context",
+      "prod",
+    ]);
     expect(met.calls.some((call) => call[1] === "wait")).toBe(false);
     expect(met.stdout).toMatch(/wait: condition met \(health\) after \d+s\n/);
     const timedOut = await runCli([
