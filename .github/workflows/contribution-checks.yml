@@ -1,0 +1,154 @@
+name: Contribution checks
+
+# Shared implementation of the cheap pull request policy checks for the AXI
+# tools: conventional title, no-mistakes attestation, and generated-file
+# protection. Each tool calls it from a thin `contribution.yml` that owns the
+# pull_request events and concurrency; sibling tools pin it by commit SHA.
+#
+# Every job reads live PR metadata through the API and never checks out or
+# executes contributed code, so it needs no secrets, write access or OIDC.
+# Every job emits a terminal result, including the release-PR exemption: a
+# skipped job would read as passing, and a trigger-level path filter would
+# leave a required check missing.
+
+on:
+  workflow_call:
+    inputs:
+      release-bot-login:
+        description: >-
+          Exact login of the release App's Bot user (for example
+          my-release-app[bot]). Only PRs from this Bot on a same-repository
+          release-please branch, whose every commit it authored and GitHub
+          verified, are exempt. Empty means no release exemption.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  classify:
+    name: Release PR identity
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.classify.outputs.release }}
+    steps:
+      # v8.0.0
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        id: classify
+        env:
+          RELEASE_BOT_LOGIN: ${{ inputs.release-bot-login }}
+        with:
+          script: |
+            const login = process.env.RELEASE_BOT_LOGIN;
+            const repo = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number });
+            const reasons = [];
+            if (!login) reasons.push('no release-bot-login is configured');
+            if (pr.user.type !== 'Bot' || pr.user.login !== login) reasons.push(`author ${pr.user.login} is not the release App Bot`);
+            if (pr.head.repo?.full_name !== `${repo.owner}/${repo.repo}`) reasons.push('head is not a branch of this repository');
+            if (!pr.head.ref.startsWith('release-please--')) reasons.push(`head branch ${pr.head.ref} is not a release-please branch`);
+            if (reasons.length === 0) {
+              const commits = await github.paginate(github.rest.pulls.listCommits, { ...repo, pull_number, per_page: 100 });
+              const foreign = commits.filter(c => c.author?.login !== login || !c.commit.verification?.verified);
+              if (commits.length === 0 || commits.length !== pr.commits) reasons.push('commit list is incomplete');
+              if (foreign.length) reasons.push(`commits not authored by ${login} with a verified signature: ${foreign.map(c => c.sha.slice(0, 7)).join(', ')}`);
+            }
+            const release = reasons.length === 0;
+            core.setOutput('release', String(release));
+            const verdict = release
+              ? `PR #${pull_number} is the release App's PR (${login}); the no-mistakes and generated-file checks report an exemption, not a validation.`
+              : `PR #${pull_number} is not exempt as a release PR: ${reasons.join('; ')}.`;
+            core.info(verdict);
+            await core.summary.addHeading('Release PR identity').addRaw(verdict).write();
+
+  title:
+    name: PR title
+    runs-on: ubuntu-latest
+    steps:
+      # v8.0.0
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.payload.pull_request.number });
+            const pattern = /^(feat|fix|chore|ci|docs|refactor|test|perf|build|revert)(\([^)]+\))?!?: .+/;
+            if (!pattern.test(pr.title)) {
+              core.setFailed(`PR title must use an allowed conventional commit format: ${pr.title}`);
+            }
+
+  no-mistakes:
+    name: PR must be raised via no-mistakes
+    needs: classify
+    # always(): a failed classification must fail this check, not skip it.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a release PR classification
+        if: ${{ needs.classify.result != 'success' }}
+        env:
+          RESULT: ${{ needs.classify.result }}
+        run: |
+          echo "::error::Release PR identity did not complete ($RESULT); refusing to judge this PR."
+          exit 1
+      - name: Report release App exemption
+        if: ${{ needs.classify.outputs.release == 'true' }}
+        run: echo "Exempt - release App PR. no-mistakes did not run; this is not contributor validation." | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Verify no-mistakes signature and pipeline attestation in PR body
+        if: ${{ needs.classify.outputs.release == 'false' }}
+        uses: kunchenguid/no-mistakes/.github/actions/require-no-mistakes@f6441c96c352a18b9cadcaef6b6c7017e9ac3970 # v1.80.1
+        with:
+          exempt-authors: dependabot[bot]
+
+  generated-files:
+    name: Generated files must not be hand-edited
+    needs: classify
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a release PR classification
+        if: ${{ needs.classify.result != 'success' }}
+        env:
+          RESULT: ${{ needs.classify.result }}
+        run: |
+          echo "::error::Release PR identity did not complete ($RESULT); refusing to judge this PR."
+          exit 1
+      - name: Report release App exemption
+        if: ${{ needs.classify.outputs.release == 'true' }}
+        run: echo "Exempt - release App PR. release-please owns its generated files." | tee -a "$GITHUB_STEP_SUMMARY"
+      # v8.0.0
+      - name: Check PR does not modify release-please-generated files
+        if: ${{ needs.classify.outputs.release == 'false' }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const repo = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number });
+            const files = await github.paginate(github.rest.pulls.listFiles, { ...repo, pull_number, per_page: 100 });
+            if (files.length !== pr.changed_files) {
+              core.setFailed(`The file list is incomplete (${files.length}/${pr.changed_files}); refusing to judge this PR.`);
+              return;
+            }
+            // A rename removes its original path. Creating the manifest is the
+            // one-time release-please bootstrap; every later change to it, and
+            // any change to CHANGELOG.md, must come from release-please.
+            const touched = f => [f.filename, f.previous_filename].filter(Boolean);
+            const violated = new Set();
+            for (const f of files) {
+              for (const path of touched(f)) {
+                if (path === 'CHANGELOG.md') violated.add(path);
+                if (path === '.release-please-manifest.json' && f.status !== 'added') violated.add(path);
+              }
+            }
+            if (violated.size) {
+              core.setFailed([
+                `This PR modifies release-please-generated files: ${[...violated].join(', ')}`,
+                'CHANGELOG.md and .release-please-manifest.json are generated by release-please from',
+                'conventional commits on main. Do not hand-edit them; use a conventional commit message',
+                '(feat/fix/docs/...) and release-please updates them in the next release PR.',
+              ].join('\n'));
+              return;
+            }
+            core.info('No release-please-generated files modified. OK.');

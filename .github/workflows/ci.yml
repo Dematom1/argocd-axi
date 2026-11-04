@@ -4,12 +4,54 @@ on:
   push:
     branches: [main]
   pull_request:
+    # labeled/unlabeled let adding full-ci start the suite and removing it
+    # revoke the go-ahead. Title and body edits never rerun CI.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
 
 permissions:
   contents: read
 
+# Outside pull request gate: the full suite runs on main pushes, on PRs from
+# this repository's own branches, and on PRs carrying the full-ci label, which
+# the maintainer adds after reviewing an outside PR's source, dependencies and
+# workflow changes. Any other PR skips the check lanes, and the Full suite job
+# fails naming the label, so no outside PR looks tested before the go-ahead.
+# full-ci is permission to spend CI, not to merge or to see secrets; GitHub's
+# own approval for first-time fork runs is separate. See CONTRIBUTING.md.
+#
+# A label event for any other label runs nothing. GitHub still publishes a
+# skipped check for each job of that run, and a newer skipped check with a
+# job's own name would replace an earlier real result, so those jobs take a
+# "Not run for label - " name prefix and their run gets its own group that
+# never cancels a running suite. Every other PR event shares one group per PR,
+# so a new head, or removing full-ci, cancels the superseded run.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ (github.event_name == 'push' && github.sha) || ((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'full-ci' && github.run_id) || github.event.pull_request.number }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && !((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'full-ci') }}
+
 jobs:
+  # Single owner of the gate decision for the jobs below. It always runs and
+  # always succeeds, so its own check needs no label-event prefix.
+  gate:
+    name: CI gate
+    runs-on: ubuntu-latest
+    outputs:
+      unrelated-label: ${{ steps.gate.outputs.unrelated-label }}
+      full: ${{ steps.gate.outputs.full }}
+    steps:
+      - id: gate
+        env:
+          UNRELATED_LABEL: ${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'full-ci' }}
+          FULL: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+        run: |
+          echo "unrelated-label=$UNRELATED_LABEL" >> "$GITHUB_OUTPUT"
+          echo "full=$FULL" >> "$GITHUB_OUTPUT"
+          echo "unrelated label event: $UNRELATED_LABEL; full suite authorized: $FULL"
+
   check:
+    name: ${{ needs.gate.outputs.unrelated-label == 'true' && 'Not run for label - ' || '' }}check (${{ matrix.os }}, ${{ matrix.node }})
+    needs: gate
+    if: ${{ needs.gate.outputs.unrelated-label == 'false' && needs.gate.outputs.full == 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,3 +66,33 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+
+  # The Full suite verdict: fails until an outside PR has the full-ci go-ahead,
+  # and fails unless every check lane actually succeeded. It runs even when the
+  # lanes are skipped, because a skipped job would read as passing.
+  full-suite:
+    name: ${{ needs.gate.outputs.unrelated-label == 'true' && 'Not run for label - ' || '' }}Full suite
+    needs: [gate, check]
+    if: ${{ always() && needs.gate.outputs.unrelated-label != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the full-ci go-ahead and passing lanes
+        env:
+          GATE: ${{ needs.gate.result }}
+          FULL: ${{ needs.gate.outputs.full }}
+          CHECK: ${{ needs.check.result }}
+        run: |
+          set -eu
+          if [ "$GATE" != success ]; then
+            echo "::error::The CI gate did not complete ($GATE)."
+            exit 1
+          fi
+          if [ "$FULL" != true ]; then
+            echo "::error::The full suite runs on outside pull requests only after a maintainer adds the full-ci label; see CONTRIBUTING.md. This failure is expected until then and needs no action from you."
+            exit 1
+          fi
+          if [ "$CHECK" != success ]; then
+            echo "::error::A check lane did not succeed ($CHECK); see the check jobs in this run."
+            exit 1
+          fi
+          echo "Full suite passed."

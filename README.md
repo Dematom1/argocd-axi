@@ -447,6 +447,8 @@ specific app.
 
 ## Development
 
+To contribute, read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
 Build from source and run checks:
 
 ```sh

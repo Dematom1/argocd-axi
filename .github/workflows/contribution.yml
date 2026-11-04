@@ -1,0 +1,34 @@
+name: Contribution
+
+# Thin caller of the shared contribution checks (title, no-mistakes,
+# generated files). This repository hosts the shared workflow, so it calls it
+# locally; sibling tools pin it by commit SHA. The caller owns events and
+# concurrency. Title and body edits rerun only these cheap checks, never CI.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  # The checks read the PR's live title, body, head, commits and files rather
+  # than the event payload, which a rerun replays verbatim.
+  pull-requests: read
+
+# A concurrency group keeps at most one pending run and replaces older pending
+# runs. Opened and edited events get their own group so a first-time-fork
+# approval or a later edit never collapses an earlier body check; head changes
+# coalesce so a new head supersedes the old one.
+concurrency:
+  group: contribution-${{ github.event.pull_request.number }}-${{ (github.event.action == 'opened' || github.event.action == 'edited') && github.run_id || 'head-change' }}
+  cancel-in-progress: true
+
+jobs:
+  contribution:
+    name: contribution
+    uses: ./.github/workflows/contribution-checks.yml
+    with:
+      # Nonsecret, owned by the operations Terraform; empty means no release
+      # exemption, so release PRs then fail these checks instead of skipping.
+      release-bot-login: ${{ vars.RELEASE_APP_BOT_LOGIN }}

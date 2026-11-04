@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit reviews are advisory and the maintainer adjudicates them.
+# It must never approve, merge, label, assign, or push to a pull request.
+language: en-US
+reviews:
+  profile: chill
+  auto_approvals:
+    enabled: false
+    allow_author_approval: false
+  auto_apply_labels: false
+  auto_assign_reviewers: false
+  poem: false
+  in_progress_fortune: false
+  auto_review:
+    # Reviews non-draft pull requests to the default branch only.
+    enabled: true
+    drafts: false
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: false
+    autofix:
+      enabled: false
+    fix_ci:
+      enabled: false
+    resolve_merge_conflict:
+      enabled: false
+chat:
+  auto_reply: false
