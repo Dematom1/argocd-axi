@@ -258,21 +258,11 @@ export async function setupCommand(args: string[]): Promise<string> {
 
   const errors: string[] = [];
   const current = sessionStartHookStatus({ marker: "argocd-axi" });
-  const expectedEntrypoint = realpathSync(entrypoint);
+  const canonicalCommand = `node '${realpathSync(entrypoint).replaceAll("'", "'\\''")}' context`;
   const jsonTargetsAreCurrent = [current.claude.path, current.codex.path].every(
     (file) => {
       try {
-        const text = readFileSync(file, "utf8");
-        return (
-          text.includes(expectedEntrypoint) &&
-          !text
-            .split(expectedEntrypoint)
-            .slice(1)
-            .some((tail) => {
-              const next = tail.match(/[^\\s'"`,}\\]]+/)?.[0];
-              return Boolean(next && next.includes("argocd-axi"));
-            })
-        );
+        return readFileSync(file, "utf8").includes(canonicalCommand);
       } catch {
         return false;
       }
