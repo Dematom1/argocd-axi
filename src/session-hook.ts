@@ -59,11 +59,18 @@ function settings(): Record<string, unknown> {
 
 function writeSettings(value: Record<string, unknown>): void {
   const file = path();
+  const serialized = `${JSON.stringify(value, null, 2)}\n`;
+  try {
+    if (readFileSync(file, "utf8") === serialized) return;
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      throw error;
+  }
   const temporary = `${file}.${randomUUID()}.tmp`;
   try {
     mkdirSync(join(file, ".."), { recursive: true });
     const mode = existsSync(file) ? statSync(file).mode & 0o777 : 0o600;
-    writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode });
+    writeFileSync(temporary, serialized, { mode });
     chmodSync(temporary, mode);
     renameSync(temporary, file);
   } catch (error) {

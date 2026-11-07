@@ -37,6 +37,31 @@ export function formatError(error: unknown): {
     };
   }
   const message = error instanceof Error ? error.message : String(error);
+  if (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    [
+      "EACCES",
+      "EPERM",
+      "EROFS",
+      "ENOSPC",
+      "ENOTDIR",
+      "EISDIR",
+      "EEXIST",
+      "EMFILE",
+    ].includes(error.code) &&
+    "path" in error &&
+    typeof error.path === "string"
+  ) {
+    return {
+      output: renderError(`${message} (${error.path})`, "FILE_ERROR", [
+        `Check file permissions and available disk space for ${error.path}`,
+      ]),
+      exitCode: 1,
+    };
+  }
   return {
     output: renderError(`unexpected failure: ${message}`, "UNKNOWN", []),
     exitCode: 1,
