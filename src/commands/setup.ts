@@ -257,13 +257,40 @@ export async function setupCommand(args: string[]): Promise<string> {
   }
 
   const errors: string[] = [];
-  installSessionStartHooks({
-    marker: "argocd-axi",
-    execPath: entrypoint,
-    binaryNames: ["argocd-axi-ctx"],
-    distEntrypoints: ["dist/bin/argocd-axi-ctx.js"],
-    onError: (message) => errors.push(message),
-  });
+  const current = sessionStartHookStatus({ marker: "argocd-axi" });
+  const expectedEntrypoint = realpathSync(entrypoint);
+  const jsonTargetsAreCurrent = [current.claude.path, current.codex.path].every(
+    (file) => {
+      try {
+        const text = readFileSync(file, "utf8");
+        return (
+          text.includes(expectedEntrypoint) &&
+          !text
+            .split(expectedEntrypoint)
+            .slice(1)
+            .some((tail) => {
+              const next = tail.match(/[^\\s'"`,}\\]]+/)?.[0];
+              return Boolean(next && next.includes("argocd-axi"));
+            })
+        );
+      } catch {
+        return false;
+      }
+    },
+  );
+  if (
+    !current.claude.installed ||
+    !current.codex.installed ||
+    !current.opencode.installed ||
+    !jsonTargetsAreCurrent
+  )
+    installSessionStartHooks({
+      marker: "argocd-axi",
+      execPath: entrypoint,
+      binaryNames: ["argocd-axi-ctx"],
+      distEntrypoints: ["dist/bin/argocd-axi-ctx.js"],
+      onError: (message) => errors.push(message),
+    });
   try {
     // Run only after successful SDK installation, so the retained entry is current.
     if (errors.length === 0) repairSessionStartHooks();
