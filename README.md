@@ -165,12 +165,12 @@ Pick one; you do not need both.
   `argocd-axi setup status` verifies installed hooks across integrations; use
   `argocd-axi setup uninstall` to remove all managed SessionStart and SessionEnd
   hooks and the OpenCode plugin. The shared Codex hooks feature flag is
-  preserved. axi-sdk-js treats any SessionStart command containing `argocd-axi`
-  as managed, so uninstall may also remove an unrelated command containing that text.
-  With axi-sdk-js 0.1.13, SessionStart setup, status, and uninstall
-  use `~/.claude/settings.json`, ignoring `CLAUDE_CONFIG_DIR`;
-  SessionEnd honors that variable. Uninstall can leave SessionStart hooks in
-  a custom Claude directory. Custom Claude directories need an SDK fix.
+  preserved. SessionStart removal also checks `CLAUDE_CONFIG_DIR/settings.json`
+  for matching hooks. axi-sdk-js treats any SessionStart command containing
+  `argocd-axi` as managed, so uninstall may also remove an unrelated command
+  containing that text. `setup status` checks only the default Claude settings
+  file, so it does not report hooks present only in `CLAUDE_CONFIG_DIR`.
+  SessionEnd honors `CLAUDE_CONFIG_DIR`.
   Hooks need a persistent install (`npm install -g argocd-axi`); setup refuses
   an npx-cache
   install because hooks would point at a temporary path.
