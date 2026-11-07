@@ -1,10 +1,15 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -175,11 +180,24 @@ export async function setupCommand(args: string[]): Promise<string> {
             recursive: true,
             mode: 0o700,
           });
-          writeFileSync(
-            claudeSettingsPath,
-            `${JSON.stringify(updated, null, 2)}\n`,
-            { mode: 0o600 },
-          );
+          const mode = existsSync(claudeSettingsPath)
+            ? statSync(claudeSettingsPath).mode & 0o777
+            : 0o600;
+          const temporary = `${claudeSettingsPath}.${randomUUID()}.tmp`;
+          try {
+            writeFileSync(temporary, `${JSON.stringify(updated, null, 2)}\n`, {
+              mode,
+            });
+            chmodSync(temporary, mode);
+            renameSync(temporary, claudeSettingsPath);
+          } catch (error) {
+            try {
+              unlinkSync(temporary);
+            } catch {
+              // No temporary file to remove.
+            }
+            throw error;
+          }
         }
       } catch (error) {
         if (!(

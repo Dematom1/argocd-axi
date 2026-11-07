@@ -166,8 +166,11 @@ Pick one; you do not need both.
   `argocd-axi setup uninstall` to remove all managed SessionStart and SessionEnd
   hooks and the OpenCode plugin. The shared Codex hooks feature flag is
   preserved. SessionStart removal also checks `CLAUDE_CONFIG_DIR/settings.json`
-  so hooks installed in an alternate Claude config are removed; unrelated hooks
-  remain untouched. SessionEnd honors `CLAUDE_CONFIG_DIR`.
+  for matching hooks. axi-sdk-js treats any SessionStart command containing
+  `argocd-axi` as managed, so uninstall may also remove an unrelated command
+  containing that text. `setup status` checks only the default Claude settings
+  file, so it does not report hooks present only in `CLAUDE_CONFIG_DIR`.
+  SessionEnd honors `CLAUDE_CONFIG_DIR`.
   Hooks need a persistent install (`npm install -g argocd-axi`); setup refuses
   an npx-cache
   install because hooks would point at a temporary path.
