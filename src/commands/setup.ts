@@ -101,6 +101,17 @@ function hasCanonicalSessionStartHook(file: string, command: string): boolean {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return false;
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^E[A-Z0-9]+$/.test(error.code)
+    ) {
+      if (!("path" in error) || typeof error.path !== "string")
+        Object.assign(error, { path: file });
+      throw error;
+    }
     throw axiError(
       `Cannot read hook destination ${file}: ${String(error)}`,
       CODES.CONFIG_INVALID,
@@ -318,6 +329,16 @@ export async function setupCommand(args: string[]): Promise<string> {
       realpathSync(join(dirname(entrypoint), "argocd-axi.js")),
     );
   } catch (error) {
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^E[A-Z0-9]+$/.test(error.code) &&
+      "path" in error &&
+      typeof error.path === "string"
+    )
+      throw error;
     errors.push(error instanceof Error ? error.message : String(error));
   }
   if (errors.length > 0) {

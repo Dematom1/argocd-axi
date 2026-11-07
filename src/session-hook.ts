@@ -44,6 +44,16 @@ function settings(): Record<string, unknown> {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return {};
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^E[A-Z0-9]+$/.test(error.code) &&
+      "path" in error &&
+      typeof error.path === "string"
+    )
+      throw error;
     throw axiError(
       `Cannot read Claude settings ${file}: ${String(error)}`,
       CODES.CONFIG_INVALID,
@@ -79,6 +89,16 @@ function writeSettings(value: Record<string, unknown>): void {
     } catch {
       /* No temporary file to remove. */
     }
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^E[A-Z0-9]+$/.test(error.code) &&
+      "path" in error &&
+      typeof error.path === "string"
+    )
+      throw error;
     throw axiError(
       `Cannot update Claude settings ${file}: ${String(error)}`,
       CODES.UPSTREAM_ERROR,
