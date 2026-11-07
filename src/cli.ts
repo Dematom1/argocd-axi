@@ -59,6 +59,8 @@ export function formatError(error: unknown): {
       "ENOTDIR",
       "ENOTEMPTY",
       "ENOTCAPABLE",
+      "ENOTSUP",
+      "EOPNOTSUPP",
       "ENXIO",
       "EMLINK",
       "EPERM",
