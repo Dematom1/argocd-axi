@@ -14,6 +14,33 @@ import { describe, expect, it } from "vitest";
 import { makeHome, ROOT, runCli } from "./helpers.js";
 
 describe("truthful setup", () => {
+  it("removes only argocd-axi SessionStart hooks from CLAUDE_CONFIG_DIR and is idempotent", async () => {
+    const home = makeHome();
+    const config = join(home, "alternate-claude");
+    const file = join(config, "settings.json");
+    mkdirSync(config);
+    const unrelated = { type: "command", command: "other-tool" };
+    writeFileSync(file, JSON.stringify({ hooks: { SessionStart: [
+      { hooks: [{ type: "command", command: "argocd-axi-ctx" }, unrelated] },
+    ] } }));
+    const env = { CLAUDE_CONFIG_DIR: config };
+
+    const first = await runCli(["setup", "uninstall"], { home, env });
+    expect(first.exitCode, first.stdout).toBe(0);
+    expect(first.stdout).toContain("claude: removed");
+    expect(JSON.parse(readFileSync(file, "utf8")).hooks.SessionStart).toEqual([
+      { hooks: [unrelated] },
+    ]);
+    expect(existsSync(join(home, ".claude", "settings.json"))).toBe(false);
+
+    const second = await runCli(["setup", "uninstall"], { home, env });
+    expect(second.exitCode, second.stdout).toBe(0);
+    expect(second.stdout).toContain("claude: not installed (no-op)");
+    expect(JSON.parse(readFileSync(file, "utf8")).hooks.SessionStart).toEqual([
+      { hooks: [unrelated] },
+    ]);
+  });
+
   it("preserves foreign SessionEnd commands mentioning argocd-axi during setup and removal", async () => {
     const home = makeHome();
     const file = join(home, ".claude", "settings.json");

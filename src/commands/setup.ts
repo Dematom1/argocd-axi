@@ -1,7 +1,9 @@
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  computeSessionStartHookRemoval,
   detectInstallMethod,
   installSessionStartHooks,
   sessionStartHookStatus,
@@ -141,11 +143,29 @@ export async function setupCommand(args: string[]): Promise<string> {
     return finish([encodeObject(hookStatus())], undefined);
   if (action === "uninstall") {
     const before = sessionStartHookStatus({ marker: "argocd-axi" });
+    const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+    const claudeSettingsPath = join(claudeConfigDir, "settings.json");
+    let customClaudeInstalled = false;
     const errors: string[] = [];
     uninstallSessionStartHooks({
       marker: "argocd-axi",
       onError: (message) => errors.push(message),
     });
+    if (process.env.CLAUDE_CONFIG_DIR) {
+      try {
+        const settings: unknown = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
+        if (!isRecord(settings)) throw new Error("settings must be a JSON object");
+        const [updated, changed] = computeSessionStartHookRemoval(settings, "argocd-axi");
+        customClaudeInstalled = changed;
+        if (changed) {
+          mkdirSync(dirname(claudeSettingsPath), { recursive: true, mode: 0o700 });
+          writeFileSync(claudeSettingsPath, `${JSON.stringify(updated, null, 2)}\n`, { mode: 0o600 });
+        }
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+          errors.push(`Cannot remove SessionStart hook from ${claudeSettingsPath}: ${String(error)}`);
+      }
+    }
     let sessionEndRemoved = false;
     try {
       sessionEndRemoved = uninstallSessionEndHook();
@@ -163,7 +183,7 @@ export async function setupCommand(args: string[]): Promise<string> {
     return finish(
       [
         encodeObject({
-          claude: before.claude.installed ? "removed" : "not installed (no-op)",
+          claude: before.claude.installed || customClaudeInstalled ? "removed" : "not installed (no-op)",
           codex: before.codex.installed ? "removed" : "not installed (no-op)",
           opencode: before.opencode.installed
             ? "removed"
