@@ -61,7 +61,7 @@ commands[27]:
   projects | projects view <p> | projects windows <p>: projects, their rules, and whether sync is allowed now
   appsets | appsets view <name> | appsets generate <file>: ApplicationSets and what a spec would generate
   repos | clusters: repositories and destination clusters with connection status
-  setup hooks | status | uninstall: manage the Claude Code SessionEnd memory hook; setup hooks also installs SessionStart hooks
+  setup hooks | status | uninstall: manage Claude Code SessionStart and SessionEnd hooks
 ```
 
 Run `npx -y argocd-axi --help` for global flags, or `npx -y argocd-axi <command> --help` for per-command usage.

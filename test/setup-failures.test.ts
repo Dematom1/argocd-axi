@@ -20,9 +20,21 @@ describe("truthful setup", () => {
     const file = join(config, "settings.json");
     mkdirSync(config);
     const unrelated = { type: "command", command: "other-tool" };
-    writeFileSync(file, JSON.stringify({ hooks: { SessionStart: [
-      { hooks: [{ type: "command", command: "argocd-axi-ctx" }, unrelated] },
-    ] } }));
+    writeFileSync(
+      file,
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [
+                { type: "command", command: "argocd-axi-ctx" },
+                unrelated,
+              ],
+            },
+          ],
+        },
+      }),
+    );
     const env = { CLAUDE_CONFIG_DIR: config };
 
     const first = await runCli(["setup", "uninstall"], { home, env });
