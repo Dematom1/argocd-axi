@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.14](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.13...argocd-axi-v0.1.14) (2026-11-04)
+
+
+### Features
+
+* add selective resource sync ([#50](https://github.com/Dematom1/argocd-axi/issues/50)) ([300703b](https://github.com/Dematom1/argocd-axi/commit/300703b65136b601b15118298b6c4a4e32b64124))
+* **contributions:** adopt contribution workflow ([#58](https://github.com/Dematom1/argocd-axi/issues/58)) ([f913943](https://github.com/Dematom1/argocd-axi/commit/f9139437c7a31c88a497c9c80f5f0eb3f2d7a42c))
+
+
+### Bug Fixes
+
+* **apps:** detect prune-only drift in wait ([#52](https://github.com/Dematom1/argocd-axi/issues/52)) ([87005d3](https://github.com/Dematom1/argocd-axi/commit/87005d3d69592b0e45f1492ecc7b8210ccbad28e))
+* **apps:** make waits resilient to Argo CD timing ([#53](https://github.com/Dematom1/argocd-axi/issues/53)) ([3f2f9b7](https://github.com/Dematom1/argocd-axi/commit/3f2f9b72007d2505d8437f6822894fa37a55aa5b))
+* **cli:** make commands idempotent ([#54](https://github.com/Dematom1/argocd-axi/issues/54)) ([acc8a35](https://github.com/Dematom1/argocd-axi/commit/acc8a35dbdce066fc2dad694876859b05b40f376))
+* **cli:** resolve bare app names in can-i ([#57](https://github.com/Dematom1/argocd-axi/issues/57)) ([43cedbf](https://github.com/Dematom1/argocd-axi/commit/43cedbf7132ecb6d62a57102324643380be03380))
+* **setup:** repair hook lifecycle and context help ([#55](https://github.com/Dematom1/argocd-axi/issues/55)) ([060323f](https://github.com/Dematom1/argocd-axi/commit/060323ffc7054551ec650796a16973331271a107))
+
 ## [0.1.13](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.12...argocd-axi-v0.1.13) (2026-11-03)
 
 
