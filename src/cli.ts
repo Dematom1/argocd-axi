@@ -42,22 +42,13 @@ export function formatError(error: unknown): {
     typeof error === "object" &&
     "code" in error &&
     typeof error.code === "string" &&
-    [
-      "EACCES",
-      "EPERM",
-      "EROFS",
-      "ENOSPC",
-      "ENOTDIR",
-      "EISDIR",
-      "EEXIST",
-      "EMFILE",
-    ].includes(error.code) &&
+    error.code.startsWith("E") &&
     "path" in error &&
     typeof error.path === "string"
   ) {
     return {
       output: renderError(`${message} (${error.path})`, "FILE_ERROR", [
-        `Check file permissions and available disk space for ${error.path}`,
+        `Check that ${error.path} exists, is accessible, and has sufficient storage; correct the reported filesystem error`,
       ]),
       exitCode: 1,
     };
