@@ -42,7 +42,26 @@ export function formatError(error: unknown): {
     typeof error === "object" &&
     "code" in error &&
     typeof error.code === "string" &&
-    error.code.startsWith("E") &&
+    [
+      "EACCES",
+      "EBUSY",
+      "EDQUOT",
+      "EEXIST",
+      "EIO",
+      "EISDIR",
+      "ELOOP",
+      "EMFILE",
+      "ENAMETOOLONG",
+      "ENFILE",
+      "ENOENT",
+      "ENOSPC",
+      "ENOTDIR",
+      "ENOTEMPTY",
+      "ENXIO",
+      "EPERM",
+      "EROFS",
+      "ETXTBSY",
+    ].includes(error.code) &&
     "path" in error &&
     typeof error.path === "string"
   ) {
