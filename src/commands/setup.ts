@@ -94,6 +94,33 @@ function isManagedSessionStartCommand(command: string): boolean {
   return command.includes("argocd-axi");
 }
 
+function hasCanonicalSessionStartCommand(file: string, canonicalCommand: string): boolean {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      return false;
+    throw axiError(
+      `Cannot read SessionStart settings ${file}: ${String(error)}`,
+      CODES.CONFIG_INVALID,
+      [`Check read permissions and JSON syntax for ${file}`],
+    );
+  }
+  if (!isRecord(value) || !isRecord(value.hooks) || !Array.isArray(value.hooks.SessionStart))
+    return false;
+  const commands = value.hooks.SessionStart.flatMap((group: unknown) =>
+    isRecord(group) && Array.isArray(group.hooks)
+      ? group.hooks.flatMap((hook: unknown) =>
+          isRecord(hook) && typeof hook.command === "string" && isManagedSessionStartCommand(hook.command)
+            ? [hook.command]
+            : [],
+        )
+      : [],
+  );
+  return commands.length > 0 && commands.every((command) => command === canonicalCommand);
+}
+
 function repairSessionStartHooks(): void {
   const targets = sessionStartHookStatus({ marker: "argocd-axi" });
   for (const file of [targets.claude.path, targets.codex.path]) {
@@ -260,13 +287,7 @@ export async function setupCommand(args: string[]): Promise<string> {
   const current = sessionStartHookStatus({ marker: "argocd-axi" });
   const canonicalCommand = `node '${realpathSync(entrypoint).replaceAll("'", "'\\''")}' context`;
   const jsonTargetsAreCurrent = [current.claude.path, current.codex.path].every(
-    (file) => {
-      try {
-        return readFileSync(file, "utf8").includes(canonicalCommand);
-      } catch {
-        return false;
-      }
-    },
+    (file) => hasCanonicalSessionStartCommand(file, canonicalCommand),
   );
   if (
     !current.claude.installed ||
