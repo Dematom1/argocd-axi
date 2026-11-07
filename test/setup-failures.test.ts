@@ -6,14 +6,68 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { formatError } from "../src/cli.js";
 import { makeHome, ROOT, runCli } from "./helpers.js";
 
 describe("truthful setup", () => {
+  it("classifies filesystem errors by their code and path", () => {
+    for (const code of ["EACCES", "ENOENT", "EUNKNOWN"]) {
+      const result = formatError(
+        Object.assign(new Error("failed"), { code, path: "/tmp/config" }),
+      );
+      expect(result.output).toContain("FILE_ERROR");
+      expect(result.output).toContain("/tmp/config");
+      expect(result.exitCode).toBe(1);
+    }
+    expect(
+      formatError(Object.assign(new Error("failed"), { code: "EACCES" }))
+        .output,
+    ).toContain("UNKNOWN");
+    expect(
+      formatError(
+        Object.assign(new Error("failed"), {
+          code: "CUSTOM",
+          path: "/tmp/config",
+        }),
+      ).output,
+    ).toContain("UNKNOWN");
+  });
+
+  it("reports malformed hook settings as CONFIG_INVALID instead of overwriting them", async () => {
+    const home = makeHome();
+    const file = join(home, ".claude", "settings.json");
+    mkdirSync(join(home, ".claude"));
+    writeFileSync(file, "{");
+    const result = await runCli(["setup", "hooks"], { home });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("CONFIG_INVALID");
+    expect(readFileSync(file, "utf8")).toBe("{");
+  });
+
+  it("does not rewrite canonical SessionStart settings on repeated setup", async () => {
+    const home = makeHome();
+    expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);
+    const files = [
+      join(home, ".claude", "settings.json"),
+      join(home, ".codex", "hooks.json"),
+    ];
+    const before = files.map((file) => [
+      readFileSync(file, "utf8"),
+      statSync(file).mtimeMs,
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect((await runCli(["setup", "hooks"], { home })).exitCode).toBe(0);
+    expect(
+      files.map((file) => [readFileSync(file, "utf8"), statSync(file).mtimeMs]),
+    ).toEqual(before);
+  });
+
   it("removes only argocd-axi SessionStart hooks from CLAUDE_CONFIG_DIR and is idempotent", async () => {
     const home = makeHome();
     const config = join(home, "alternate-claude");

@@ -37,6 +37,22 @@ export function formatError(error: unknown): {
     };
   }
   const message = error instanceof Error ? error.message : String(error);
+  if (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    /^E[A-Z0-9]+$/.test(error.code) &&
+    "path" in error &&
+    typeof error.path === "string"
+  ) {
+    return {
+      output: renderError(`${message} (${error.path})`, "FILE_ERROR", [
+        `Check that ${error.path} exists, is accessible, and has sufficient storage; correct the reported filesystem error`,
+      ]),
+      exitCode: 1,
+    };
+  }
   return {
     output: renderError(`unexpected failure: ${message}`, "UNKNOWN", []),
     exitCode: 1,

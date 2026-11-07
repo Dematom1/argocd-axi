@@ -94,6 +94,47 @@ function isManagedSessionStartCommand(command: string): boolean {
   return command.includes("argocd-axi");
 }
 
+function hasCanonicalSessionStartHook(file: string, command: string): boolean {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      return false;
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^E[A-Z0-9]+$/.test(error.code)
+    ) {
+      if (!("path" in error) || typeof error.path !== "string")
+        Object.assign(error, { path: file });
+      throw error;
+    }
+    throw axiError(
+      `Cannot read hook destination ${file}: ${String(error)}`,
+      CODES.CONFIG_INVALID,
+      [`Check read permissions and file syntax for ${file}`],
+    );
+  }
+  if (!isRecord(value) || !isRecord(value.hooks)) return false;
+  const groups = value.hooks.SessionStart;
+  if (!Array.isArray(groups)) return false;
+  const commands = groups.flatMap((group: unknown) =>
+    isRecord(group) && Array.isArray(group.hooks)
+      ? group.hooks.flatMap((hook: unknown) =>
+          isRecord(hook) &&
+          typeof hook.command === "string" &&
+          isManagedSessionStartCommand(hook.command)
+            ? [hook.command]
+            : [],
+        )
+      : [],
+  );
+  return commands.length === 1 && commands[0] === command;
+}
+
 function repairSessionStartHooks(): void {
   const targets = sessionStartHookStatus({ marker: "argocd-axi" });
   for (const file of [targets.claude.path, targets.codex.path]) {
@@ -257,13 +298,30 @@ export async function setupCommand(args: string[]): Promise<string> {
   }
 
   const errors: string[] = [];
-  installSessionStartHooks({
-    marker: "argocd-axi",
-    execPath: entrypoint,
-    binaryNames: ["argocd-axi-ctx"],
-    distEntrypoints: ["dist/bin/argocd-axi-ctx.js"],
-    onError: (message) => errors.push(message),
-  });
+  const canonicalCommand = `'${realpathSync(entrypoint).replaceAll("'", "'\\''")}'`;
+  const currentHooks = sessionStartHookStatus({ marker: "argocd-axi" });
+  const claudeCanonical = hasCanonicalSessionStartHook(
+    currentHooks.claude.path,
+    canonicalCommand,
+  );
+  const codexCanonical = hasCanonicalSessionStartHook(
+    currentHooks.codex.path,
+    canonicalCommand,
+  );
+  const canonicalHooksInstalled =
+    currentHooks.claude.installed &&
+    currentHooks.codex.installed &&
+    currentHooks.opencode.installed &&
+    claudeCanonical &&
+    codexCanonical;
+  if (!canonicalHooksInstalled)
+    installSessionStartHooks({
+      marker: "argocd-axi",
+      execPath: entrypoint,
+      binaryNames: ["argocd-axi-ctx"],
+      distEntrypoints: ["dist/bin/argocd-axi-ctx.js"],
+      onError: (message) => errors.push(message),
+    });
   try {
     // Run only after successful SDK installation, so the retained entry is current.
     if (errors.length === 0) repairSessionStartHooks();
@@ -271,6 +329,16 @@ export async function setupCommand(args: string[]): Promise<string> {
       realpathSync(join(dirname(entrypoint), "argocd-axi.js")),
     );
   } catch (error) {
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^E[A-Z0-9]+$/.test(error.code) &&
+      "path" in error &&
+      typeof error.path === "string"
+    )
+      throw error;
     errors.push(error instanceof Error ? error.message : String(error));
   }
   if (errors.length > 0) {
