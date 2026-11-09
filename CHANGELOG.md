@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.15](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.14...argocd-axi-v0.1.15) (2026-11-07)
+
+
+### Bug Fixes
+
+* **setup:** make repeated hook setup idempotent ([#61](https://github.com/Dematom1/argocd-axi/issues/61)) ([67ecae5](https://github.com/Dematom1/argocd-axi/commit/67ecae55664feb80ab9a952f535c6f375c2b37eb))
+* **setup:** remove SessionStart hooks from alternate Claude config ([#59](https://github.com/Dematom1/argocd-axi/issues/59)) ([f6ca3e0](https://github.com/Dematom1/argocd-axi/commit/f6ca3e09c8b547eaa8f468550d91445a6b1eea5d))
+
 ## [0.1.14](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.13...argocd-axi-v0.1.14) (2026-11-04)
 
 
