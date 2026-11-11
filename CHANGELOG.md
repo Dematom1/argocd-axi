@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.16](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.15...argocd-axi-v0.1.16) (2026-11-11)
+
+
+### Bug Fixes
+
+* **apps:** allow resource actions with native RBAC ([#63](https://github.com/Dematom1/argocd-axi/issues/63)) ([2a92a17](https://github.com/Dematom1/argocd-axi/commit/2a92a171b2b839b9d445853c539ee9e747e50e47))
+
 ## [0.1.15](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.14...argocd-axi-v0.1.15) (2026-11-07)
 
 
