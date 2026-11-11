@@ -721,7 +721,7 @@ describe("apps", () => {
     expect(calls.some((call) => call[1] === "wait")).toBe(false);
   });
 
-  it("checks action-specific RBAC before running a resource action", async () => {
+  it("reports native action-specific RBAC denial", async () => {
     const home = makeHome();
     mkdirSync(join(home, ".config", "argocd-axi"), { recursive: true });
     writeFileSync(
@@ -765,31 +765,20 @@ describe("apps", () => {
             stdoutFile: "actions-web.json",
           },
           {
-            argv: [
-              "account",
-              "can-i",
-              "action/argoproj.io/Rollout/restart",
-              "applications",
-              "shop/web",
-            ],
-            stdout: "no\n",
+            argv: ["app", "actions", "run", "web", "restart"],
+            stderr:
+              "rpc error: code = PermissionDenied desc = permission denied",
+            exit: 20,
           },
         ]),
       },
     );
     expect(stdout).toContain("code: REFUSED");
-    expect(calls).toContainEqual([
-      "account",
-      "can-i",
-      "action/argoproj.io/Rollout/restart",
-      "applications",
-      "shop/web",
-      "--argocd-context",
-      "prod",
-    ]);
+    expect(stdout).toContain("Argo CD RBAC denied actions run for web");
+    expect(calls.some((call) => call[0] === "account")).toBe(false);
     expect(
       calls.some((call) => call[1] === "actions" && call[2] === "run"),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("does not authorize an action from a same-named resource in another namespace", async () => {
@@ -2123,16 +2112,6 @@ describe("apps", () => {
             ],
             stdoutFile: "actions-web.json",
           },
-          {
-            argv: [
-              "account",
-              "can-i",
-              "action/argoproj.io/Rollout/restart",
-              "applications",
-              "shop/web",
-            ],
-            stdout: "yes\n",
-          },
           { argv: ["app", "actions", "run", "web"], stdout: "" },
         ]),
       },
@@ -2184,13 +2163,7 @@ describe("apps", () => {
             stdoutFile: "actions-web.json",
           },
           {
-            argv: [
-              "account",
-              "can-i",
-              "action/argoproj.io/Rollout/restart",
-              "applications",
-              "shop/web",
-            ],
+            argv: ["app", "actions", "run", "web", "restart"],
             stderr: "permission service unavailable",
             exit: 20,
           },
@@ -2198,7 +2171,7 @@ describe("apps", () => {
       },
     );
     expect(failedPermission.exitCode).toBe(1);
-    expect(failedPermission.stdout).toContain("code: UPSTREAM_ERROR");
+    expect(failedPermission.stdout).toContain("code: SERVER_UNREACHABLE");
     expect(failedPermission.stdout).toContain("permission service unavailable");
     expect(failedPermission.stdout).not.toContain("code: REFUSED");
 
@@ -2237,26 +2210,19 @@ describe("apps", () => {
             stdoutFile: "actions-web.json",
           },
           {
-            argv: [
-              "account",
-              "can-i",
-              "action/argoproj.io/Rollout/restart",
-              "applications",
-              "shop/web",
-            ],
-            stdout: "no\n",
+            argv: ["app", "actions", "run", "web", "restart"],
+            stderr:
+              "rpc error: code = PermissionDenied desc = permission denied",
+            exit: 20,
           },
         ]),
       },
     );
     expect(denied.exitCode).toBe(1);
     expect(denied.stdout).toContain("code: REFUSED");
-    expect(denied.stdout).toContain(
-      "Argo CD RBAC denies action/argoproj.io/Rollout/restart",
-    );
-    expect(
-      denied.calls.some((call) => call[1] === "actions" && call[2] === "run"),
-    ).toBe(false);
+    expect(denied.stdout).toContain("Argo CD RBAC denied actions run for web");
+    expect(denied.stdout).not.toContain("result: submitted");
+    expect(denied.calls.some((call) => call[0] === "account")).toBe(false);
   });
 
   it("does not poll resource health after submitting an action", async () => {
@@ -2321,16 +2287,6 @@ describe("apps", () => {
                 Disabled: false,
               },
             ]),
-          },
-          {
-            argv: [
-              "account",
-              "can-i",
-              "action/apps/Deployment/restart",
-              "applications",
-              "shop/web",
-            ],
-            stdout: "yes\n",
           },
           {
             argv: ["app", "actions", "run", "web"],
