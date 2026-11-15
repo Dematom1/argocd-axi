@@ -500,14 +500,13 @@ version instead.
 
 ## Dematom1 platform AXIs
 
-| Tool                                                                 | What it covers                                 | Install the skill                                                          |
-| -------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------- |
-| [terraform-axi](https://github.com/Dematom1/terraform-axi)           | Terraform/OpenTofu plan, drift and state       | `npx skills add Dematom1/terraform-axi --skill terraform-axi -g`           |
-| [argocd-axi](https://github.com/Dematom1/argocd-axi)                 | Argo CD apps, diffs, history and syncs         | `npx skills add Dematom1/argocd-axi --skill argocd-axi -g`                 |
-| [datadog-axi](https://github.com/Dematom1/datadog-axi)               | Datadog monitors, incidents and logs           | `npx skills add Dematom1/datadog-axi --skill datadog-axi -g`               |
-| [argo-workflows-axi](https://github.com/Dematom1/argo-workflows-axi) | Argo Workflows runs and failures               | `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g` |
-| [search-console-axi](https://github.com/Dematom1/search-console-axi) | Google Search Console performance and indexing | `npx skills add Dematom1/search-console-axi --skill search-console-axi -g` |
-| [k8s-axi](https://github.com/Dematom1/k8s-axi)                       | Kubernetes workloads and why they fail         | `npx skills add Dematom1/k8s-axi --skill k8s-axi -g`                       |
+| Tool                                                                 | What it covers                           | Install the skill                                                          |
+| -------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| [terraform-axi](https://github.com/Dematom1/terraform-axi)           | Terraform/OpenTofu plan, drift and state | `npx skills add Dematom1/terraform-axi --skill terraform-axi -g`           |
+| [k8s-axi](https://github.com/Dematom1/k8s-axi)                       | Kubernetes workloads and why they fail   | `npx skills add Dematom1/k8s-axi --skill k8s-axi -g`                       |
+| [argocd-axi](https://github.com/Dematom1/argocd-axi)                 | Argo CD apps, diffs, history and syncs   | `npx skills add Dematom1/argocd-axi --skill argocd-axi -g`                 |
+| [argo-workflows-axi](https://github.com/Dematom1/argo-workflows-axi) | Argo Workflows runs and failures         | `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g` |
+| [datadog-axi](https://github.com/Dematom1/datadog-axi) (optional)    | Datadog monitors, incidents and logs     | `npx skills add Dematom1/datadog-axi --skill datadog-axi -g`               |
 
 ## License
 
