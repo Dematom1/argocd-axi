@@ -18,7 +18,7 @@ describe("installable skill", () => {
   it("has trigger-shaped frontmatter and npx invocations", () => {
     const skill = createSkillMarkdown();
     expect(skill).toMatch(
-      /^---\nname: argocd-axi\ndescription: "Inspect Argo CD/,
+      /^---\nname: argocd-axi\ndescription: "Find out why an Argo CD app/,
     );
     expect(skill).toContain("npx -y argocd-axi");
     expect(skill).toContain(
