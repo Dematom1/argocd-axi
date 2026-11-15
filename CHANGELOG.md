@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.17](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.16...argocd-axi-v0.1.17) (2026-11-15)
+
+
+### Features
+
+* improve Argo CD skill onboarding ([#65](https://github.com/Dematom1/argocd-axi/issues/65)) ([89764e9](https://github.com/Dematom1/argocd-axi/commit/89764e9db732800f9c46fe2323758e92f5f3c07d))
+
 ## [0.1.16](https://github.com/Dematom1/argocd-axi/compare/argocd-axi-v0.1.15...argocd-axi-v0.1.16) (2026-11-11)
 
 
