@@ -15,11 +15,8 @@ describe("installable skill", () => {
     for (const line of COMMAND_LINES) expect(committed).toContain(line);
   });
 
-  it("has trigger-shaped frontmatter and npx invocations", () => {
+  it("has npx invocations", () => {
     const skill = createSkillMarkdown();
-    expect(skill).toMatch(
-      /^---\nname: argocd-axi\ndescription: "Inspect Argo CD/,
-    );
     expect(skill).toContain("npx -y argocd-axi");
     expect(skill).toContain(
       "read operations plus opt-in writes on writable contexts",

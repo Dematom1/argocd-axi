@@ -20,7 +20,10 @@
     "cli",
     "agent",
     "axi",
-    "toon"
+    "toon",
+    "claude-code",
+    "codex",
+    "skills"
   ],
   "bin": {
     "argocd-axi": "./dist/bin/argocd-axi.js",

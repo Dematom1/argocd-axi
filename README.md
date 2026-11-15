@@ -60,14 +60,26 @@ argocd-axi turns that into small, definitive answers:
 
 ## Quick start
 
-Install the published package:
+Install the skill for your agent:
+
+```sh
+npx skills add Dematom1/argocd-axi --skill argocd-axi -g
+```
+
+Zero setup: tell your agent "Execute `npx -y argocd-axi` to see which Argo CD
+apps need attention and why." Without a global install, run every
+`argocd-axi` command in this README as `npx -y argocd-axi`, for example
+`npx -y argocd-axi whoami`.
+
+### Optional: global install and session hooks
 
 ```sh
 npm install -g argocd-axi
 argocd-axi setup hooks
 ```
 
-Or run without installing: `npx -y argocd-axi`. The session hook requires a global install.
+The session hook requires a global install; see
+[agent integration](#agent-integration).
 
 Requirements:
 
@@ -174,7 +186,7 @@ Pick one; you do not need both.
   Hooks need a persistent install (`npm install -g argocd-axi`); setup refuses
   an npx-cache
   install because hooks would point at a temporary path.
-- **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi`
+- **Skill.** `npx skills add Dematom1/argocd-axi --skill argocd-axi -g`
   installs [`skills/argocd-axi/SKILL.md`](skills/argocd-axi/SKILL.md), which
   is generated from the CLI's own help and loads when a task is about Argo CD.
 
@@ -487,6 +499,16 @@ gh workflow run release-please.yml --ref v0.1.1 -f tag=v0.1.1
 A version that is staged but not yet approved does not count as published, so
 re-running would try to stage it again and fail. Approve or discard the staged
 version instead.
+
+## Dematom1 platform AXIs
+
+| Tool                                                                 | What it covers                           | Install the skill                                                          |
+| -------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| [terraform-axi](https://github.com/Dematom1/terraform-axi)           | Terraform/OpenTofu plan, drift and state | `npx skills add Dematom1/terraform-axi --skill terraform-axi -g`           |
+| [k8s-axi](https://github.com/Dematom1/k8s-axi)                       | Kubernetes workloads and why they fail   | `npx skills add Dematom1/k8s-axi --skill k8s-axi -g`                       |
+| [argocd-axi](https://github.com/Dematom1/argocd-axi)                 | Argo CD apps, diffs, history and syncs   | `npx skills add Dematom1/argocd-axi --skill argocd-axi -g`                 |
+| [argo-workflows-axi](https://github.com/Dematom1/argo-workflows-axi) | Argo Workflows runs and failures         | `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g` |
+| [datadog-axi](https://github.com/Dematom1/datadog-axi) (optional)    | Datadog monitors, incidents and logs     | `npx skills add Dematom1/datadog-axi --skill datadog-axi -g`               |
 
 ## License
 

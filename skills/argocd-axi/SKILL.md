@@ -1,6 +1,6 @@
 ---
 name: argocd-axi
-description: "Inspect Argo CD through the argocd-axi CLI - which applications are OutOfSync, Degraded or failing to sync and why, per-resource diffs against Git, deployment history, pod logs, project sync windows and RBAC checks, plus confirmed app sync, rollback, refresh, and operation termination on writable contexts. Use whenever a task involves Argo CD or GitOps deployments: an app stuck or unhealthy, a sync that failed, what changed in a rollout, or whether a sync is allowed right now."
+description: "Find out why an Argo CD app is OutOfSync, Degraded or failing to sync, and fix it safely: compact answers on per-resource diffs against Git, deployment history, pod logs, sync windows and RBAC, with Secret data always redacted and log lines redacted on a best-effort basis. Read-only by default; sync, rollback, refresh and operation termination run only on writable contexts and only when confirmed. Use whenever a task involves Argo CD or GitOps deployments: an app stuck or unhealthy, a sync that failed, what changed in a rollout, or whether a sync is allowed right now."
 user-invocable: false
 ---
 
