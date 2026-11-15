@@ -67,7 +67,9 @@ npx skills add Dematom1/argocd-axi --skill argocd-axi -g
 ```
 
 Zero setup: tell your agent "Execute `npx -y argocd-axi` to see which Argo CD
-apps need attention and why."
+apps need attention and why." Without a global install, run every
+`argocd-axi` command in this README as `npx -y argocd-axi`, for example
+`npx -y argocd-axi whoami`.
 
 ### Optional: global install and session hooks
 
